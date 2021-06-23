@@ -1,0 +1,232 @@
+import numpy as np
+import torch
+import torch.distributed as dist
+from torch import nn, optim
+
+import pickle
+import os
+import sys
+from shutil import copy2
+
+from experiment_utils import ExperimentBuilder
+import dataset_configs, model_configs, exp_configs
+from . import config
+
+import json
+import argparse
+
+from .utils import loader
+from torch.utils.data.distributed import DistributedSampler
+
+from .utils import distributed as du
+from .utils import misc
+from .train_and_val import eval_epoch
+from .train_and_val_multilabel import eval_epoch as eval_epoch_multilabel
+
+import coloredlogs, logging, verboselogs
+logger = verboselogs.VerboseLogger(__name__)    # add logger.success
+
+
+import configparser
+
+import git
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
+
+def _suppress_print():
+    """
+    Suppresses printing from the current process.
+    """
+
+    sys.stdout = open(os.devnull,'w')
+    sys.stderr = open(os.devnull,'w')
+
+
+def distributed_init(global_seed, local_world_size):
+    rank = dist.get_rank() if dist.is_initialized() else 0
+    world_size = dist.get_world_size() if dist.is_initialized() else 1
+    local_rank = rank % local_world_size
+
+    #local_seed = global_seed + rank
+    local_seed = global_seed
+
+    # Set GPU
+    torch.cuda.set_device(local_rank)
+
+    # Set seed
+    torch.manual_seed(local_seed)
+    torch.cuda.manual_seed(local_seed)
+    np.random.seed(local_seed)
+    # DALI seed
+
+    return rank, world_size, local_rank, local_world_size, local_seed
+
+
+
+
+
+
+def val(args):
+    rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
+    if rank == 0:
+        coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
+        logging.getLogger('slowfast.utils.checkpoint').setLevel(logging.WARNING)
+
+    cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
+    perform_multicropval=True       # when loading, assume there was multicropval. Even if there was not, having more CSV field information doesn't hurt.
+    if cfg.dataset_cfg.task == 'singlelabel_classification':
+        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_singlelabel(multicropval = perform_multicropval)
+        best_metric_field = 'val_acc'
+    elif cfg.dataset_cfg.task == 'multilabel_classification':
+        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_multilabel(multicropval = perform_multicropval)
+        best_metric_field = 'val_vid_mAP'
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+
+
+
+    if rank == 0:
+        exp.make_dirs_for_training()
+
+        f_handler = logging.FileHandler(os.path.join(exp.logs_dir, 'val.log'))
+        #f_handler.setLevel(logging.NOTSET)
+        f_handler.setLevel(logging.DEBUG)
+
+        # Create formatters and add it to handlers
+        f_format = logging.Formatter('%(asctime)s - %(name)s: %(lineno)4d - %(levelname)s - %(message)s')
+        f_handler.setFormatter(f_format)
+
+        # Add handlers to the logger
+        root_logger = logging.getLogger()
+        root_logger.addHandler(f_handler)
+    else:
+        _suppress_print()
+
+    try:
+        # Writes the pids to file, to make killing processes easier.    
+        if world_size > 1:
+            du.write_pids_to_file(os.path.join(config.PYVIDEOAI_DIR, 'tools', "last_pids.txt"))
+
+        if rank == 0:
+            repo = git.Repo(search_parent_directories=True)
+            sha = repo.head.object.hexsha
+            logger.info("git hash: %s", sha)
+            # save configs
+#            exp.dump_args(args)
+            logger.info("args: " + json.dumps(args.__dict__, sort_keys=False, indent=4))
+            dataset_config_dir = os.path.join(exp.configs_dir, 'dataset_config_val')
+            os.makedirs(dataset_config_dir, exist_ok=True)
+            #copy2(os.path.join(dataset_configs._SCRIPT_DIR, '__init__.py'), os.path.join(dataset_config_dir, '__init__.py'))
+            copy2(dataset_configs.config_path(args.dataset, args.dataset_channel), os.path.join(dataset_config_dir, args.dataset + '.py'))
+
+            model_config_dir = os.path.join(exp.configs_dir, 'model_config_val')
+            os.makedirs(model_config_dir, exist_ok=True)
+            #copy2(os.path.join(model_configs._SCRIPT_DIR, 'model_configs', '__init__.py'), os.path.join(model_config_dir, '__init__.py'))
+            copy2(model_configs.config_path(args.model, args.model_channel), os.path.join(model_config_dir, args.model + '.py'))
+
+            exp_config_dir = os.path.join(exp.configs_dir, 'exp_config_val')
+            os.makedirs(exp_config_dir, exist_ok=True)
+            config_file_name = exp_configs._get_file_name(args.dataset, args.model, args.experiment_name)
+            #copy2(os.path.join(exp_configs._SCRIPT_DIR, '__init__.py'), os.path.join(config_dir, '__init__.py'))
+            copy2(exp_configs.config_path(args.dataset, args.model, args.experiment_name, args.experiment_channel), os.path.join(exp_config_dir, os.path.basename(config_file_name)))
+
+
+        # Dataset
+        if args.mode == 'oneclip':
+            split = 'val'
+        else:   # multicrop
+            split = 'multicropval'
+        val_dataset = cfg.get_torch_dataset(split)
+        data_unpack_func = cfg.get_data_unpack_func(split)
+        input_reshape_func = cfg.get_input_reshape_func(split)
+        val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
+        val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+
+        # Network
+        # Construct the model
+        model = cfg.load_model()
+        # Determine the GPU used by the current process
+        cur_device = torch.cuda.current_device()
+        # Transfer the model to the current GPU device
+        model = model.to(device=cur_device, non_blocking=True)
+        # Use multi-process data parallel model in the multi-gpu setting
+        if world_size > 1:
+            # Make model replica operate on the current device
+            model = nn.parallel.DistributedDataParallel(
+                module=model, device_ids=[cur_device], output_device=cur_device
+            )
+
+        misc.log_model_info(model)
+
+        if args.load_epoch == -1:
+            exp.load_summary()
+            load_epoch = int(exp.summary['epoch'][-1])
+        elif args.load_epoch == -2:
+            exp.load_summary()
+            load_epoch = int(exp.get_best_model_stat(best_metric_field)['epoch'])
+        elif args.load_epoch is None:
+            load_epoch = None
+        elif args.load_epoch >= 0:
+            exp.load_summary()
+            load_epoch = args.load_epoch
+        else:
+            raise ValueError(f"Wrong args.load_epoch value: {args.load_epoch:d}")
+
+        if load_epoch is not None:
+            weights_path = exp.get_checkpoint_path(load_epoch)
+            checkpoint = loader.model_load_weights_GPU(model, weights_path)
+
+            logger.info("Training stats: %s", json.dumps(exp.get_epoch_stat(load_epoch), sort_keys=False, indent=4))
+        else:
+            if hasattr(cfg, 'load_pretrained'):
+                cfg.load_pretrained(model)
+
+
+
+        if hasattr(cfg, 'criterion'):
+            criterion = cfg.criterion()
+        else:
+            if cfg.dataset_cfg.task == 'singlelabel_classification':
+                logger.info(f"cfg.criterion not defined. Using CrossEntropyLoss()")
+                criterion = nn.CrossEntropyLoss()
+            elif cfg.dataset_cfg.task == 'multilabel_classification':
+                logger.info(f"cfg.criterion not defined. Using BCEWithLogitsLoss()")
+                criterion = nn.BCEWithLogitsLoss()
+            else:
+                raise ValueError(f"cfg.dataset_cfg.task not known task: {cfg.dataset_cfg.task}")
+
+
+        oneclip = args.mode == 'oneclip'
+
+        if cfg.dataset_cfg.task == 'singlelabel_classification':
+            _, _, _, _, _, _, _, video_metrics, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, cfg.batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+        elif cfg.dataset_cfg.task == 'multilabel_classification':
+            _, _, _, _, _, video_metrics, eval_log_str = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, cfg.batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+        else:
+            raise ValueError(f"Unknown task: {cfg.dataset_cfg.task}")
+
+
+        if rank == 0:
+            if args.save_predictions:
+                video_predictions, video_labels, video_ids = video_metrics.get_predictions_numpy()
+
+                if load_epoch is None:
+                    predictions_file_path = os.path.join(exp.predictions_dir, 'pretrained_%sval.pkl' % (args.mode))
+                else:
+                    predictions_file_path = os.path.join(exp.predictions_dir, 'epoch_%04d_%sval.pkl' % (load_epoch, args.mode))
+                os.makedirs(exp.predictions_dir, exist_ok=True)
+                
+                print("Saving predictions to: " + predictions_file_path) 
+                with open(predictions_file_path, 'wb') as f:
+                    pickle.dump({'video_predictions': video_predictions, 'video_labels': video_labels, 'video_ids': video_ids}, f, pickle.HIGHEST_PROTOCOL)
+
+
+
+        logger.success('Finished evaluation')
+        if rank == 0:
+            exp.tg_send_text_with_expname('Finished evaluation\n\n' + eval_log_str)
+
+    except Exception as e:
+        logger.exception("Exception occurred")
+        if rank == 0:
+            exp.tg_send_text_with_expname('Exception occurred\n\n' + repr(e))
+

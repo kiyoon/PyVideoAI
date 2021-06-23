@@ -1,0 +1,12 @@
+[submodule "submodules/video_datasets_api"]
+	path = submodules/video_datasets_api
+	url = https://github.com/kiyoon/video_datasets_api.git
+	branch = master
+[submodule "submodules/experiment_utils"]
+	path = submodules/experiment_utils
+	url = https://github.com/kiyoon/experiment_utils.git
+	branch = master
+[submodule "examples"]
+	path = examples
+	url = https://github.com/kiyoon/PyVideoAI-examples.git
+	branch = master

@@ -1,0 +1,12 @@
+[Telegram0]
+token =
+chat_id =
+
+; Multiple bot possible to split output
+;[Telegram1]
+;token =
+;chat_id =
+;
+;[Telegram2]
+;token =
+;chat_id =
