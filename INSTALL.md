@@ -31,6 +31,13 @@ git submodule update
 git submodule foreach git checkout master
 ```
 
+Preferrably, checkout to a stable release.
+
+```bash
+git checkout v0.1
+git submodule update --recursive
+```
+
 Then, install each submodule.  
 
 ```bash

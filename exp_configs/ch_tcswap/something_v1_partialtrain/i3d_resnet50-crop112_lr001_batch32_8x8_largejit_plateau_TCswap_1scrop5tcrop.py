@@ -20,24 +20,79 @@ test_num_spatial_crops = 1
 
 input_channel_num=[3]   # RGB
 
+#### OPTIONAL
+## when you resume from checkpoint, load optimiser/scheduler state?
+## Default values are True.
+#load_optimiser_state = True
+#load_scheduler_state = True
+#
+#def criterion():
+#    return torch.nn.CrossEntropyLoss()
+#
+#def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
+#    return None
+#
+#def get_optim_policies(model):
+#    """
+#    You can set different learning rates on different blocks of the network.
+#    Refer to `get_optim_policies()` in pyvideoai/models/epic/tsn.py
+#    """
+#    conv_weight = []
+#    conv_bias = []
+#    for m in model.parameters():
+#        if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Conv1d):
+#            ps = list(m.parameters())
+#            conv_weight.append(ps[0])
+#            if len(ps) == 2:
+#                conv_bias.append(ps[1])
+#        # ...
+#    return [
+#        {   
+#            "params": conv_weight,
+#            "lr_mult": 1,
+#            "decay_mult": 1,
+#            "name": "conv_weight",
+#        },
+#        {   
+#            "params": conv_bias,
+#            "lr_mult": 2,
+#            "decay_mult": 0,
+#            "name": "conv_bias",
+#        },
+#    ]
+#
+import logging
+logger = logging.getLogger(__name__)
+from pyvideoai.utils.misc import has_gotten_lower, has_gotten_higher
+# optional
+def early_stopping_condition(epoch, exp):
+    patience=20
+    if epoch+1 >= patience:
+        if not has_gotten_lower(exp.summary['val_loss'][-patience:]) and not has_gotten_higher(exp.summary['val_acc'][-patience:]):
+            logger.info(f"Validation loss and accuracy haven't gotten better for {patience} epochs. Stopping training..")
+            return True
+
+    return False
+
 def optimiser(params):
     return torch.optim.SGD(params, lr = 0.001, momentum = 0.9, weight_decay = 5e-4)
 
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
-    return torch.optim.lr_scheduler.StepLR(optimiser, step_size = 50 * iters_per_epoch, gamma = 0.1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
+    #return torch.optim.lr_scheduler.StepLR(optimiser, step_size = 50 * iters_per_epoch, gamma = 0.1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
+    return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
     #return None
 
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, crop_size, input_channel_num)
 
 def load_pretrained(model):
-    model_cfg.load_pretrained(model, model_cfg.pretrained_path_8x8)
+    model_cfg.load_pretrained_kinetics400(model, model_cfg.kinetics400_pretrained_path_8x8)
 
 def _dataloader_shape_to_model_input_shape(inputs):
     N, C, T, H, W = inputs.shape
-    inputs = inputs.permute((0,2,1,3,4))    # N, T, C, H, W
-    inputs = inputs.reshape((N,C,T,H,W))
+    inputs = inputs.reshape(N,T,C,H,W)      # TCswap
+    inputs = inputs.permute(0,2,1,3,4)    # back to N, C, T, H, W
     return [inputs]
 
 def get_input_reshape_func(split):

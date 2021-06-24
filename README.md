@@ -4,8 +4,9 @@ Ultimate computer vision (video action recognition focused) training framework f
 
 ** Key features **  
 - Supports multi-gpu, multi-node training.  
-- STOA models such as I3D, Non-local, TSN, TRN, ...
+- STOA models such as I3D, Non-local, TSN, TRN, ..., and even ImageNet training!
 - Many datasets such as Kinetics-400, EPIC-Kitchens-55, Something-Something-V1/V2, HMDB-51, UCF-101, Diving48, CATER, ...
+- Supports both video decoding (straight from .avi/mp4) and frame extracted (.jpg/png) dataloaders, sparse-sample and dense-sample.
 - Any popular LR scheduling like Cosine Annealing with Warm Restart, Step LR, and Reduce LR on Plateau (when val loss doesn't decrease)
 - Early stopping when training doesn't improve (customise your condition)
 - **Easily add custom model, optimiser, scheduler, loss and dataloader!**
@@ -22,7 +23,7 @@ Difference between the two config systems can be found in [CONFIG_SYSTEM.md](CON
 # Getting Started
 Jupyter Notebook examples to run:  
 - HMDB-51 data preparation
-- Inference on pre-trained model from the model zoo
+- Inference on pre-trained model from the model zoo, and visualise model/dataloader/per-class performance.
 - Training I3D using Kinetics pretrained model
 - Using image model and ImageNet dataset  
 
@@ -82,7 +83,10 @@ conda activate videoai
 conda install pytorch==1.8.1 torchvision==0.9.1 cudatoolkit=10.2 -c pytorch
 
 git clone --recurse-submodules https://github.com/kiyoon/PyVideoAI.git
-cd PyVideoAI/submodules/video_datasets_api
+cd PyVideoAI
+git checkout v0.1
+git submodule update --recursive
+cd submodules/video_datasets_api
 python setup.py develop
 cd ../experiment_utils
 python setup.py develop
