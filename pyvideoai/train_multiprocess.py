@@ -35,6 +35,8 @@ from .train_and_val import train_epoch, eval_epoch
 from .train_and_val_multilabel import train_epoch as train_epoch_multilabel
 from .train_and_val_multilabel import eval_epoch as eval_epoch_multilabel
 
+from .metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+
 import coloredlogs, logging, verboselogs
 logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
@@ -91,6 +93,10 @@ def train(args):
 
     if cfg.dataset_cfg.task == 'singlelabel_classification':
         summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_singlelabel(multicropval = perform_multicropval)
+        metrics = {'train': [ClipAccuracyMetric()],
+                'val': [ClipAccuracyMetric()],
+                'multicropval': [VideoAccuracyMetric(topk=(1,5))]
+                }
     elif cfg.dataset_cfg.task == 'multilabel_classification':
         summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_multilabel(multicropval = perform_multicropval)
     exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
@@ -338,7 +344,7 @@ def train(args):
                 logger.info("Epoch %d/%d" % (epoch, args.num_epochs-1))
 
             if cfg.dataset_cfg.task == 'singlelabel_classification':
-                sample_seen, total_samples, loss, acc, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, train_dataloader, data_unpack_funcs['train'], rank, world_size, input_reshape_func=input_reshape_funcs['train'])
+                sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, train_dataloader, data_unpack_funcs['train'], metrics['train'], rank, world_size, input_reshape_func=input_reshape_funcs['train'])
                 if rank == 0:#{{{
                     train_writer.add_scalar('Loss', loss, epoch)
                     train_writer.add_scalar('Accuracy', acc, epoch)
@@ -348,7 +354,7 @@ def train(args):
                     # writer.add_graph(model, inputs)
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss, 'train_acc': acc}#}}}
          
-                val_sample_seen, val_total_samples, val_loss, val_acc, _, _, val_elapsed_time, _, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], cfg.dataset_cfg.num_classes, batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
+                val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], cfg.dataset_cfg.num_classes, batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
                 val_metric = val_acc    # which metric to use for deciding the best model
                 if rank == 0:#{{{
                     val_writer.add_scalar('Loss', val_loss, epoch)
@@ -359,7 +365,7 @@ def train(args):
                     curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss, 'val_acc': val_acc})#}}}
 
                 if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
-                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_acc, multi_crop_val_vid_acc_top1, multi_crop_val_vid_acc_top5, multi_crop_val_elapsed_time, _, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], cfg.dataset_cfg.num_classes, batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
+                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], cfg.dataset_cfg.num_classes, batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
                     if rank == 0:#{{{
                         multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
                         multi_crop_val_writer.add_scalar('Accuracy', multi_crop_val_acc, epoch)

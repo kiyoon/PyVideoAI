@@ -10,21 +10,23 @@ class Metric(ABC):
         self.data = {}              # Store predictions here for later metric calculation
         self.num_classes = None     # prediction length
         self.label_size = None      # either num_classes (multi-label) or 1 (one-label)
+        self.last_calculated_metrics = None
 
-    def __init__(self):
+    def __init__(self, activation=None):
+        self.activation = activation
         self.clean_data()
 
-    def _apply_activation(self, predictions, activation):
-        if activation == 'softmax':
+    def _apply_activation(self, predictions):
+        if self.activation == 'softmax':
             return torch.nn.Softmax(dim=1)(predictions)
-        elif activation == 'sigmoid':
+        elif self.activation == 'sigmoid':
             return torch.nn.Sigmoid()(predictions)
-        elif activation is None:
-            return clip_predictions
-        elif callable(activation):
-            return activation(predictions)
+        elif self.activation is None:
+            return predictions
+        elif callable(self.activation):
+            return self.activation(predictions)
         else:
-            raise ValueError(f"activation wrong value: {activation}")
+            raise ValueError(f"activation wrong value: {self.activation}")
 
     def _check_data_shape(self, video_ids, clip_predictions, labels):
         assert video_ids.shape[0] == clip_predictions.shape[0] == labels.shape[0], "Batch size not equal. video_ids.shape = {}, clip_predictions.shape = {}, labels.shape = {}".format(video_ids.shape, clip_predictions.shape, labels.shape)
@@ -54,7 +56,7 @@ class Metric(ABC):
 
 
     @abstractmethod
-    def add_clip_predictions(self, video_ids, clip_predictions, labels, activation = 'softmax'):
+    def add_clip_predictions(self, video_ids, clip_predictions, labels):
         """By default, we will average the clip predictions with the same video_ids.
         If averaging does not fit your needs, override and redefine this function as you'd like.
         """ 
@@ -62,26 +64,16 @@ class Metric(ABC):
 
         with torch.no_grad():
             self._check_num_classes(clip_predictions, labels)
-            clip_predictions = self._apply_activation(clip_predictions, activation)
+            clip_predictions = self._apply_activation(clip_predictions)
 
-    @abstractmethod
-    def get_predictions_torch(self):
-        """Return the video-based predictions in Torch tensor
-        """
-        #return video_predictions, video_labels, video_ids
-        pass
 
-    def get_predictions_numpy(self):
-        """Return the video-based predictions in numpy array 
-        """
-        return map(np.array, self.get_predictions_torch())
 
 
     @abstractmethod
     def calculate_metrics(self):
         """
         video_predictions, video_labels, _ = self.get_predictions_torch()
-        return accuracy(video_predictions, video_labels, topk)
+        self.last_calculated_metrics = accuracy(video_predictions, video_labels, topk)
         """
         pass
 
@@ -102,7 +94,7 @@ class Metric(ABC):
 
 
     @abstractmethod
-    def logging_str_iter(self, split, value):
+    def logging_msg_iter(self, split):
         """
         Returning None will skip logging this metric
         """
@@ -110,7 +102,7 @@ class Metric(ABC):
 
 
     @abstractmethod
-    def logging_str_epoch(self, split, value):
+    def logging_msg_epoch(self, split):
         """
         Returning None will skip logging this metric
         """
@@ -139,11 +131,13 @@ class Metric(ABC):
 class ClipMetric(Metric):
     """Clip metric that don't average clip predictions from the same video ID.
     Instead, store all clip predictions independently.
+    Example usage: mAP for multilabel classification.
+    Note that calculating accuracy don't require saving predictions to the memory, so don't use this for that.
     """
-    def add_clip_predictions(self, video_ids, clip_predictions, labels, activation = 'softmax'):
+    def add_clip_predictions(self, video_ids, clip_predictions, labels):
         """We will ignore the video_ids and store all the clip predictions independently without aggregating (like averaging).
         """ 
-        super().add_clip_predictions(video_ids, clip_predictions, labels, activation)
+        super().add_clip_predictions(video_ids, clip_predictions, labels)
         with torch.no_grad():
             self.data['video_ids'] = torch.cat((self.data['video_ids'], video_ids), dim=0)
             self.data['clip_predictions'] = torch.cat((self.data['clip_predictions'], clip_predictions), dim=0)
@@ -154,6 +148,11 @@ class ClipMetric(Metric):
         """
         return self.data['clip_predictions'], self.data['labels'], self.data['video_ids']
 
+    def get_predictions_numpy(self):
+        """Return the video-based predictions in numpy array 
+        """
+        return map(np.array, self.get_predictions_torch())
+
     def __len__(self):
         return len(self.data['clip_predictions']) 
 
@@ -161,10 +160,10 @@ class ClipMetric(Metric):
 class AverageMetric(Metric):
     """Video metric that averages all clip predictions from the same video ID.
     """
-    def add_clip_predictions(self, video_ids, clip_predictions, labels, activation = 'softmax'):
+    def add_clip_predictions(self, video_ids, clip_predictions, labels):
         """We will average the clip predictions with the same video_ids.
         """ 
-        super().add_clip_predictions(video_ids, clip_predictions, labels, activation)
+        super().add_clip_predictions(video_ids, clip_predictions, labels)
         with torch.no_grad():
             for video_id, clip_prediction, label in zip(video_ids, clip_predictions, labels):
                 video_id = video_id.item()
@@ -194,6 +193,11 @@ class AverageMetric(Metric):
                 video_ids[b] = video_id 
 
         return video_predictions, video_labels, video_ids
+
+    def get_predictions_numpy(self):
+        """Return the video-based predictions in numpy array 
+        """
+        return map(np.array, self.get_predictions_torch())
 
     def __len__(self):
         num_clips_added = 0

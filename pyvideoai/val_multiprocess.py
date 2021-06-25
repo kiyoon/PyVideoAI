@@ -23,6 +23,8 @@ from .utils import misc
 from .train_and_val import eval_epoch
 from .train_and_val_multilabel import eval_epoch as eval_epoch_multilabel
 
+from .metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+
 import coloredlogs, logging, verboselogs
 logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
@@ -77,6 +79,10 @@ def val(args):
     if cfg.dataset_cfg.task == 'singlelabel_classification':
         summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_singlelabel(multicropval = perform_multicropval)
         best_metric_field = 'val_acc'
+        metrics = {'train': [ClipAccuracyMetric()],
+                'val': [ClipAccuracyMetric()],
+                'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5))]
+                }
     elif cfg.dataset_cfg.task == 'multilabel_classification':
         summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_multilabel(multicropval = perform_multicropval)
         best_metric_field = 'val_vid_mAP'
@@ -204,9 +210,9 @@ def val(args):
         oneclip = args.mode == 'oneclip'
 
         if cfg.dataset_cfg.task == 'singlelabel_classification':
-            _, _, _, _, _, _, _, video_metrics, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+            _, _, _, _, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics['val' if oneclip else 'multicropval'], cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
         elif cfg.dataset_cfg.task == 'multilabel_classification':
-            _, _, _, _, _, video_metrics, eval_log_str = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+            _, _, _, _, eval_log_str = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_func, metrics['val' if oneclip else 'multicropval'], cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
         else:
             raise ValueError(f"Unknown task: {cfg.dataset_cfg.task}")
 

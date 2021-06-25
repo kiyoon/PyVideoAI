@@ -4,16 +4,16 @@ from pyvideoai.dataloaders.frames_densesample_dataset import FramesDensesampleDa
 
 import torch
 
-#batch_size = 8  # per process (per GPU)
-def batch_size():
-    '''batch_size can be either integer or function returning integer.
-    '''
-    vram = cuda.get_device_properties(0).total_memory
-    if vram > 20e+9:
-        return 32
-    elif vram > 10e+9:
-        return 16
-    return 8
+batch_size = 8  # per process (per GPU)
+#def batch_size():
+#    '''batch_size can be either integer or function returning integer.
+#    '''
+#    vram = torch.cuda.get_device_properties(0).total_memory
+#    if vram > 20e+9:
+#        return 32
+#    elif vram > 10e+9:
+#        return 16
+#    return 8
 
 input_frame_length = 8
 input_sample_rate = 8
