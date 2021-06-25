@@ -138,8 +138,11 @@ def val(args):
         val_dataset = cfg.get_torch_dataset(split)
         data_unpack_func = cfg.get_data_unpack_func(split)
         input_reshape_func = cfg.get_input_reshape_func(split)
+        batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
+        logger.info(f'Using batch size of {batch_size} per process (per GPU), resulting in total size of {batch_size * world_size}.')
+
         val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
-        val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+        val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
 
         # Network
         # Construct the model
@@ -198,9 +201,9 @@ def val(args):
         oneclip = args.mode == 'oneclip'
 
         if cfg.dataset_cfg.task == 'singlelabel_classification':
-            _, _, _, _, _, _, _, video_metrics, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, cfg.batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+            _, _, _, _, _, _, _, video_metrics, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
         elif cfg.dataset_cfg.task == 'multilabel_classification':
-            _, _, _, _, _, video_metrics, eval_log_str = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, cfg.batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+            _, _, _, _, _, video_metrics, eval_log_str = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
         else:
             raise ValueError(f"Unknown task: {cfg.dataset_cfg.task}")
 

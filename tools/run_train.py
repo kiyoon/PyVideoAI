@@ -68,8 +68,8 @@ def add_train_args(parser):
     parser.add_argument("-s", "--save_mode", type=str, default="last_and_peaks", choices=["all", "higher", "last_and_peaks"],  help="Checkpoint saving condition. all: save all epochs, higher: save whenever the highest validation performance model is found, last_and_peaks: save all epochs, but remove previous epoch if that wasn't the best.")
     parser.add_argument("-l", "--load_epoch", type=int, default=None, help="Load from checkpoint. Set to -1 to load from the last checkpoint.")
     parser.add_argument("--seed", type=int, default=12, help="Random seed for np, torch, torch.cuda, DALI. Actual seed will be seed+rank.")
-    parser.add_argument("-t", "--multi_crop_val_freq", type=int, default=5, help="Number of epochs after full multi-crop validation is performed.")
-    parser.add_argument("-T", "--telegram_post_freq", type=int, default=5, help="Frequency (in epochs) to send the training stats on Telegram.")
+    parser.add_argument("-t", "--multi_crop_val_period", type=int, default=5, help="Number of epochs after full multi-crop validation is performed.")
+    parser.add_argument("-T", "--telegram_post_period", type=int, default=10, help="Period (in epochs) to send the training stats on Telegram.")
     parser.add_argument("-B", "--telegram_bot_idx", type=int, default=0, help="Which Telegram bot to use defined in key.ini?")
     parser.add_argument("-w", "--dataloader_num_workers", type=int, default=4, help="num_workers for PyTorch Dataset loader.")
 
