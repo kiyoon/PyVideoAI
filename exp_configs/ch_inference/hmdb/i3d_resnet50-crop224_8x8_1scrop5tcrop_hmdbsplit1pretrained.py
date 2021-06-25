@@ -9,9 +9,7 @@ def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
     vram = torch.cuda.get_device_properties(0).total_memory
-    if vram > 20e+9:
-        return 32
-    elif vram > 10e+9:
+    if vram > 10e+9:
         return 16
     return 8
 
@@ -40,7 +38,7 @@ input_channel_num=[3]   # RGB
 #    return torch.nn.CrossEntropyLoss()
 #
 #def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
-#    return None
+#   return None
 #
 #def get_optim_policies(model):
 #    """
@@ -98,7 +96,7 @@ def load_model():
 
 # optional
 def load_pretrained(model):
-    model_cfg.load_pretrained_kinetics400(model, model_cfg.kinetics400_pretrained_path_8x8)
+    model_cfg.load_pretrained_hmdb(model)
 
 def _dataloader_shape_to_model_input_shape(inputs):
     return model_cfg.NCTHW_to_model_input_shape(inputs)
