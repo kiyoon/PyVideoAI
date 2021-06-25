@@ -23,6 +23,7 @@ from .utils import misc
 from .train_and_val import eval_epoch
 from .train_and_val_multilabel import eval_epoch as eval_epoch_multilabel
 
+from .metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 from .metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 
 import coloredlogs, logging, verboselogs
@@ -142,10 +143,17 @@ def val(args):
         else:   # set split automatically
             if args.mode == 'oneclip':
                 split = 'val'
+                predictions_gatherer = ClipPredictionsGatherer()
             else:   # multicrop
                 split = 'multicropval'
+                predictions_gatherer = VideoPredictionsGatherer()
         val_dataset = cfg.get_torch_dataset(split)
         data_unpack_func = cfg.get_data_unpack_func(split)
+        metric = metrics[split]
+        if metric is not None:
+            metric.append(predictions_gatherer)
+        else:
+            metric = [predictions_gatherer]
         input_reshape_func = cfg.get_input_reshape_func(split)
         batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
         logger.info(f'Using batch size of {batch_size} per process (per GPU), resulting in total size of {batch_size * world_size}.')
@@ -210,16 +218,16 @@ def val(args):
         oneclip = args.mode == 'oneclip'
 
         if cfg.dataset_cfg.task == 'singlelabel_classification':
-            _, _, _, _, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics['val' if oneclip else 'multicropval'], cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+            _, _, _, _, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metric, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
         elif cfg.dataset_cfg.task == 'multilabel_classification':
-            _, _, _, _, eval_log_str = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_func, metrics['val' if oneclip else 'multicropval'], cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+            _, _, _, _, eval_log_str = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_func, metric, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
         else:
             raise ValueError(f"Unknown task: {cfg.dataset_cfg.task}")
 
 
         if rank == 0:
             if args.save_predictions:
-                video_predictions, video_labels, video_ids = video_metrics.get_predictions_numpy()
+                video_predictions, video_labels, video_ids = predictions_gatherer.get_predictions_numpy()
 
                 if load_epoch is None:
                     predictions_file_path = os.path.join(exp.predictions_dir, 'pretrained_%sval.pkl' % (args.mode))

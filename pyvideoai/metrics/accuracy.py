@@ -77,6 +77,7 @@ class ClipAccuracyMetric(Metric):
         if split == 'train':
             prefix = ''
         else:
+            split = split.replace('multicrop', '')  # don't print multicrop for one clip evaluation
             prefix = f'{split}_'
 
         messages = [f'{prefix}acc: {value:.4f}' if topk == 1 else f'{prefix}acc_top{topk}: {value:.4f}' for topk, value in zip(self.topk, self.last_calculated_metrics)]
@@ -88,7 +89,7 @@ class ClipAccuracyMetric(Metric):
         """
         Returning None will skip logging this metric
         """
-        return self.logging_str_iter(split, values)
+        return self.logging_msg_iter(split)
     
     @staticmethod
     def is_better(value_1, value_2):

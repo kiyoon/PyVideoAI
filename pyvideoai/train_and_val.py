@@ -362,7 +362,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, metrics, num_clas
             logging_msgs = []
             for metric in metrics:
                 metric.calculate_metrics()
-                logging_msg = metric.logging_msg_iter('val' if one_clip else 'multicropval')
+                logging_msg = metric.logging_msg_epoch('val' if one_clip else 'multicropval')
                 if logging_msg is not None:
                     logging_msgs.append(logging_msg)
 

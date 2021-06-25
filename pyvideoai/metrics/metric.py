@@ -139,14 +139,19 @@ class ClipMetric(Metric):
         """ 
         super().add_clip_predictions(video_ids, clip_predictions, labels)
         with torch.no_grad():
-            self.data['video_ids'] = torch.cat((self.data['video_ids'], video_ids), dim=0)
-            self.data['clip_predictions'] = torch.cat((self.data['clip_predictions'], clip_predictions), dim=0)
-            self.data['labels'] = torch.cat((self.data['labels'], labels), dim=0)
+            if 'video_ids' in self.data.keys():
+                self.data['video_ids'] = torch.cat((self.data['video_ids'], video_ids), dim=0)
+                self.data['clip_predictions'] = torch.cat((self.data['clip_predictions'], clip_predictions), dim=0)
+                self.data['labels'] = torch.cat((self.data['labels'], labels), dim=0)
+            else:
+                self.data['video_ids'] = video_ids
+                self.data['clip_predictions'] = clip_predictions
+                self.data['labels'] = labels
 
     def get_predictions_torch(self):
         """Return the clip-based predictions in Torch tensor
         """
-        return self.data['clip_predictions'], self.data['labels'], self.data['video_ids']
+        return self.data['clip_predictions'].cpu(), self.data['labels'].cpu(), self.data['video_ids'].cpu()
 
     def get_predictions_numpy(self):
         """Return the video-based predictions in numpy array 
@@ -205,3 +210,54 @@ class AverageMetric(Metric):
             num_clips_added += data['num_clips']
 
         return num_clips_added
+
+
+class ClipPredictionsGatherer(ClipMetric):
+    """Silent, no metric calculation but designed to gather predictions.
+    DO NOT USE. Used for val_multiprocess.py --save_predictions only
+    """
+    def calculate_metrics(self):
+        return None
+
+    def types_of_metrics(self):
+        return None
+
+    def tensorboard_tags(self):
+        return None
+
+    def get_csv_fieldnames(self, split):
+        return None
+
+    def logging_msg_iter(self, split):
+        return None
+
+    def logging_msg_epoch(self, split):
+        return None
+    
+    def is_better(value_1, value_2):
+        return None
+
+class VideoPredictionsGatherer(AverageMetric):
+    """Silent, no metric calculation but designed to gather predictions.
+    DO NOT USE. Used for val_multiprocess.py --save_predictions only
+    """
+    def calculate_metrics(self):
+        return None
+
+    def types_of_metrics(self):
+        return None
+
+    def tensorboard_tags(self):
+        return None
+
+    def get_csv_fieldnames(self, split):
+        return None
+
+    def logging_msg_iter(self, split):
+        return None
+
+    def logging_msg_epoch(self, split):
+        return None
+    
+    def is_better(value_1, value_2):
+        return None
