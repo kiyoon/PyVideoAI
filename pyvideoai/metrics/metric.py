@@ -5,19 +5,14 @@ import numpy as np
 def is_numpy(instance):
     return type(instance).__module__ == np.__name__
 
-class Metric(metaclass=ABCMeta):
+class Metric(ABC):
     def clean_data(self):
         self.data = {}              # Store predictions here for later metric calculation
         self.num_classes = None     # prediction length
         self.label_size = None      # either num_classes (multi-label) or 1 (one-label)
 
-    def __init__(self, prefix=None):
-        """
-        args:
-            prefix (str): prefix of the metric name (usually, "val_" or "multicropval_" to make "acc" -> "val_acc" for the CSV fieldnames)
-        """
+    def __init__(self):
         self.clean_data()
-        self.prefix = prefix
 
     def _apply_activation(self, predictions, activation):
         if activation == 'softmax':
@@ -58,16 +53,119 @@ class Metric(metaclass=ABCMeta):
             assert self.label_size == (1 if len(labels.shape) == 1 else labels.shape[1]), "Different size of labels from the last times"
 
 
-    def add_clip_predictions(self, video_ids, clip_predictions, labels, apply_activation = 'softmax'):
+    @abstractmethod
+    def add_clip_predictions(self, video_ids, clip_predictions, labels, activation = 'softmax'):
         """By default, we will average the clip predictions with the same video_ids.
-        If averaging does not fit your needs, redefine this function as you'd like.
+        If averaging does not fit your needs, override and redefine this function as you'd like.
         """ 
         video_ids, clip_predictions, labels = self._check_data_shape(video_ids, clip_predictions, labels)
 
         with torch.no_grad():
             self._check_num_classes(clip_predictions, labels)
-            clip_predictions = self._apply_activation(clip_predictions, apply_activation)
+            clip_predictions = self._apply_activation(clip_predictions, activation)
 
+    @abstractmethod
+    def get_predictions_torch(self):
+        """Return the video-based predictions in Torch tensor
+        """
+        #return video_predictions, video_labels, video_ids
+        pass
+
+    def get_predictions_numpy(self):
+        """Return the video-based predictions in numpy array 
+        """
+        return map(np.array, self.get_predictions_torch())
+
+
+    @abstractmethod
+    def calculate_metrics(self):
+        """
+        video_predictions, video_labels, _ = self.get_predictions_torch()
+        return accuracy(video_predictions, video_labels, topk)
+        """
+        pass
+
+
+    @abstractmethod
+    def types_of_metrics(self):
+        return float
+
+
+    @abstractmethod
+    def tensorboard_tags(self):
+        return 'Metric'
+
+
+    @abstractmethod
+    def get_csv_fieldnames(self, split):
+        return f'{split}_metric'     # like val_acc
+
+
+    @abstractmethod
+    def logging_str_iter(self, split, value):
+        """
+        Returning None will skip logging this metric
+        """
+        return f'{split}_metric: {value:.5f}'
+
+
+    @abstractmethod
+    def logging_str_epoch(self, split, value):
+        """
+        Returning None will skip logging this metric
+        """
+        return f'{split}_metric: {value:.5f}'
+    
+    @staticmethod
+    @abstractmethod
+    def is_better(value_1, value_2):
+        """Metric comparison function
+
+        params:
+            two values of the metric
+
+        return:
+            True if value_1 is better. False if value_2 is better or they're equal.
+        """
+        return value_1 > value_2 
+
+
+
+    @abstractmethod
+    def __len__(self):
+        pass
+
+
+class ClipMetric(Metric):
+    """Clip metric that don't average clip predictions from the same video ID.
+    Instead, store all clip predictions independently.
+    """
+    def add_clip_predictions(self, video_ids, clip_predictions, labels, activation = 'softmax'):
+        """We will ignore the video_ids and store all the clip predictions independently without aggregating (like averaging).
+        """ 
+        super().add_clip_predictions(video_ids, clip_predictions, labels, activation)
+        with torch.no_grad():
+            self.data['video_ids'] = torch.cat((self.data['video_ids'], video_ids), dim=0)
+            self.data['clip_predictions'] = torch.cat((self.data['clip_predictions'], clip_predictions), dim=0)
+            self.data['labels'] = torch.cat((self.data['labels'], labels), dim=0)
+
+    def get_predictions_torch(self):
+        """Return the clip-based predictions in Torch tensor
+        """
+        return self.data['clip_predictions'], self.data['labels'], self.data['video_ids']
+
+    def __len__(self):
+        return len(self.data['clip_predictions']) 
+
+
+class AverageMetric(Metric):
+    """Video metric that averages all clip predictions from the same video ID.
+    """
+    def add_clip_predictions(self, video_ids, clip_predictions, labels, activation = 'softmax'):
+        """We will average the clip predictions with the same video_ids.
+        """ 
+        super().add_clip_predictions(video_ids, clip_predictions, labels, activation)
+        with torch.no_grad():
             for video_id, clip_prediction, label in zip(video_ids, clip_predictions, labels):
                 video_id = video_id.item()
                 #label = label.item()
@@ -79,45 +177,23 @@ class Metric(metaclass=ABCMeta):
                 else:
                     self.data[video_id] = {'clip_prediction_accum': clip_prediction, 'label': label, 'num_clips': 1}
 
-    @abstractmethod
     def get_predictions_torch(self):
         """Return the video-based predictions in Torch tensor
         """
-        #return video_predictions, video_labels, video_ids
-        return None, None, None
+        with torch.no_grad():
+            num_videos = len(self.data.keys())
+            video_predictions = torch.zeros(num_videos, self.num_classes)
+            if self.label_size == 1:
+                video_labels = torch.zeros(num_videos, dtype=torch.long)
+            else:
+                video_labels = torch.zeros((num_videos, self.label_size), dtype=torch.long)
+            video_ids = torch.zeros(num_videos, dtype=torch.long)
+            for b, video_id in enumerate(self.data.keys()):
+                video_predictions[b] = self.data[video_id]['clip_prediction_accum'] / self.data[video_id]['num_clips']
+                video_labels[b] = self.data[video_id]['label']
+                video_ids[b] = video_id 
 
-
-    @abstractmethod
-    def calculate_metrics(self, topk=(1,)):
-        video_predictions, video_labels, _ = self.get_predictions_torch()
-        return accuracy(video_predictions, video_labels, topk)
-
-
-    @abstractmethod
-    def get_types_of_metrics(self):
-        return float
-
-
-    @abstractmethod
-    def get_tensorboard_tags(self):
-        # DO NOT add self.prefix
-        return 'Metric'
-
-
-    @abstractmethod
-    def get_csv_fieldnames(self):
-        return f'{self.prefix}metric'     # like val_acc
-
-
-    @abstractmethod
-    def get_logging_format(self):
-        return f'{self.prefix}metric: {{:.5f}}'
-
-
-    def get_predictions_numpy(self):
-        """Return the video-based predictions in numpy array 
-        """
-        return map(np.array, self.get_predictions_torch())
+        return video_predictions, video_labels, video_ids
 
     def __len__(self):
         num_clips_added = 0
