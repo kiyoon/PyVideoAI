@@ -131,10 +131,13 @@ def val(args):
 
 
         # Dataset
-        if args.mode == 'oneclip':
-            split = 'val'
-        else:   # multicrop
-            split = 'multicropval'
+        if args.split is not None:
+            split = args.split
+        else:   # set split automatically
+            if args.mode == 'oneclip':
+                split = 'val'
+            else:   # multicrop
+                split = 'multicropval'
         val_dataset = cfg.get_torch_dataset(split)
         data_unpack_func = cfg.get_data_unpack_func(split)
         input_reshape_func = cfg.get_input_reshape_func(split)
