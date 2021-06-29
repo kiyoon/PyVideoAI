@@ -76,17 +76,17 @@ def val(args):
         logging.getLogger('slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
-    perform_multicropval=True       # when loading, assume there was multicropval. Even if there was not, having more CSV field information doesn't hurt.
-    if cfg.dataset_cfg.task == 'singlelabel_classification':
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_singlelabel(multicropval = perform_multicropval)
-        best_metric_field = 'val_acc'
-        metrics = {'train': [ClipAccuracyMetric()],
-                'val': [ClipAccuracyMetric()],
-                'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5))]
-                }
-    elif cfg.dataset_cfg.task == 'multilabel_classification':
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_multilabel(multicropval = perform_multicropval)
-        best_metric_field = 'val_vid_mAP'
+
+    metrics = {'train': [ClipAccuracyMetric()],
+            'val': [ClipAccuracyMetric()],
+            'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5))]
+            }
+
+    # metrics[best_metric_split][best_metric_index] is the metric that determines the best model.
+    best_metric_split = 'val'      
+    best_metric_index = 0
+
+    summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
     exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
 
 
@@ -140,6 +140,7 @@ def val(args):
         # Dataset
         if args.split is not None:
             split = args.split
+            predictions_gatherer = VideoPredictionsGatherer()
         else:   # set split automatically
             if args.mode == 'oneclip':
                 split = 'val'
@@ -182,7 +183,14 @@ def val(args):
             load_epoch = int(exp.summary['epoch'][-1])
         elif args.load_epoch == -2:
             exp.load_summary()
-            load_epoch = int(exp.get_best_model_stat(best_metric_field)['epoch'])
+            best_metric = metrics[best_metric_split][best_metric_index]
+            best_metric_fieldname = best_metric.get_csv_fieldnames(best_metric_split)
+            best_metric_is_better = best_metric.is_better
+            if isinstance(best_metric_fieldname, tuple):
+                best_metric_fieldname = best_metric_fieldname[0]
+
+            logger.info(f'Using the best metric from CSV field `{best_metric_fieldname}`')
+            load_epoch = int(exp.get_best_model_stat(best_metric_fieldname, best_metric_is_better)['epoch'])
         elif args.load_epoch is None:
             load_epoch = None
         elif args.load_epoch >= 0:

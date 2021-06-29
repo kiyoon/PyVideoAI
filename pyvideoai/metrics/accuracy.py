@@ -32,10 +32,13 @@ class ClipAccuracyMetric(Metric):
 
         super().__init__(activation=None)
 
+
     def clean_data(self):
         super().clean_data()
         self.num_seen_samples = 0
         self.num_correct_preds = [0] * len(self.topk)
+        self.last_calculated_metrics = (0.,) * len(self.topk)
+
 
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
         super().add_clip_predictions(video_ids, clip_predictions, labels)
@@ -108,13 +111,18 @@ class ClipAccuracyMetric(Metric):
 
 class VideoAccuracyMetric(AverageMetric):
     def __init__(self, topk=(1,)):
-        super().__init__(activation=None)
         if isinstance(topk, tuple):
             self.topk = topk
         elif isinstance(topk, int):
             self.topk = (topk,)
         else:
             raise ValueError(f'topk {topk} not recognised. It must be a tuple or integer.')
+
+        super().__init__(activation=None)
+
+    def clean_data(self):
+        super().clean_data()
+        self.last_calculated_metrics = (0.,) * len(self.topk)
 
     def calculate_metrics(self):
         video_predictions, video_labels, _ = self.get_predictions_torch()

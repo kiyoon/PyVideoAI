@@ -98,7 +98,7 @@ class Metric(ABC):
         """
         Returning None will skip logging this metric
         """
-        return f'{split}_metric: {value:.5f}'
+        return f'{split}_metric: {self.last_calculated_metrics:.5f}'
 
 
     @abstractmethod
@@ -106,7 +106,7 @@ class Metric(ABC):
         """
         Returning None will skip logging this metric
         """
-        return f'{split}_metric: {value:.5f}'
+        return f'{split}_metric: {self.last_calculated_metrics:.5f}'
     
     @staticmethod
     @abstractmethod

@@ -76,9 +76,9 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, m
             logging_msgs = []
             for metric in metrics:
                 metric.add_clip_predictions(uids_gathered, outputs_gathered, labels_gathered)
-                metric.calculate_metrics()
-                logging_msg = metric.logging_msg_iter('train')
-                if logging_msg is not None:
+                if metric.logging_msg_iter('train') is not None:
+                    metric.calculate_metrics()
+                    logging_msg = metric.logging_msg_iter('train')
                     logging_msgs.append(logging_msg)
 
             final_logging_msg = ' - '.join(logging_msgs)
@@ -151,9 +151,9 @@ def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_
         if metrics is not None and len(metrics) > 0:
             logging_msgs = []
             for metric in metrics:
-                metric.calculate_metrics()
-                logging_msg = metric.logging_msg_epoch('train')
-                if logging_msg is not None:
+                if metric.logging_msg_epoch('train') is not None:
+                    metric.calculate_metrics()
+                    logging_msg = metric.logging_msg_epoch('train')
                     logging_msgs.append(logging_msg)
 
             final_logging_msg = ' - '.join(logging_msgs)
@@ -320,9 +320,10 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, metrics, num_clas
                     logging_msgs = []
                     for metric in metrics:
                         metric.add_clip_predictions(uids_gathered, outputs_gathered, labels_gathered)
-                        metric.calculate_metrics()
                         logging_msg = metric.logging_msg_iter('val' if one_clip else 'multicropval')
                         if logging_msg is not None:
+                            metric.calculate_metrics()
+                            logging_msg = metric.logging_msg_iter('val' if one_clip else 'multicropval')
                             logging_msgs.append(logging_msg)
 
                     final_logging_msg = ' - '.join(logging_msgs)
@@ -361,9 +362,10 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, metrics, num_clas
         if metrics is not None and len(metrics) > 0:
             logging_msgs = []
             for metric in metrics:
-                metric.calculate_metrics()
                 logging_msg = metric.logging_msg_epoch('val' if one_clip else 'multicropval')
                 if logging_msg is not None:
+                    metric.calculate_metrics()
+                    logging_msg = metric.logging_msg_epoch('val' if one_clip else 'multicropval')
                     logging_msgs.append(logging_msg)
 
             final_logging_msg = ' - '.join(logging_msgs)
