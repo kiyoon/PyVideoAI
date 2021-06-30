@@ -1,27 +1,31 @@
 import os
 
-from pyvideoai.dataloaders.image_classification_dataset import ImageClassificationDataset
+from pyvideoai.dataloaders.frames_densesample_dataset import FramesDensesampleDataset
 
 import torch
 
-#batch_size = 32  # per process (per GPU)
+#batch_size = 8  # per process (per GPU)
 def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
-    vram = cuda.get_device_properties(0).total_memory
-    if vram > 20e+9:
-        return 128
-    elif vram > 10e+9:
-        return 64
-    return 32
+    vram = torch.cuda.get_device_properties(0).total_memory
+    if vram > 10e+9:
+        return 16
+    return 8
 
+input_frame_length = 8
+input_sample_rate = 8
 crop_size = 224
 train_jitter_min = 224
 train_jitter_max = 336
 val_scale = 224
+val_num_ensemble_views = 1
 val_num_spatial_crops = 1
 test_scale = 224
-test_num_spatial_crops = 5
+test_num_ensemble_views = 5
+test_num_spatial_crops = 1
+
+input_channel_num=[3]   # RGB
 
 
 #### OPTIONAL
@@ -34,7 +38,7 @@ test_num_spatial_crops = 5
 #    return torch.nn.CrossEntropyLoss()
 #
 #def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
-#   return None
+#    return None
 #
 #def get_optim_policies(model):
 #    """
@@ -88,14 +92,14 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return None
 
 def load_model():
-    return model_cfg.load_model(dataset_cfg.num_classes, pretrained=True)
+    return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, crop_size, input_channel_num)
 
 # optional
-#def load_pretrained(model):
-#    model_cfg.load_pretrained_imagenet(model)
+def load_pretrained(model):
+    model_cfg.load_pretrained_kinetics400(model, model_cfg.kinetics400_pretrained_path_8x8)
 
 def _dataloader_shape_to_model_input_shape(inputs):
-    return model_cfg.NCHW_to_model_input_shape(inputs)
+    return model_cfg.NCTHW_to_model_input_shape(inputs)
 
 def get_input_reshape_func(split):
     '''
@@ -115,8 +119,8 @@ def _unpack_data(data):
     '''
     From dataloader returning values to (inputs, uids, labels, [reserved]) format
     '''
-    inputs, uids, labels, spatial_idx, _ = data
-    return inputs, uids, labels, {"spatial_idx": spatial_idx}
+    inputs, uids, labels, spatial_idx, temporal_idx, _, _ = data
+    return inputs, uids, labels, {"spatial_idx": spatial_idx, "temporal_idx": temporal_idx}
 
 def get_data_unpack_func(split):
     '''
@@ -134,26 +138,25 @@ def get_data_unpack_func(split):
 def _get_torch_dataset(csv_path, split):
     mode = dataset_cfg.split2mode[split]
 
-    if split == 'train':
-        _test_scale = test_scale
-        _test_num_spatial_crops = test_num_spatial_crops
-        path_prefix = dataset_cfg.train_dir
-    elif split == 'val':
+    if split == 'val':
         _test_scale = val_scale
+        _test_num_ensemble_views = val_num_ensemble_views
         _test_num_spatial_crops = val_num_spatial_crops
-        path_prefix = dataset_cfg.val_dir
     else:
         _test_scale = test_scale
+        _test_num_ensemble_views = test_num_ensemble_views
         _test_num_spatial_crops = test_num_spatial_crops
-        path_prefix = dataset_cfg.val_dir
-    return ImageClassificationDataset(csv_path, mode,
+    return FramesDensesampleDataset(csv_path, mode,
+            input_frame_length, input_sample_rate,
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
-            test_scale=_test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+            test_scale=_test_scale, test_num_ensemble_views=_test_num_ensemble_views, test_num_spatial_crops=_test_num_spatial_crops,
             crop_size=crop_size,
             mean = model_cfg.input_mean, std = model_cfg.input_std,
             normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
-            path_prefix=path_prefix)
+            path_prefix=dataset_cfg.frames_dir)
 
 def get_torch_dataset(split):
-    csv_path = os.path.join(dataset_cfg.split_file_dir, dataset_cfg.split_file_basename[split])
+
+    csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename1[split])
+
     return _get_torch_dataset(csv_path, split)

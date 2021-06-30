@@ -3,7 +3,6 @@ from torch import nn
 import torch.distributed as dist
 from .utils import distributed as du
 from .utils import misc
-from .utils.video_metrics import VideoMetrics
 import time
 import sys
 from .utils.distributed_sampler_for_val import count_true_samples
@@ -15,16 +14,6 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import logging
 logger = logging.getLogger(__name__)
 
-'''
-def unpack_data(data):
-    inputs = [data["data"]]     # make it as a list for slowonly (not slowfast)
-    labels = data["label"]
-    uids = data["uid"]
-    curr_batch_size = torch.LongTensor([labels.shape[0]])
-
-    return inputs, labels, uids, curr_batch_size
-'''
-
 def get_lr(optimiser):
     ''' Works ONLY IF there's one parameter group only.
     Usually there's multiple groups with different learning rate.
@@ -32,7 +21,7 @@ def get_lr(optimiser):
     for param_group in optimiser.param_groups:
         return param_group['lr']
 
-def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, start_time=None, it=None, total_iters=None, sample_seen=None, num_correct_preds=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None):
+def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, train_metrics, start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0):
     inputs, uids, labels, _ = data_unpack_func(data)#{{{
     inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
 
@@ -59,21 +48,19 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, s
     # loss
     batch_loss_accum = batch_loss * curr_batch_size
 
-    # accuracy
-    _, predicted = torch.max(outputs.data, 1)
-    batch_correct = (predicted == labels).sum()
-
     # sync
     if world_size > 1:
-        for tensor in [curr_batch_size, batch_loss_accum, batch_correct]:
+        for tensor in [curr_batch_size, batch_loss_accum]:
             dist.reduce(tensor, dst=0)
+
+        if train_metrics is not None and len(train_metrics) > 0:
+            (uids,labels,outputs) = du.all_gather([uids, labels, outputs])
 
     if rank == 0:
         # Copy the stats from GPU to CPU (sync point).
-        curr_batch_size, batch_loss_accum, batch_correct = (
+        curr_batch_size, batch_loss_accum = (
                 curr_batch_size.item(),
                 batch_loss_accum.item(),
-                batch_correct.item(),
             )
 
         # Recalculate batch loss using the gathered data
@@ -84,24 +71,41 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, s
         loss_accum += batch_loss_accum
         loss = loss_accum / sample_seen
 
-        # accuracy
-        num_correct_preds += batch_correct 
-        batch_acc = batch_correct / curr_batch_size 
-        acc = num_correct_preds / sample_seen
+        if train_metrics is not None and len(train_metrics) > 0:
+            logging_msgs = []
+            for metric in train_metrics:
+                metric.add_clip_predictions(uids, outputs, labels)
+                if metric.logging_msg_iter() is not None:
+                    metric.calculate_metrics()
+                    logging_msg = metric.logging_msg_iter()
+                    logging_msgs.append(logging_msg)
+
+            final_logging_msg = ' - '.join(logging_msgs)
+        else:
+            final_logging_msg = ''
+
 
         elapsed_time = time.time() - start_time
 #        eta = int((total_samples-sample_seen) * elapsed_time / sample_seen)
         eta = int((total_iters-(it+1)) * elapsed_time / (it+1))
-        sys.stdout.write("\r Train Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - ETA: {:4d}s - lr: {:.8f} - batch_loss: {:.4f} - loss: {:.4f} - batch_acc: {:.4f} - acc: {:.4f}        ".format(it+1, total_iters, sample_seen, total_samples, eta, lr, batch_loss, loss, batch_acc, acc))
+        write_str = "\r Train Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - ETA: {:4d}s - lr: {:.8f} - batch_loss: {:.4f} - loss: {:.4f} - {:s}".format(it+1, total_iters, sample_seen, total_samples, eta, lr, batch_loss, loss, final_logging_msg)
+
+        # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
+        if max_log_length < len(write_str):
+            max_log_length = len(write_str)
+        else:
+            # Pad empty spaces
+            write_str += ' ' * (max_log_length - len(write_str))
+        sys.stdout.write(write_str)
         sys.stdout.flush()
     else:
         loss = None
-        acc = None
         elapsed_time = None
+        max_log_length = None
 
-    return sample_seen, num_correct_preds, loss_accum, loss, acc, elapsed_time, lr#}}}
+    return sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length#}}}
 
-def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_func, rank = 0, world_size = 1, input_reshape_func = None):
+def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_func, train_metrics, rank = 0, world_size = 1, input_reshape_func = None):
     """Train for one epoch.
 
     Args:
@@ -113,7 +117,7 @@ def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_
         world_size (int): Total number of processes in distributed training.
     
     Returns:
-        tuple: sample_seen, total_samples, loss, acc, elapsed_time
+        tuple: sample_seen, total_samples, loss, elapsed_time
     """
 
     model.train()
@@ -121,33 +125,59 @@ def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_
     if rank == 0:#{{{
         # train
         sample_seen = 0
-        num_correct_preds = 0
         total_samples = len(dataloader.dataset)
         loss_accum = 0.
         start_time = time.time()
         total_iters = len(dataloader)
+        max_log_length = 0
+        if train_metrics is not None and len(train_metrics) > 0:
+            for metric in train_metrics:
+                metric.clean_data()
     else:
         sample_seen = None
-        num_correct_preds = None
         total_samples = None
         loss_accum = None
         start_time = None
         total_iters = None
+        max_log_length = None
 
     # In training, set pad_last_batch=True so that the shard size is always equivalent and it doesn't give you no batch for some processes at the last batch.
     for it, data in enumerate(dataloader):
 
-        sample_seen, num_correct_preds, loss_accum, loss, acc, elapsed_time, lr = train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, start_time, it, total_iters, sample_seen, num_correct_preds, total_samples, loss_accum, rank, world_size, input_reshape_func)
+        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, train_metrics, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length)
 
     if rank == 0:
+        if train_metrics is not None and len(train_metrics) > 0:
+            logging_msgs = []
+            for metric in train_metrics:
+                if metric.logging_msg_epoch() is not None:
+                    metric.calculate_metrics()
+                    logging_msg = metric.logging_msg_epoch()
+                    logging_msgs.append(logging_msg)
+
+            final_logging_msg = ' - '.join(logging_msgs)
+        else:
+            final_logging_msg = ''
+
         sys.stdout.write("\r")
         sys.stdout.flush()
-        logger.info(" Train Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - {:d}s - lr: {:.8f} - loss: {:.4f} - acc: {:.4f}                                                            ".format(it+1, total_iters, sample_seen, total_samples, round(elapsed_time), lr, loss, acc))
-
-    return sample_seen, total_samples, loss, acc, elapsed_time#}}}
 
 
-def eval_epoch(model, criterion, dataloader, data_unpack_func, num_classes, batch_size, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, PAD_VALUE = -1):
+        write_str = " Train Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - {:d}s - lr: {:.8f} - loss: {:.4f} - {:s}".format(it+1, total_iters, sample_seen, total_samples, round(elapsed_time), lr, loss, final_logging_msg)
+
+        # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
+        if max_log_length < len(write_str):
+            max_log_length = len(write_str)
+        else:
+            # Pad empty spaces
+            write_str += ' ' * (max_log_length - len(write_str))
+
+        logger.info(write_str)
+
+    return sample_seen, total_samples, loss, elapsed_time#}}}
+
+
+def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_classes, batch_size, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, PAD_VALUE = -1):
     """Test for one epoch.
 
     Args:
@@ -160,7 +190,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, num_classes, batc
         PAD_VALUE (int): The value to be padded when each process has different number of batch size. These padded value will be removed anyway after all gathering.
     
     Returns:
-        tuple: sample_seen, total_samples, loss, acc, vid_acc_top1, vid_acc_top5, elapsed_time, video_metrics (VideoMetrics), eval_log_str
+        tuple: sample_seen, total_samples, loss, elapsed_time, eval_log_str
     """
 
     cur_device = torch.cuda.current_device()
@@ -175,18 +205,22 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, num_classes, batc
         loss_accum = 0.
 
         if rank == 0:
-            num_correct_preds = 0
+#            num_correct_preds = 0
             total_samples = len(dataloader.dataset)
             total_iters = len(dataloader)
 
-            video_metrics = VideoMetrics()
-            #video_metrics.clean_data()     # new validation
+            if val_metrics is not None and len(val_metrics) > 0:
+                for metric in val_metrics:
+                    metric.clean_data()
+#            video_metrics = VideoMetrics()
+#            #video_metrics.clean_data()     # new validation
             start_time = time.time()
+            max_log_length = 0
 
             if one_clip:
                 eval_mode = "One-clip Eval"
             else:
-                eval_mode = "Multi-clip Eval"
+                eval_mode = "Multi-crop Eval"
         """
         if world_size > 1:
             # Number of iterations can be different over processes. Some processes need to wait until others finish.
@@ -208,7 +242,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, num_classes, batc
 
         #for it in range(max_num_iters):
         for it, data in enumerate(dataloader):
-            inputs, uids, labels, _ = data_unpack_func(data)#{{{
+            inputs, uids, labels, _ = data_unpack_func(data)
             inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
 
             perform_forward = it < num_iters - 1 or last_batch_size > 0     # not last batch or last batch size is at least 1
@@ -235,50 +269,46 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, num_classes, batc
                 batch_loss = criterion(outputs, labels)
                 batch_loss_accum = batch_loss * curr_batch_size
 
-                _, predicted = torch.max(outputs.data, 1)
-                batch_correct = (predicted == labels).sum()
-
             else:
                 #curr_batch_size = torch.LongTensor([0]).to(cur_device, non_blocking=True)
                 batch_loss_accum = torch.FloatTensor([0]).to(cur_device, non_blocking=True)
-                batch_correct = torch.LongTensor([0]).to(cur_device, non_blocking=True)
 
             # Gather data
             if world_size > 1:
-                (curr_batch_sizes,) = du.all_gather([curr_batch_size])
-                max_batch_size = curr_batch_sizes.max()
+                if val_metrics is not None and len(val_metrics) > 0:
+                    (curr_batch_sizes,) = du.all_gather([curr_batch_size])
+                    max_batch_size = curr_batch_sizes.max()
 
-                # Pad to make the data same size before all_gather
-                uids = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
-                labels = nn.functional.pad(labels, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
-                if curr_batch_size == 0:
-                    outputs = torch.ones((max_batch_size, num_classes), dtype=torch.float32, device=cur_device) * PAD_VALUE
-                else:
-                    outputs = nn.functional.pad(outputs, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    # Pad to make the data same size before all_gather
+                    uids = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    labels = nn.functional.pad(labels, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    if curr_batch_size == 0:
+                        outputs = torch.ones((max_batch_size, num_classes), dtype=torch.float32, device=cur_device) * PAD_VALUE
+                    else:
+                        outputs = nn.functional.pad(outputs, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
 
-                # Communicate with the padded data
-                (uids_gathered,labels_gathered,outputs_gathered) = du.all_gather([uids, labels, outputs])
+                    # Communicate with the padded data
+                    (uids_gathered,labels_gathered,outputs_gathered) = du.all_gather([uids, labels, outputs])
 
-                if rank == 0:
-                    # Remove padding from the received data
-                    no_pad_row_mask = []     # logical indices
-                    for proc_batch_size in curr_batch_sizes:
-                        no_pad_row_mask.extend([i < proc_batch_size.item() for i in range(max_batch_size)])
+                    if rank == 0:
+                        # Remove padding from the received data
+                        no_pad_row_mask = []     # logical indices
+                        for proc_batch_size in curr_batch_sizes:
+                            no_pad_row_mask.extend([i < proc_batch_size.item() for i in range(max_batch_size)])
 
-                    uids = uids_gathered[no_pad_row_mask]
-                    labels = labels_gathered[no_pad_row_mask]
-                    outputs = outputs_gathered[no_pad_row_mask]
+                        uids = uids_gathered[no_pad_row_mask]
+                        labels = labels_gathered[no_pad_row_mask]
+                        outputs = outputs_gathered[no_pad_row_mask]
                     
                 # Communicate other data
-                for tensor in [curr_batch_size, batch_loss_accum, batch_correct]:
+                for tensor in [curr_batch_size, batch_loss_accum]:
                     dist.reduce(tensor, dst=0)
 
             if rank == 0 or is_scheduler_plateau:
                 # Copy the stats from GPU to CPU (sync point).
-                curr_batch_size, batch_loss_accum, batch_correct = (
+                curr_batch_size, batch_loss_accum = (
                         curr_batch_size.item(),
                         batch_loss_accum.item(),
-                        batch_correct.item(),
                     )
 
                 sample_seen += curr_batch_size
@@ -287,13 +317,20 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, num_classes, batc
                 loss = loss_accum / sample_seen
 
             if rank == 0:
-                # accuracy
-                num_correct_preds += batch_correct 
+                if val_metrics is not None and len(val_metrics) > 0:
+                    logging_msgs = []
+                    for metric in val_metrics:
+                        metric.add_clip_predictions(uids, outputs, labels)
+                        logging_msg = metric.logging_msg_iter()
+                        if logging_msg is not None:
+                            metric.calculate_metrics()
+                            logging_msg = metric.logging_msg_iter()
+                            logging_msgs.append(logging_msg)
 
-                # video accuracy top1, top5
-                video_metrics.add_clip_predictions(uids, outputs, labels, apply_activation='softmax')
+                    final_logging_msg = ' - '.join(logging_msgs)
+                else:
+                    final_logging_msg = ''
 
-                acc = num_correct_preds / sample_seen
                 elapsed_time = time.time() - start_time
                 #eta = int((total_samples-sample_seen) * elapsed_time / sample_seen)
                 eta = int((total_iters-(it+1)) * elapsed_time / (it+1))
@@ -301,8 +338,15 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, num_classes, batc
                 if one_clip:
                     eval_mode = "One-clip Eval"
                 else:
-                    eval_mode = "Multi-clip Eval"
-                sys.stdout.write("\r {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - ETA: {:4d}s - val_loss: {:.4f} - val_acc: {:.4f}        ".format(eval_mode, it+1, total_iters, sample_seen, total_samples, eta, loss, acc))
+                    eval_mode = "Multi-crop Eval"
+                write_str = "\r {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - ETA: {:4d}s - val_loss: {:.4f} - {:s}".format(eval_mode, it+1, total_iters, sample_seen, total_samples, eta, loss, final_logging_msg)
+                # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
+                if max_log_length < len(write_str):
+                    max_log_length = len(write_str)
+                else:
+                    # Pad empty spaces
+                    write_str += ' ' * (max_log_length - len(write_str))
+                sys.stdout.write(write_str)
                 sys.stdout.flush()
 
         # Reset the iterator. Needs to be done at the end of epoch when __next__ is directly called instead of doing iteration.
@@ -313,28 +357,40 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, num_classes, batc
             scheduler.step(loss)
 
     if rank == 0:
-        vid_acc_top1, vid_acc_top5 = video_metrics.accuracy(topk=(1,5))
-
         sys.stdout.write("\r")
         sys.stdout.flush()
 
-        eval_log_str = " {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - {:d}s - val_loss: {:.4f} - val_acc: {:.4f}".format(eval_mode, it+1, total_iters, sample_seen, total_samples, round(elapsed_time), loss, acc)
-        if not one_clip:
-            eval_log_str += " - val_vid_acc_top1: {:.4f} - val_vid_acc_top5: {:.4f}".format(vid_acc_top1, vid_acc_top5)
+        if val_metrics is not None and len(val_metrics) > 0:
+            logging_msgs = []
+            for metric in val_metrics:
+                logging_msg = metric.logging_msg_epoch()
+                if logging_msg is not None:
+                    metric.calculate_metrics()
+                    logging_msg = metric.logging_msg_epoch()
+                    logging_msgs.append(logging_msg)
+
+            final_logging_msg = ' - '.join(logging_msgs)
+        else:
+            final_logging_msg = ''
+
+        eval_log_str = " {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - {:d}s - val_loss: {:.4f} - {:s}".format(eval_mode, it+1, total_iters, sample_seen, total_samples, round(elapsed_time), loss, final_logging_msg)
+        # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
+        if max_log_length < len(eval_log_str):
+            max_log_length = len(eval_log_str)
+        else:
+            # Pad empty spaces
+            eval_log_str += ' ' * (max_log_length - len(eval_log_str))
+
         logger.info(eval_log_str)
 
     else:
         sample_seen = None
         total_samples = None
         loss = None
-        acc = None
-        vid_acc_top1 = None
-        vid_acc_top5 = None
         elapsed_time = None
-        video_metrics = None
         eval_log_str = None
 
-    return sample_seen, total_samples, loss, acc, vid_acc_top1, vid_acc_top5, elapsed_time, video_metrics, eval_log_str#}}}
+    return sample_seen, total_samples, loss, elapsed_time, eval_log_str#}}}
 
 # NOTE: DEPRECATED
 def test_epoch_DALI(model, criterion, dataloader, data_unpack_func, num_classes, rank = 0, world_size = 1, PAD_VALUE = -1):#{{{

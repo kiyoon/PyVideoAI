@@ -6,7 +6,8 @@ from video_datasets_api.hmdb.definitions import NUM_CLASSES as num_classes
 from video_datasets_api.hmdb.read_annotations import get_class_keys
 from pyvideoai.config import DATA_DIR
 
-task = 'singlelabel_classification'
+from pyvideoai.tasks import SingleLabelClassificationTask
+task = SingleLabelClassificationTask()
 
 # Paths
 class_keys = pd.DataFrame(get_class_keys(), columns=['class_keys'])['class_keys']

@@ -7,7 +7,7 @@ import sys
 
 
 from sklearn.metrics import accuracy_score
-from pyvideoai.utils.AP import mAP_from_AP, compute_multiple_aps
+from pyvideoai.metrics.AP import mAP_from_AP, compute_multiple_aps
 from pyvideoai.utils.multilabel_tools import count_num_samples_per_class, count_num_samples_per_class_from_csv, count_num_TP_per_class
 
 import torch
@@ -20,34 +20,21 @@ import model_configs
 import exp_configs
 import time
 
+from pyvideoai.tasks import SingleLabelClassificationTask, MultiLabelClassificationTask
 
 from pyvideoai.config import DEFAULT_EXPERIMENT_ROOT
 
 
+import coloredlogs, logging, verboselogs
+logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
 def evaluate_pred(args):
     """evaluate accuracy"""
 
-    dataset_cfg = dataset_configs.load_cfg(args.dataset)
+    cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
+    metrics = cfg.dataset_cfg.task.get_metrics(cfg)
 
-    perform_multicropval=True       # when loading, assume there was multicropval. Even if there was not, having more CSV field information doesn't hurt.
-    if dataset_cfg.task == 'singlelabel_classification':
-        multilabel = False
-        if args.mode == 'oneclip':
-            best_metric_field = 'val_acc'
-        else:   # multicrop
-            best_metric_field = 'multi_crop_val_vid_acc_top1'
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_singlelabel(multicropval = perform_multicropval)
-    elif dataset_cfg.task == 'multilabel_classification':
-        multilabel = True
-        if args.mode == 'oneclip':
-            best_metric_field = 'val_vid_mAP'
-        else:   # multicrop
-            best_metric_field = 'multi_crop_val_vid_mAP'
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_multilabel(multicropval = perform_multicropval)
-    else:
-        raise ValueError(f"Not recognised dataset_cfg.task: {dataset_cfg.task}")
-
+    summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
     exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes)
     
 
@@ -56,7 +43,16 @@ def evaluate_pred(args):
         load_epoch = int(exp.summary['epoch'][-1])
     elif args.load_epoch == -2:
         exp.load_summary()
-        load_epoch = int(exp.get_best_model_stat(best_metric_field)['epoch'])
+        best_metric = metrics.get_best_metric()
+        best_metric_fieldname = best_metric.get_csv_fieldnames()
+        best_metric_is_better = best_metric.is_better
+        if isinstance(best_metric_fieldname, tuple):
+            if len(best_metric_fieldname) > 1:
+                logger.warn(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
+            best_metric_fieldname = best_metric_fieldname[0]
+
+        logger.info(f'Using the best metric from CSV field `{best_metric_fieldname}`')
+        load_epoch = int(exp.get_best_model_stat(best_metric_fieldname, best_metric_is_better)['epoch'])
     elif args.load_epoch is None:
         load_epoch = None
     elif args.load_epoch >= 0:
@@ -86,37 +82,39 @@ def evaluate_pred(args):
     '''
 
     
-    if multilabel:
+    if isinstance(cfg.dataset_cfg.task, MultiLabelClassificationTask):
         APs = compute_multiple_aps(video_labels, video_predictions)
         mAP = mAP_from_AP(APs)
-        print(f"mAP: {mAP:.4f}")
+        logger.success(f"mAP: {mAP:.4f}")
 
         num_samples_in_val = count_num_samples_per_class(video_labels)
         TPs = count_num_TP_per_class(video_labels, video_predictions)
         # !! TODO: IMPORTANT: This may not work if using the partial dataset.
         # CHANGE IT 
-        train_csv = os.path.join(dataset_cfg.frames_splits_dir, dataset_cfg.split_file_basename['train'])
-        num_samples_in_train = count_num_samples_per_class_from_csv(train_csv, dataset_cfg.num_classes)
+        train_csv = os.path.join(cfg.dataset_cfg.frames_splits_dir, cfg.dataset_cfg.split_file_basename['train'])
+        num_samples_in_train = count_num_samples_per_class_from_csv(train_csv, cfg.dataset_cfg.num_classes)
 
         out_csv = os.path.join(exp.plots_dir, f'per_class_AP-epoch_{load_epoch:04d}_{args.mode}val.csv')
-        print(f"Writing AP to {out_csv}")
+        logger.info(f"Writing AP to {out_csv}")
 
         with open(out_csv, mode='w') as csvfile:
             csvwriter = csv.writer(csvfile, delimiter=str(','), quotechar=str('"'), quoting=csv.QUOTE_MINIMAL)
 
             csvwriter.writerow(['class_key', 'AP', 'TP', 'num_samples_in_val', 'num_samples_in_train'])
 
-            for class_key, AP, TP, class_num_samples_in_val, class_num_samples_in_train in zip(dataset_cfg.class_keys, APs, TPs, num_samples_in_val, num_samples_in_train):
+            for class_key, AP, TP, class_num_samples_in_val, class_num_samples_in_train in zip(cfg.dataset_cfg.class_keys, APs, TPs, num_samples_in_val, num_samples_in_train):
                 csvwriter.writerow([class_key, AP, TP, class_num_samples_in_val, class_num_samples_in_train])
 
-    else:
+    elif isinstance(cfg.dataset_cfg.task, SingleLabelClassificationTask):
         pred_labels = np.argmax(video_predictions, axis=1)
-        print(accuracy_score(video_labels, pred_labels, normalize=args.normalise))
+        logger.success('Accuracy: %s', accuracy_score(video_labels, pred_labels, normalize=args.normalise))
+    else:
+        raise NotImplementedError(f'dataset_cfg.task not recognised: {str(cfg.dataset_cfg.task)}')
 
 
     if args.dataset == 'something_v1':
         # for Something-Something-V1, count the # of [something] in the class keys
-        class_keys = dataset_cfg.class_keys 
+        class_keys = cfg.dataset_cfg.class_keys 
 
         video_labels_kept = []
         pred_labels_kept = []
@@ -127,7 +125,7 @@ def evaluate_pred(args):
                 pred_labels_kept.append(pred)
 
 
-        print(accuracy_score(video_labels_kept, pred_labels_kept, normalize=args.normalise))
+        logger.info(accuracy_score(video_labels_kept, pred_labels_kept, normalize=args.normalise))
 
 
         video_labels_kept = []
@@ -139,7 +137,7 @@ def evaluate_pred(args):
                 pred_labels_kept.append(pred)
 
 
-        print(accuracy_score(video_labels_kept, pred_labels_kept, normalize=args.normalise))
+        logger.info(accuracy_score(video_labels_kept, pred_labels_kept, normalize=args.normalise))
 
 
 
@@ -156,6 +154,7 @@ def main():
 
     args = parser.parse_args()
 
+    coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
     evaluate_pred(args)
 
 
