@@ -74,29 +74,46 @@ class Metric(ABC):
         """
         video_predictions, video_labels, _ = self.get_predictions_torch()
         self.last_calculated_metrics = accuracy(video_predictions, video_labels, topk)
+
+        Return:
+            either tuple or a single value (e.g. float)
         """
         pass
 
 
     @abstractmethod
     def types_of_metrics(self):
+        """
+        Return:
+            either tuple or a single type
+        """
         return float
 
 
     @abstractmethod
     def tensorboard_tags(self):
+        """
+        Return:
+            either tuple or a single str 
+        """
         return 'Metric'
 
 
     @abstractmethod
     def get_csv_fieldnames(self, split):
+        """
+        Return:
+            either tuple or a single str 
+        """
         return f'{split}_metric'     # like val_acc
 
 
     @abstractmethod
     def logging_msg_iter(self, split):
         """
-        Returning None will skip logging this metric
+        Return:
+            None to skip logging this metric
+            or a single str that combines all self.last_calculated_metrics 
         """
         return f'{split}_metric: {self.last_calculated_metrics:.5f}'
 
@@ -104,12 +121,61 @@ class Metric(ABC):
     @abstractmethod
     def logging_msg_epoch(self, split):
         """
-        Returning None will skip logging this metric
+        Return:
+            None to skip logging this metric
+            or a single str that combines all self.last_calculated_metrics 
         """
         return f'{split}_metric: {self.last_calculated_metrics:.5f}'
     
-    @staticmethod
     @abstractmethod
+    def plot_legend_labels(self, split):
+        """
+        Return:
+            either tuple or a single str 
+        """
+        if split == 'train':
+            return 'Train metric' 
+        elif split == 'val':
+            return 'Validation metric' 
+        elif split == 'multicropval':
+            return 'Multicrop validation metric' 
+        else:
+            raise ValueError(f'Unknown split: {split}')
+
+
+    @abstractmethod
+    def plot_file_basenames(self):
+        """
+        Return:
+            either tuple or a single str 
+        """
+        return 'metric'     # output plot file names will be metric.png and metric.pdf
+
+
+    def telegram_report_msg_line(self, split, exp):
+        """
+        Params:
+            exp (ExperimentBuilder): READONLY. Includes all summary of the train/val stats.
+        Return:
+            None to skip logging this metric
+            or a single str
+        """
+        if split == 'train':
+            return None         # Don't print train metric on Telegram
+        fieldnames = self.get_csv_fieldnames(split)
+        if isinstance(fieldnames, str):
+            fieldnames = (fieldnames,)
+
+        messages = []
+        for fieldname in fieldnames:
+            best_stat = exp.get_best_model_stat(fieldname, self.is_better)
+            last_stat = exp.get_last_model_stat(fieldname)
+            messages.append(f'Highest (@epoch {best_stat["epoch"]}) / Last (@ {last_stat["epoch"]}) {fieldname}: {best_stat[fieldname]} / {last_stat[fieldname]}')
+
+        return '\n'.join(messages)
+
+    
+    @staticmethod
     def is_better(value_1, value_2):
         """Metric comparison function
 
@@ -120,7 +186,6 @@ class Metric(ABC):
             True if value_1 is better. False if value_2 is better or they're equal.
         """
         return value_1 > value_2 
-
 
 
     @abstractmethod
