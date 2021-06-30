@@ -85,7 +85,7 @@ def train(args):
     rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
-        logging.getLogger('slowfast.utils.checkpoint').setLevel(logging.WARNING)
+        #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     perform_multicropval = args.multi_crop_val_period > 0
 

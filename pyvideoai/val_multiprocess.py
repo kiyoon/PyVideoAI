@@ -74,18 +74,11 @@ def val(args):
     rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
-        logging.getLogger('slowfast.utils.checkpoint').setLevel(logging.WARNING)
+        #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
 
-    best_metric = ClipAccuracyMetric()
-    metrics_dict = {'train': [ClipAccuracyMetric()],
-            'val': [best_metric],
-            'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5))]
-            }
-
-    metrics = Metrics()
-    metrics.add_metrics_dict(metrics_dict, best_metric)
+    metrics = cfg.dataset_cfg.task.get_metrics(cfg)
 
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
     exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
@@ -149,13 +142,12 @@ def val(args):
             else:   # multicrop
                 split = 'multicropval'
                 predictions_gatherer = VideoPredictionsGatherer()
+        metrics[split].append(predictions_gatherer)
+
         val_dataset = cfg.get_torch_dataset(split)
         data_unpack_func = cfg.get_data_unpack_func(split)
-        metric = metrics[split]
-        if metric is not None:
-            metric.append(predictions_gatherer)
-        else:
-            metric = [predictions_gatherer]
+
+
         input_reshape_func = cfg.get_input_reshape_func(split)
         batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
         logger.info(f'Using batch size of {batch_size} per process (per GPU), resulting in total size of {batch_size * world_size}.')
@@ -212,29 +204,11 @@ def val(args):
                 cfg.load_pretrained(model)
 
 
-
-        if hasattr(cfg, 'criterion'):
-            criterion = cfg.criterion()
-        else:
-            if cfg.dataset_cfg.task == 'singlelabel_classification':
-                logger.info(f"cfg.criterion not defined. Using CrossEntropyLoss()")
-                criterion = nn.CrossEntropyLoss()
-            elif cfg.dataset_cfg.task == 'multilabel_classification':
-                logger.info(f"cfg.criterion not defined. Using BCEWithLogitsLoss()")
-                criterion = nn.BCEWithLogitsLoss()
-            else:
-                raise ValueError(f"cfg.dataset_cfg.task not known task: {cfg.dataset_cfg.task}")
-
+        criterion = cfg.dataset_cfg.task.get_criterion(cfg)
 
         oneclip = args.mode == 'oneclip'
 
-        if cfg.dataset_cfg.task == 'singlelabel_classification':
-            _, _, _, _, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metric, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
-        elif cfg.dataset_cfg.task == 'multilabel_classification':
-            _, _, _, _, eval_log_str = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_func, metric, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
-        else:
-            raise ValueError(f"Unknown task: {cfg.dataset_cfg.task}")
-
+        _, _, _, _, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
 
         if rank == 0:
             if args.save_predictions:

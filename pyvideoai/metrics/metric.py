@@ -361,10 +361,15 @@ class Metrics(dict):
         self.best_metric_split = 'val'
         self.best_metric_index = 0      # indicating that validation clip accuracy is what determines the best model
     """
-    def __init__(self):
+    def __init__(self, metrics_dict = None, best_metric = None):
         super().__init__()
         self.best_metric_split = None
         self.best_metric_index = None
+
+        if metrics_dict is not None and best_metric is not None:
+            self.add_metrics_dict(metrics_dict, best_metric)
+        elif (metrics_dict is None) != (best_metric is None):
+            raise ValueError('metrics_dict and best_metric must be specified together.')
 
     def add_metric(self, split, metric: Metric, is_best_metric:bool = False):
         """Adds to the data dictionary, mark the split of the metric, and mark the best metric that determines the best model.
@@ -401,6 +406,8 @@ class Metrics(dict):
                 for metric in metrics_in_split:
                     is_best_metric = id(metric) == id(best_metric)
                     self.add_metric(split, metric, is_best_metric)
+        
+        assert self.best_metric_split is not None and self.best_metric_index is not None, 'None of the items in metrics_dict is the best metric that determines the best model. Put best_metric directly in the metrics_dict.'
 
 
     def get_best_metric(self):

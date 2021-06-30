@@ -6,8 +6,8 @@ from video_datasets_api.diving48.definitions import NUM_CLASSES as num_classes
 from video_datasets_api.diving48.read_annotations import get_class_keys, read_splits
 from pyvideoai.config import DATA_DIR
 
-
-task = 'singlelabel_classification'
+from pyvideoai.tasks import SingleLabelClassificationTask
+task = SingleLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'diving48')

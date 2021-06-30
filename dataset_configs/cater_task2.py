@@ -6,7 +6,8 @@ from video_datasets_api.cater.definitions import NUM_CLASSES_TASK2 as num_classe
 from video_datasets_api.cater.class_keys import class_keys_task2
 from pyvideoai.config import DATA_DIR
 
-task = 'multilabel_classification'
+from pyvideoai.tasks import MultiLabelClassificationTask
+task = MultiLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, "cater/max2action")
