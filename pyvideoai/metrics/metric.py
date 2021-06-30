@@ -16,7 +16,7 @@ class Metric(ABC):
         self.data = {}              # Store predictions here for later metric calculation
         self.num_classes = None     # prediction length
         self.label_size = None      # either num_classes (multi-label) or 1 (one-label)
-        self.last_calculated_metrics = None
+        self.last_calculated_metrics = 0.
 
     def __init__(self, activation=None):
         self.activation = activation
@@ -79,13 +79,11 @@ class Metric(ABC):
     @abstractmethod
     def calculate_metrics(self):
         """
-        video_predictions, video_labels, _ = self.get_predictions_torch()
-        self.last_calculated_metrics = accuracy(video_predictions, video_labels, topk)
-
         Return:
-            either tuple or a single value (e.g. float)
+            None
+            self.last_calculated_metrics: either tuple or a single value (e.g. float)
         """
-        pass
+        self.last_calculated_metrics = 0.
 
 
     @abstractmethod
