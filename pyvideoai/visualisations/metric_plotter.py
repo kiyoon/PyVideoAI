@@ -1,10 +1,11 @@
 
 from experiment_utils.experiment_builder import ExperimentBuilder
-from .metric import Metric
+from ..metrics import Metric
 
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('Agg')       # Default TKinter backend instantiates windows even when saving the plot to files, causing problems.
+
 
 import pandas as pd
 import os
@@ -15,26 +16,27 @@ class DefaultMetricPlotter:
         self.basename_to_metrics = {}
         self._add_loss_metrics()
 
-    def _add_metric_advanced(self, plot_basename: str, plot_legend_label: str, csv_fieldname: str) -> None:
+    def _add_metric_decomposed(self, plot_basename: str, plot_legend_label: str, csv_fieldname: str) -> None:
         elif plot_basename in self.basename_to_metrics.keys():
             self.basename_to_metrics[plot_basename].append((plot_legend_label, csv_fieldname))
         else:
             self.basename_to_metrics[plot_basename] = [(plot_legend_label, csv_fieldname)]
 
     def _add_loss_metrics(self):
-        self._add_metric_advanced('loss', 'Training loss', 'train_loss')
-        self._add_metric_advanced('loss', 'Validation loss', 'val_loss')
+        self._add_metric_decomposed('loss', 'Training loss', 'train_loss')
+        self._add_metric_decomposed('loss', 'Validation loss', 'val_loss')
 
     def add_metric(self, metric: Metric) -> None:
         plot_basenames = metric.plot_file_basenames()
         plot_legend_labels = metric.plot_legend_labels()
         csv_fieldnames = metric.get_csv_fieldnames()
         for plot_basename, plot_legend_label, csv_fieldname in zip(plot_basenames, plot_legend_labels, csv_fieldnames):
-            self._add_metric_advanced(plot_basename, plot_legend_label, csv_fieldname)
+            self._add_metric_decomposed(plot_basename, plot_legend_label, csv_fieldname)
 
 
     def plot(self, exp: ExperimentBuilder):
-        figs = []
+        plt.rcParams.update({'font.size': 16})
+        figs = []       # list of (plot_basename, fig)
         for plot_basename, metric_infos in self.basename_to_metrics.items():
             num_plots_in_fig = 0
             fig = plt.figure(figsize=(8, 4)) 
@@ -68,6 +70,6 @@ class DefaultMetricPlotter:
                 fig.savefig(save_path_wo_exp + '.pdf')
                 fig.savefig(save_path_wo_exp + '.png')
 
-                figs.append(fig)
+                figs.append((plot_basename, fig))
 
         return figs
