@@ -69,18 +69,20 @@ class ClipAccuracyMetric(Metric):
         return tuple([f'clip_accuracy_top{topk}' for topk in self.topk])
 
 
-    def get_csv_fieldnames(self, split):
-        return tuple([f'{split}_acc_top{topk}' if topk != 1 else f'{split}_acc' for topk in self.topk])
+    def get_csv_fieldnames(self):
+        return tuple([f'{self.split}_acc_top{topk}' if topk != 1 else f'{self.split}_acc' for topk in self.topk])
 
 
-    def logging_msg_iter(self, split):
+    def logging_msg_iter(self):
         """
-        Returning None will skip logging this metric
+        Return:
+            None to skip logging this metric
+            or a single str that combines all self.last_calculated_metrics 
         """
-        if split == 'train':
+        if self.split == 'train':
             prefix = ''
         else:
-            split = split.replace('multicrop', '')  # don't print multicrop for one clip evaluation
+            split = self.split.replace('multicrop', '')  # don't print multicrop for one clip evaluation
             prefix = f'{split}_'
 
         messages = [f'{prefix}acc: {value:.4f}' if topk == 1 else f'{prefix}acc_top{topk}: {value:.4f}' for topk, value in zip(self.topk, self.last_calculated_metrics)]
@@ -88,11 +90,38 @@ class ClipAccuracyMetric(Metric):
         return message
 
 
-    def logging_msg_epoch(self, split):
+    def logging_msg_epoch(self):
         """
-        Returning None will skip logging this metric
+        Return:
+            None to skip logging this metric
+            or a single str that combines all self.last_calculated_metrics 
         """
-        return self.logging_msg_iter(split)
+        return self.logging_msg_iter()
+
+
+    def plot_legend_labels(self):
+        """
+        Return:
+            either tuple or a single str 
+        """
+        if self.split == 'train':
+            return tuple([f'Training accuracy top{topk}' if topk != 1 else 'Training accuracy' for topk in self.topk])
+        elif self.split == 'val':
+            return tuple([f'Validation accuracy top{topk}' if topk != 1 else 'Validation accuracy' for topk in self.topk])
+        elif self.split == 'multicropval':
+            return tuple([f'Multicrop validation clip accuracy top{topk}' if topk != 1 else 'Multicrop validation clip accuracy' for topk in self.topk])
+        else:
+            raise ValueError(f'Unknown split: {self.split}')
+
+
+    def plot_file_basenames(self):
+        """
+        Return:
+            either tuple or a single str 
+        """
+        # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
+        return tuple([f'accuracy_top{topk}' if topk != 1 else 'accuracy' for topk in self.topk])
+
     
     @staticmethod
     def is_better(value_1, value_2):
@@ -137,30 +166,56 @@ class VideoAccuracyMetric(AverageMetric):
         return tuple([f'video_accuracy_top{topk}' for topk in self.topk])
 
 
-    def get_csv_fieldnames(self, split):
-        return tuple([f'{split}_vid_acc_top{topk}' if topk != 1 else f'{split}_vid_acc' for topk in self.topk])
+    def get_csv_fieldnames(self):
+        return tuple([f'{self.split}_vid_acc_top{topk}' if topk != 1 else f'{self.split}_vid_acc' for topk in self.topk])
 
 
-    def logging_msg_iter(self, split):
+    def logging_msg_iter(self):
         """
         Returning None will skip logging this metric
         """
         return None
 
 
-    def logging_msg_epoch(self, split):
+    def logging_msg_epoch(self):
         """
         Returning None will skip logging this metric
         """
-        if split == 'train':
+        if self.split == 'train':
             prefix = ''
         else:
-            prefix = f'{split}_'
+            prefix = f'{self.split}_'
 
         messages = [f'{prefix}vid_acc: {value:.4f}' if topk == 1 else f'{prefix}vid_acc_top{topk}: {value:.4f}' for topk, value in zip(self.topk, self.last_calculated_metrics)]
         message = ' - '.join(messages)
         return message
     
+
+    def plot_legend_labels(self):
+        """
+        Return:
+            either tuple or a single str 
+        """
+        if self.split == 'train':
+            return tuple([f'Training video accuracy top{topk}' if topk != 1 else 'Training video accuracy' for topk in self.topk])
+        elif self.split == 'val':
+            return tuple([f'Validation video accuracy top{topk}' if topk != 1 else 'Validation video accuracy' for topk in self.topk])
+        elif self.split == 'multicropval':
+            return tuple([f'Multicrop validation video accuracy top{topk}' if topk != 1 else 'Multicrop validation video accuracy' for topk in self.topk])
+        else:
+            raise ValueError(f'Unknown split: {self.split}')
+
+
+    def plot_file_basenames(self):
+        """
+        Return:
+            either tuple or a single str 
+        """
+        # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
+        # Plot within the same graph 
+        return tuple([f'accuracy_top{topk}' if topk != 1 else 'accuracy' for topk in self.topk])
+
+
     @staticmethod
     def is_better(value_1, value_2):
         """Metric comparison function

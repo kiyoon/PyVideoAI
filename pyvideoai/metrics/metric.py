@@ -5,12 +5,19 @@ import numpy as np
 def is_numpy(instance):
     return type(instance).__module__ == np.__name__
 
+
+
 class Metric(ABC):
+    """
+    Formal structure that all metrics need to follow.
+    See example Accuracy / mAP metric classes to see how.
+    """
     def clean_data(self):
         self.data = {}              # Store predictions here for later metric calculation
         self.num_classes = None     # prediction length
         self.label_size = None      # either num_classes (multi-label) or 1 (one-label)
         self.last_calculated_metrics = None
+        self.split = None
 
     def __init__(self, activation=None):
         self.activation = activation
@@ -100,47 +107,47 @@ class Metric(ABC):
 
 
     @abstractmethod
-    def get_csv_fieldnames(self, split):
+    def get_csv_fieldnames(self):
         """
         Return:
             either tuple or a single str 
         """
-        return f'{split}_metric'     # like val_acc
+        return f'{self.split}_metric'     # like val_acc
 
 
     @abstractmethod
-    def logging_msg_iter(self, split):
+    def logging_msg_iter(self):
         """
         Return:
             None to skip logging this metric
             or a single str that combines all self.last_calculated_metrics 
         """
-        return f'{split}_metric: {self.last_calculated_metrics:.5f}'
+        return f'{self.split}_metric: {self.last_calculated_metrics:.5f}'
 
 
     @abstractmethod
-    def logging_msg_epoch(self, split):
+    def logging_msg_epoch(self):
         """
         Return:
             None to skip logging this metric
             or a single str that combines all self.last_calculated_metrics 
         """
-        return f'{split}_metric: {self.last_calculated_metrics:.5f}'
+        return f'{self.split}_metric: {self.last_calculated_metrics:.5f}'
     
     @abstractmethod
-    def plot_legend_labels(self, split):
+    def plot_legend_labels(self):
         """
         Return:
             either tuple or a single str 
         """
-        if split == 'train':
+        if self.split == 'train':
             return 'Train metric' 
-        elif split == 'val':
+        elif self.split == 'val':
             return 'Validation metric' 
-        elif split == 'multicropval':
+        elif self.split == 'multicropval':
             return 'Multicrop validation metric' 
         else:
-            raise ValueError(f'Unknown split: {split}')
+            raise ValueError(f'Unknown split: {self.split}')
 
 
     @abstractmethod
@@ -152,7 +159,7 @@ class Metric(ABC):
         return 'metric'     # output plot file names will be metric.png and metric.pdf
 
 
-    def telegram_report_msg_line(self, split, exp):
+    def telegram_report_msg_line(self, exp):
         """
         Params:
             exp (ExperimentBuilder): READONLY. Includes all summary of the train/val stats.
@@ -160,9 +167,9 @@ class Metric(ABC):
             None to skip logging this metric
             or a single str
         """
-        if split == 'train':
+        if self.split == 'train':
             return None         # Don't print train metric on Telegram
-        fieldnames = self.get_csv_fieldnames(split)
+        fieldnames = self.get_csv_fieldnames()
         if isinstance(fieldnames, str):
             fieldnames = (fieldnames,)
 
@@ -290,13 +297,22 @@ class ClipPredictionsGatherer(ClipMetric):
     def tensorboard_tags(self):
         return None
 
-    def get_csv_fieldnames(self, split):
+    def get_csv_fieldnames(self):
         return None
 
-    def logging_msg_iter(self, split):
+    def logging_msg_iter(self):
         return None
 
-    def logging_msg_epoch(self, split):
+    def logging_msg_epoch(self):
+        return None
+
+    def plot_legend_labels(self):
+        return None
+
+    def plot_file_basenames(self):
+        return None
+
+    def telegram_report_msg_line(self, exp):
         return None
     
     def is_better(value_1, value_2):
@@ -315,14 +331,77 @@ class VideoPredictionsGatherer(AverageMetric):
     def tensorboard_tags(self):
         return None
 
-    def get_csv_fieldnames(self, split):
+    def get_csv_fieldnames(self):
         return None
 
-    def logging_msg_iter(self, split):
+    def logging_msg_iter(self):
         return None
 
-    def logging_msg_epoch(self, split):
+    def logging_msg_epoch(self):
         return None
     
+    def plot_legend_labels(self):
+        return None
+
+    def plot_file_basenames(self):
+        return None
+
+    def telegram_report_msg_line(self, exp):
+        return None
+
     def is_better(value_1, value_2):
         return None
+
+
+
+class Metrics(dict):
+    """A data structure that combines all metrics by splits.
+    Example structure:
+        self = {'train': [ClipAccuracyMetric()], 'val': [ClipAccuracyMetric()], 'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5))]}
+        self.best_metric_split = 'val'
+        self.best_metric_index = 0      # indicating that validation clip accuracy is what determines the best model
+    """
+    def __init__(self):
+        super().__init__()
+        self.best_metric_split = None
+        self.best_metric_index = None
+
+    def add_metric(self, split, metric: Metric, is_best_metric:bool = False):
+        """Adds to the data dictionary, mark the split of the metric, and mark the best metric that determines the best model.
+        """
+        if is_best_metric:
+            if self.best_metric_split is not None or self.best_metric_index is not None:
+                raise ValueError('There is already a best metric but is_best_metric is True again. Only one metric can be best metric and this should not happen.')
+
+        if metric.split is None:
+            metric.split = split
+        else:
+            raise ValueError(f'The split of the metric is already specified ({metric.split}), but trying to add the same metric to another split ({split}), which should never happen.')
+
+        if split in self.keys():
+            self[split].append(metric)
+        else:
+            self[split] = [metric]
+
+        if is_best_metric:
+            self.best_metric_split = split
+            self.best_metric_index = len(self[split]) - 1
+
+
+    def add_metrics_dict(self, metrics_dict: dict, best_metric: Metric):
+        for split, metrics_in_split in metrics_dict.items():
+            if metrics_in_split is None or (isinstance(metrics_in_split, list) and len(metrics_in_split) == 0):
+                self[split] = []
+            elif isinstance(metrics_in_split, Metric):
+                # a single metric rather than a list
+                is_best_metric = id(metrics_in_split) == id(best_metric)
+                self.add_metric(split, metrics_in_split, is_best_metric)
+            else:
+                # list of metrics
+                for metric in metrics_in_split:
+                    is_best_metric = id(metric) == id(best_metric)
+                    self.add_metric(split, metric, is_best_metric)
+
+
+    def get_best_metric(self):
+        return self[best_metric_split][best_metric_index]
