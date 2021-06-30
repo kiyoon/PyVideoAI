@@ -107,7 +107,7 @@ def evaluate_pred(args):
 
     elif isinstance(cfg.dataset_cfg.task, SingleLabelClassificationTask):
         pred_labels = np.argmax(video_predictions, axis=1)
-        logger.success('Accuracy: {:f}'.format(accuracy_score(video_labels, pred_labels, normalize=args.normalise)))
+        logger.success('Accuracy: %s', accuracy_score(video_labels, pred_labels, normalize=args.normalise))
     else:
         raise NotImplementedError(f'dataset_cfg.task not recognised: {str(cfg.dataset_cfg.task)}')
 
