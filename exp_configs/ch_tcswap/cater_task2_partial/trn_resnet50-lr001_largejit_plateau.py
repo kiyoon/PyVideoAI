@@ -4,7 +4,14 @@ from pyvideoai.dataloaders.frames_sparsesample_dataset import FramesSparsesample
 
 import torch
 
-batch_size = 6  # per process (per GPU)
+#batch_size = 6  # per process (per GPU)
+def batch_size():
+    '''batch_size can be either integer or function returning integer.
+    '''
+    vram = torch.cuda.get_device_properties(0).total_memory
+    if vram > 20e+9:
+        return 6
+    return 3
 
 input_frame_length = 32
 crop_size = 224
@@ -39,9 +46,9 @@ import logging
 logger = logging.getLogger(__name__)
 from pyvideoai.utils.misc import has_gotten_lower, has_gotten_higher
 # optional
-def early_stopping_condition(epoch, exp):
+def early_stopping_condition(exp):
     patience=20
-    if epoch+1 >= patience:
+    if exp.summary['epoch'].count() >= patience:
         if not has_gotten_lower(exp.summary['val_loss'][-patience:]) and not has_gotten_higher(exp.summary['val_vid_mAP'][-patience:]):
             logger.info(f"Validation loss and mAP haven't gotten better for {patience} epochs. Stopping training..")
             return True

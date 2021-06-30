@@ -281,7 +281,16 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
 
                     # Pad to make the data same size before all_gather
                     uids = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
-                    labels = nn.functional.pad(labels, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+
+                    if labels.dim() == 2:
+                        # multilabel
+                        labels = nn.functional.pad(labels, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    elif labels.dim() == 1:
+                        # singlelabel
+                        labels = nn.functional.pad(labels, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    else:
+                        raise NotImplementedError('Label with dim not 1 or 2 not expected.')
+
                     if curr_batch_size == 0:
                         outputs = torch.ones((max_batch_size, num_classes), dtype=torch.float32, device=cur_device) * PAD_VALUE
                     else:

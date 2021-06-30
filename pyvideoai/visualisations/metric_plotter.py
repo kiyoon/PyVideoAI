@@ -28,8 +28,14 @@ class DefaultMetricPlotter:
 
     def add_metric(self, metric: Metric) -> None:
         plot_basenames = metric.plot_file_basenames()
+        if not isinstance(plot_basenames, tuple):
+            plot_basenames = (plot_basenames,)
         plot_legend_labels = metric.plot_legend_labels()
+        if not isinstance(plot_legend_labels, tuple):
+            plot_legend_labels = (plot_legend_labels,)
         csv_fieldnames = metric.get_csv_fieldnames()
+        if not isinstance(csv_fieldnames, tuple):
+            csv_fieldnames = (csv_fieldnames,)
         for plot_basename, plot_legend_label, csv_fieldname in zip(plot_basenames, plot_legend_labels, csv_fieldnames):
             self._add_metric_decomposed(plot_basename, plot_legend_label, csv_fieldname)
 

@@ -416,7 +416,7 @@ def train(args):
                 figs = metric_plotter.plot(exp)
 
                 if hasattr(cfg, 'early_stopping_condition'):
-                    early_stopping = cfg.early_stopping_condition(epoch, exp)
+                    early_stopping = cfg.early_stopping_condition(exp)
                 
                 send_telegram = early_stopping or (epoch % args.telegram_post_period == args.telegram_post_period -1)
                 if send_telegram:

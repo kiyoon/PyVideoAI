@@ -15,7 +15,7 @@ setup(
        'gitpython', 'coloredlogs', 'verboselogs',
        'matplotlib', 'scipy', 'scikit-learn',
        'seaborn',               # confusion matrix plots
-       'pandas',
+       'pandas>=1.2.4',
        'tensorboard',
        'opencv-python',
        'av',  # Video decoding

@@ -147,7 +147,7 @@ def has_gotten_lower(values: list, allow_same: bool = True, EPS: float = 1e-6) -
     ```
     """
 
-    values = [value for value in values if value is not None]
+    values = [value for value in values if value is not None and not math.isnan(value)]
 
     if len(values) <= 1:
         raise ValueError("Can't determine if values got lower with 0 or 1 value.")
@@ -177,7 +177,7 @@ def has_gotten_higher(values: list, allow_same: bool = True, EPS: float = 1e-6) 
     ```
     """
 
-    values = [value for value in values if value is not None]
+    values = [value for value in values if value is not None and not math.isnan(value)]
 
     if len(values) <= 1:
         raise ValueError("Can't determine if values got higher with 0 or 1 value.")
