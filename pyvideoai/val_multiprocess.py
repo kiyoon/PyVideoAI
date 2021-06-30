@@ -23,7 +23,6 @@ from .utils import misc
 from .train_and_val import eval_epoch
 
 from .metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
-from .metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 
 import coloredlogs, logging, verboselogs
 logger = verboselogs.VerboseLogger(__name__)    # add logger.success
@@ -63,11 +62,6 @@ def distributed_init(global_seed, local_world_size):
 
     return rank, world_size, local_rank, local_world_size, local_seed
 
-
-
-
-
-from .metrics import Metrics
 
 def val(args):
     rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
@@ -172,7 +166,7 @@ def val(args):
 
         if args.load_epoch == -1:
             exp.load_summary()
-            load_epoch = int(exp.summary['epoch'][-1])
+            load_epoch = int(exp.summary['epoch'].iloc[-1])
         elif args.load_epoch == -2:
             exp.load_summary()
             best_metric = metrics.get_best_metric()

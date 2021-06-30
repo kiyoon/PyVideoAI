@@ -54,7 +54,7 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, t
             dist.reduce(tensor, dst=0)
 
         if train_metrics is not None and len(train_metrics) > 0:
-            (uids_gathered,labels_gathered,outputs_gathered) = du.all_gather([uids, labels, outputs])
+            (uids,labels,outputs) = du.all_gather([uids, labels, outputs])
 
     if rank == 0:
         # Copy the stats from GPU to CPU (sync point).
@@ -74,7 +74,7 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, t
         if train_metrics is not None and len(train_metrics) > 0:
             logging_msgs = []
             for metric in train_metrics:
-                metric.add_clip_predictions(uids_gathered, outputs_gathered, labels_gathered)
+                metric.add_clip_predictions(uids, outputs, labels)
                 if metric.logging_msg_iter() is not None:
                     metric.calculate_metrics()
                     logging_msg = metric.logging_msg_iter()
@@ -162,6 +162,9 @@ def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_
         sys.stdout.write("\r")
         sys.stdout.flush()
 
+
+        write_str = " Train Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - {:d}s - lr: {:.8f} - loss: {:.4f} - {:s}".format(it+1, total_iters, sample_seen, total_samples, round(elapsed_time), lr, loss, final_logging_msg)
+
         # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
         if max_log_length < len(write_str):
             max_log_length = len(write_str)
@@ -169,8 +172,7 @@ def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_
             # Pad empty spaces
             write_str += ' ' * (max_log_length - len(write_str))
 
-        write_str = " Train Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - {:d}s - lr: {:.8f} - loss: {:.4f} - {:s}".format(it+1, total_iters, sample_seen, total_samples, round(elapsed_time), lr, loss, final_logging_msg)
-        logger.info()
+        logger.info(write_str)
 
     return sample_seen, total_samples, loss, elapsed_time#}}}
 
@@ -218,7 +220,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
             if one_clip:
                 eval_mode = "One-clip Eval"
             else:
-                eval_mode = "Multi-clip Eval"
+                eval_mode = "Multi-crop Eval"
         """
         if world_size > 1:
             # Number of iterations can be different over processes. Some processes need to wait until others finish.
@@ -294,9 +296,9 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
                         for proc_batch_size in curr_batch_sizes:
                             no_pad_row_mask.extend([i < proc_batch_size.item() for i in range(max_batch_size)])
 
-                        uids_gathered = uids_gathered[no_pad_row_mask]
-                        labels_gathered = labels_gathered[no_pad_row_mask]
-                        outputs_gathered = outputs_gathered[no_pad_row_mask]
+                        uids = uids_gathered[no_pad_row_mask]
+                        labels = labels_gathered[no_pad_row_mask]
+                        outputs = outputs_gathered[no_pad_row_mask]
                     
                 # Communicate other data
                 for tensor in [curr_batch_size, batch_loss_accum]:
@@ -318,7 +320,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
                 if val_metrics is not None and len(val_metrics) > 0:
                     logging_msgs = []
                     for metric in val_metrics:
-                        metric.add_clip_predictions(uids_gathered, outputs_gathered, labels_gathered)
+                        metric.add_clip_predictions(uids, outputs, labels)
                         logging_msg = metric.logging_msg_iter()
                         if logging_msg is not None:
                             metric.calculate_metrics()
@@ -336,7 +338,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
                 if one_clip:
                     eval_mode = "One-clip Eval"
                 else:
-                    eval_mode = "Multi-clip Eval"
+                    eval_mode = "Multi-crop Eval"
                 write_str = "\r {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - ETA: {:4d}s - val_loss: {:.4f} - {:s}".format(eval_mode, it+1, total_iters, sample_seen, total_samples, eta, loss, final_logging_msg)
                 # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
                 if max_log_length < len(write_str):

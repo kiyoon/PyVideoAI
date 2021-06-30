@@ -173,11 +173,13 @@ class Metric(ABC):
 
         messages = []
         for fieldname in fieldnames:
-            best_stat = exp.get_best_model_stat(fieldname, self.is_better)
-            last_stat = exp.get_last_model_stat(fieldname)
-            messages.append(f'Highest (@epoch {best_stat["epoch"]}) / Last (@ {last_stat["epoch"]}) {fieldname}: {best_stat[fieldname]} / {last_stat[fieldname]}')
+            if exp.summary[fieldname].count() > 0:
+                best_stat = exp.get_best_model_stat(fieldname, self.is_better)
+                last_stat = exp.get_last_model_stat(fieldname)
+                messages.append(f'Highest (@ epoch {best_stat["epoch"]}) / Last (@ {last_stat["epoch"]}) {fieldname}: {best_stat[fieldname]:.4f} / {last_stat[fieldname]:.4f}')
 
-        return '\n'.join(messages)
+        
+        return '\n'.join(messages) if len(messages) > 0 else None
 
     
     @staticmethod

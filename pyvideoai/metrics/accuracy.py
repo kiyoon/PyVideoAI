@@ -58,7 +58,7 @@ class ClipAccuracyMetric(Metric):
 
 
     def calculate_metrics(self):
-        self.last_calculated_metrics = tuple([num_correct / self.num_seen_samples for num_correct in self.num_correct_preds])
+        self.last_calculated_metrics = tuple([(num_correct / self.num_seen_samples).item() for num_correct in self.num_correct_preds])
 
 
     def types_of_metrics(self):
