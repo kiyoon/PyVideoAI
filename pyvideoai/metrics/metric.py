@@ -17,10 +17,10 @@ class Metric(ABC):
         self.num_classes = None     # prediction length
         self.label_size = None      # either num_classes (multi-label) or 1 (one-label)
         self.last_calculated_metrics = None
-        self.split = None
 
     def __init__(self, activation=None):
         self.activation = activation
+        self.split = None           # Note that these are permanent after initialisation and shouldn't change with self.clean_data()
         self.clean_data()
 
     def _apply_activation(self, predictions):
@@ -404,4 +404,4 @@ class Metrics(dict):
 
 
     def get_best_metric(self):
-        return self[best_metric_split][best_metric_index]
+        return self[self.best_metric_split][self.best_metric_index]

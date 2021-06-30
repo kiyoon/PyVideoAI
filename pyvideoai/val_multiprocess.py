@@ -68,6 +68,7 @@ def distributed_init(global_seed, local_world_size):
 
 
 
+from .metrics import Metrics
 
 def val(args):
     rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
@@ -77,14 +78,14 @@ def val(args):
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
 
-    metrics = {'train': [ClipAccuracyMetric()],
-            'val': [ClipAccuracyMetric()],
+    best_metric = ClipAccuracyMetric()
+    metrics_dict = {'train': [ClipAccuracyMetric()],
+            'val': [best_metric],
             'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5))]
             }
 
-    # metrics[best_metric_split][best_metric_index] is the metric that determines the best model.
-    best_metric_split = 'val'      
-    best_metric_index = 0
+    metrics = Metrics()
+    metrics.add_metrics_dict(metrics_dict, best_metric)
 
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
     exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
@@ -183,10 +184,12 @@ def val(args):
             load_epoch = int(exp.summary['epoch'][-1])
         elif args.load_epoch == -2:
             exp.load_summary()
-            best_metric = metrics[best_metric_split][best_metric_index]
-            best_metric_fieldname = best_metric.get_csv_fieldnames(best_metric_split)
+            best_metric = metrics.get_best_metric()
+            best_metric_fieldname = best_metric.get_csv_fieldnames()
             best_metric_is_better = best_metric.is_better
             if isinstance(best_metric_fieldname, tuple):
+                if len(best_metric_fieldname) > 1:
+                    logger.warn(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
                 best_metric_fieldname = best_metric_fieldname[0]
 
             logger.info(f'Using the best metric from CSV field `{best_metric_fieldname}`')

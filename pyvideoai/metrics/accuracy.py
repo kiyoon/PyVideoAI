@@ -66,7 +66,7 @@ class ClipAccuracyMetric(Metric):
 
 
     def tensorboard_tags(self):
-        return tuple([f'clip_accuracy_top{topk}' for topk in self.topk])
+        return tuple([f'Clip accuracy top{topk}' if topk != 1 else 'Clip accuracy' for topk in self.topk])
 
 
     def get_csv_fieldnames(self):
@@ -163,7 +163,7 @@ class VideoAccuracyMetric(AverageMetric):
 
 
     def tensorboard_tags(self):
-        return tuple([f'video_accuracy_top{topk}' for topk in self.topk])
+        return tuple([f'Video accuracy top{topk}' if topk != 1 else 'Video accuracy' for topk in self.topk])
 
 
     def get_csv_fieldnames(self):

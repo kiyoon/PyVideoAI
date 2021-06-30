@@ -22,7 +22,7 @@ def get_lr(optimiser):
     for param_group in optimiser.param_groups:
         return param_group['lr']
 
-def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, metrics, start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0):
+def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, train_metrics, start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0):
     inputs, uids, labels, _ = data_unpack_func(data)#{{{
     inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
 
@@ -54,7 +54,7 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, m
         for tensor in [curr_batch_size, batch_loss_accum]:
             dist.reduce(tensor, dst=0)
 
-        if metrics is not None and len(metrics) > 0:
+        if train_metrics is not None and len(train_metrics) > 0:
             (uids_gathered,labels_gathered,outputs_gathered) = du.all_gather([uids, labels, outputs])
 
     if rank == 0:
@@ -72,13 +72,13 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, m
         loss_accum += batch_loss_accum
         loss = loss_accum / sample_seen
 
-        if metrics is not None and len(metrics) > 0:
+        if train_metrics is not None and len(train_metrics) > 0:
             logging_msgs = []
-            for metric in metrics:
+            for metric in train_metrics:
                 metric.add_clip_predictions(uids_gathered, outputs_gathered, labels_gathered)
-                if metric.logging_msg_iter('train') is not None:
+                if metric.logging_msg_iter() is not None:
                     metric.calculate_metrics()
-                    logging_msg = metric.logging_msg_iter('train')
+                    logging_msg = metric.logging_msg_iter()
                     logging_msgs.append(logging_msg)
 
             final_logging_msg = ' - '.join(logging_msgs)
@@ -106,7 +106,7 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, m
 
     return sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length#}}}
 
-def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_func, metrics, rank = 0, world_size = 1, input_reshape_func = None):
+def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_func, train_metrics, rank = 0, world_size = 1, input_reshape_func = None):
     """Train for one epoch.
 
     Args:
@@ -131,8 +131,8 @@ def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_
         start_time = time.time()
         total_iters = len(dataloader)
         max_log_length = 0
-        if metrics is not None and len(metrics) > 0:
-            for metric in metrics:
+        if train_metrics is not None and len(train_metrics) > 0:
+            for metric in train_metrics:
                 metric.clean_data()
     else:
         sample_seen = None
@@ -145,15 +145,15 @@ def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_
     # In training, set pad_last_batch=True so that the shard size is always equivalent and it doesn't give you no batch for some processes at the last batch.
     for it, data in enumerate(dataloader):
 
-        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, metrics, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length)
+        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, train_metrics, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length)
 
     if rank == 0:
-        if metrics is not None and len(metrics) > 0:
+        if train_metrics is not None and len(train_metrics) > 0:
             logging_msgs = []
-            for metric in metrics:
-                if metric.logging_msg_epoch('train') is not None:
+            for metric in train_metrics:
+                if metric.logging_msg_epoch() is not None:
                     metric.calculate_metrics()
-                    logging_msg = metric.logging_msg_epoch('train')
+                    logging_msg = metric.logging_msg_epoch()
                     logging_msgs.append(logging_msg)
 
             final_logging_msg = ' - '.join(logging_msgs)
@@ -176,7 +176,7 @@ def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_
     return sample_seen, total_samples, loss, elapsed_time#}}}
 
 
-def eval_epoch(model, criterion, dataloader, data_unpack_func, metrics, num_classes, batch_size, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, PAD_VALUE = -1):
+def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_classes, batch_size, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, PAD_VALUE = -1):
     """Test for one epoch.
 
     Args:
@@ -208,8 +208,8 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, metrics, num_clas
             total_samples = len(dataloader.dataset)
             total_iters = len(dataloader)
 
-            if metrics is not None and len(metrics) > 0:
-                for metric in metrics:
+            if val_metrics is not None and len(val_metrics) > 0:
+                for metric in val_metrics:
                     metric.clean_data()
 #            video_metrics = VideoMetrics()
 #            #video_metrics.clean_data()     # new validation
@@ -274,7 +274,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, metrics, num_clas
 
             # Gather data
             if world_size > 1:
-                if metrics is not None and len(metrics) > 0:
+                if val_metrics is not None and len(val_metrics) > 0:
                     (curr_batch_sizes,) = du.all_gather([curr_batch_size])
                     max_batch_size = curr_batch_sizes.max()
 
@@ -316,14 +316,14 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, metrics, num_clas
                 loss = loss_accum / sample_seen
 
             if rank == 0:
-                if metrics is not None and len(metrics) > 0:
+                if val_metrics is not None and len(val_metrics) > 0:
                     logging_msgs = []
-                    for metric in metrics:
+                    for metric in val_metrics:
                         metric.add_clip_predictions(uids_gathered, outputs_gathered, labels_gathered)
-                        logging_msg = metric.logging_msg_iter('val' if one_clip else 'multicropval')
+                        logging_msg = metric.logging_msg_iter()
                         if logging_msg is not None:
                             metric.calculate_metrics()
-                            logging_msg = metric.logging_msg_iter('val' if one_clip else 'multicropval')
+                            logging_msg = metric.logging_msg_iter()
                             logging_msgs.append(logging_msg)
 
                     final_logging_msg = ' - '.join(logging_msgs)
@@ -359,13 +359,13 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, metrics, num_clas
         sys.stdout.write("\r")
         sys.stdout.flush()
 
-        if metrics is not None and len(metrics) > 0:
+        if val_metrics is not None and len(val_metrics) > 0:
             logging_msgs = []
-            for metric in metrics:
-                logging_msg = metric.logging_msg_epoch('val' if one_clip else 'multicropval')
+            for metric in val_metrics:
+                logging_msg = metric.logging_msg_epoch()
                 if logging_msg is not None:
                     metric.calculate_metrics()
-                    logging_msg = metric.logging_msg_epoch('val' if one_clip else 'multicropval')
+                    logging_msg = metric.logging_msg_epoch()
                     logging_msgs.append(logging_msg)
 
             final_logging_msg = ' - '.join(logging_msgs)
