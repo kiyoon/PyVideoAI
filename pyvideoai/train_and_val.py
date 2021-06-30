@@ -3,7 +3,6 @@ from torch import nn
 import torch.distributed as dist
 from .utils import distributed as du
 from .utils import misc
-from .utils.video_metrics import VideoMetrics
 import time
 import sys
 from .utils.distributed_sampler_for_val import count_true_samples

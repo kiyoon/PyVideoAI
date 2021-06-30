@@ -20,9 +20,9 @@ def accuracy(output, target, topk=(1,)):
 
 
 class ClipAccuracyMetric(Metric):
-    """Don't need activation softmax for accuracy calculation.
+    """Don't need activation softmax for clip accuracy calculation.
     """
-    def __init__(self, topk=(1,)):
+    def __init__(self, topk=(1,), activation=None):
         if isinstance(topk, tuple):
             self.topk = topk
         elif isinstance(topk, int):
@@ -30,7 +30,7 @@ class ClipAccuracyMetric(Metric):
         else:
             raise ValueError(f'topk {topk} not recognised. It must be a tuple or integer.')
 
-        super().__init__(activation=None)
+        super().__init__(activation=activation)
 
 
     def clean_data(self):
@@ -139,7 +139,7 @@ class ClipAccuracyMetric(Metric):
         return self.num_seen_samples
 
 class VideoAccuracyMetric(AverageMetric):
-    def __init__(self, topk=(1,)):
+    def __init__(self, topk=(1,), activation='softmax'):
         if isinstance(topk, tuple):
             self.topk = topk
         elif isinstance(topk, int):
@@ -147,7 +147,7 @@ class VideoAccuracyMetric(AverageMetric):
         else:
             raise ValueError(f'topk {topk} not recognised. It must be a tuple or integer.')
 
-        super().__init__(activation=None)
+        super().__init__(activation=activation)
 
     def clean_data(self):
         super().clean_data()

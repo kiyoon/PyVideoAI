@@ -27,7 +27,29 @@ class Task(ABC):
         pass
 
 
+    def get_last_activation(self, exp_cfg):
+        if hasattr(exp_cfg, 'last_activation'):
+            return exp_cfg.last_activation
+
+        default_last_activation = self._default_last_activation()
+        logger.info(f'cfg.last_activation not defined. Using {str(default_last_activation)}')
+        return default_last_activation
+
+
+    @abstractmethod
+    def _default_last_activation(self):
+        """
+        Return:
+            callable, or str
+        """
+        pass
+    
+
     def get_metrics(self, exp_cfg):
+        """
+        Return:
+            metrics (pyvideoai.metrics.Metrics)
+        """
         has_best_metric = hasattr(exp_cfg, 'best_metric')
         has_metrics = hasattr(exp_cfg, 'metrics')
 
@@ -36,14 +58,39 @@ class Task(ABC):
         elif has_best_metric != has_metrics:
             raise ValueError('exp_cfg has only one of `best_metric` and `metrics`. You must specify either both or none of them.')
         else:   # (not has_best_metric) and (not has_metrics)
-            best_metric, metrics_dict = self._default_metrics()
+            best_metric, metrics_dict = self._default_metrics(self.get_last_activation(exp_cfg))
             metrics = Metrics(metrics_dict, best_metric)
 
         return metrics
 
 
     @abstractmethod
-    def _default_metrics(self):
+    def _default_metrics(self, activation):
+        """
+        Return:
+            best_metric (pyvideoai.metrics.Metric), metrics_dict (dict of splits as keys, list of Metric as values)
+        """
+        pass
+
+
+    def get_predictions_gatherers(self, exp_cfg):
+        """
+        Predictions_gatherer is a Metric that doesn't log/report anything but accumulates predictions over the dataset.
+        
+        Return:
+            predictions_gatherers (dict of split as keys, predictions_gatherer as values)
+        """
+
+        if hasattr(exp_cfg, 'predictions_gatherers'):
+            predictions_gatherers = exp_cfg.predictions_gatherers
+        else:   # (not has_best_metric) and (not has_metrics)
+            predictions_gatherers = self._default_predictions_gatherers(self.get_last_activation(exp_cfg))
+
+        return predictions_gatherers
+
+
+    @abstractmethod
+    def _default_predictions_gatherers(self, activation):
         """
         Return:
             best_metric (pyvideoai.metrics.Metric), metrics_dict (dict of splits as keys, list of Metric as values)

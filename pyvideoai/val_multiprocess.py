@@ -21,7 +21,6 @@ from torch.utils.data.distributed import DistributedSampler
 from .utils import distributed as du
 from .utils import misc
 from .train_and_val import eval_epoch
-from .train_and_val_multilabel import eval_epoch as eval_epoch_multilabel
 
 from .metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 from .metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
@@ -134,15 +133,15 @@ def val(args):
         # Dataset
         if args.split is not None:
             split = args.split
-            predictions_gatherer = VideoPredictionsGatherer()
         else:   # set split automatically
             if args.mode == 'oneclip':
                 split = 'val'
-                predictions_gatherer = ClipPredictionsGatherer()
             else:   # multicrop
                 split = 'multicropval'
-                predictions_gatherer = VideoPredictionsGatherer()
-        metrics[split].append(predictions_gatherer)
+
+        if args.save_predictions:
+            predictions_gatherer = cfg.dataset_cfg.task.get_predictions_gatherers(cfg)[split]
+            metrics[split].append(predictions_gatherer)
 
         val_dataset = cfg.get_torch_dataset(split)
         data_unpack_func = cfg.get_data_unpack_func(split)
