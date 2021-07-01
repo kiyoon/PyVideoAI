@@ -29,11 +29,6 @@ input_channel_num=[3]   # RGB
 
 
 #### OPTIONAL
-## when you resume from checkpoint, load optimiser/scheduler state?
-## Default values are True.
-#load_optimiser_state = True
-#load_scheduler_state = True
-#
 #def criterion():
 #    return torch.nn.CrossEntropyLoss()
 #
@@ -73,14 +68,18 @@ input_channel_num=[3]   # RGB
 #logger = logging.getLogger(__name__)
 #from pyvideoai.utils.misc import has_gotten_lower, has_gotten_higher
 ## optional
-#def early_stopping_condition(epoch, exp):
+#def early_stopping_condition(exp):
 #    patience=20
-#    if epoch+1 >= patience:
+#    if exp.summary['epoch'].iloc[-1]+1 >= patience:
 #        if not has_gotten_lower(exp.summary['val_loss'][-patience:]) and not has_gotten_higher(exp.summary['val_acc'][-patience:]):
 #            logger.info(f"Validation loss and accuracy haven't gotten better for {patience} epochs. Stopping training..")
 #            return True
 #
 #    return False
+#
+#
+
+
 
 def optimiser(params):
     return torch.optim.SGD(params, lr = 0.0001, momentum = 0.9, weight_decay = 5e-4)
@@ -160,3 +159,38 @@ def get_torch_dataset(split):
     csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename1[split])
 
     return _get_torch_dataset(csv_path, split)
+
+
+
+## OPTIONAL: change metrics, plotting figures and reporting text.
+## when you resume from checkpoint, load optimiser/scheduler state?
+## Default values are True.
+#load_optimiser_state = True
+#load_scheduler_state = True
+#
+##
+## For both train & val
+## Changing last_activation and leaving metrics/predictions_gatherers commented out will still change the default metrics and predictions_gatherers' activation function
+#last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
+#
+## For training, (tools/run_train.py)
+## how to calculate metrics
+#from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+#best_metric = ClipAccuracyMetric()
+#metrics = {'train': [ClipAccuracyMetric()],
+#        'val': [best_metric],
+#        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
+#        }
+#
+## For validation, (tools/run_val.py)
+## how to gather predictions when --save_predictions is set
+#from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
+#predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
+#        'multicropval': VideoPredictionsGatherer(last_activation),
+#        }
+#
+## How will you plot
+#from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
+#metric_plotter = DefaultMetricPlotter()
+#from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter
+#telegram_reporter = DefaultTelegramReporter()
