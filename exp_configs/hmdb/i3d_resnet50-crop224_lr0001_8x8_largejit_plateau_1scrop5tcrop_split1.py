@@ -175,12 +175,12 @@ def get_torch_dataset(split):
 #
 ## For training, (tools/run_train.py)
 ## how to calculate metrics
-#from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
-#best_metric = ClipAccuracyMetric()
-#metrics = {'train': [ClipAccuracyMetric()],
-#        'val': [best_metric],
-#        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
-#        }
+from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+best_metric = ClipAccuracyMetric()
+metrics = {'train': [ClipAccuracyMetric()],
+        'val': [best_metric],
+        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
+        }
 #
 ## For validation, (tools/run_val.py)
 ## how to gather predictions when --save_predictions is set
@@ -190,7 +190,7 @@ def get_torch_dataset(split):
 #        }
 #
 ## How will you plot
-#from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
-#metric_plotter = DefaultMetricPlotter()
-#from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter
-#telegram_reporter = DefaultTelegramReporter()
+from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
+metric_plotter = DefaultMetricPlotter()
+from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter
+telegram_reporter = DefaultTelegramReporter()
