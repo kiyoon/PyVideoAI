@@ -1,10 +1,13 @@
 """setup script for the PyVideoAI package."""
 
 from setuptools import setup
+import versioneer
 
 setup(
     name = "PyVideoAI",
-    version="0.1",
+    setup_requires=[],
+    version=versioneer.get_version(),
+    cmdclass=versioneer.get_cmdclass(),
     author = "Kiyoon Kim",
     author_email='kiyoon.kim@ed.ac.uk',
     description = "Video datasets' annotation parser and etc.",
