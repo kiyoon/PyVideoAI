@@ -47,6 +47,7 @@ from requests import ConnectionError
 import configparser
 
 import git
+from . import __version__
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
@@ -120,7 +121,8 @@ def train(args):
         if rank == 0:
             repo = git.Repo(search_parent_directories=True)
             sha = repo.head.object.hexsha
-            logger.info("git hash: %s", sha)
+            logger.info(f"PyVideoAI==f{__version__}")
+            logger.info(f"PyVideoAI git hash: {sha}")
 
             # save configs
             exp.dump_args(args)

@@ -31,6 +31,7 @@ logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 import configparser
 
 import git
+from . import __version__
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
@@ -103,7 +104,8 @@ def val(args):
         if rank == 0:
             repo = git.Repo(search_parent_directories=True)
             sha = repo.head.object.hexsha
-            logger.info("git hash: %s", sha)
+            logger.info(f"PyVideoAI==f{__version__}")
+            logger.info(f"PyVideoAI git hash: {sha}")
             # save configs
 #            exp.dump_args(args)
             logger.info("args: " + json.dumps(args.__dict__, sort_keys=False, indent=4))
