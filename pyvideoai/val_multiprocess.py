@@ -104,7 +104,7 @@ def val(args):
         if rank == 0:
             repo = git.Repo(search_parent_directories=True)
             sha = repo.head.object.hexsha
-            logger.info(f"PyVideoAI==f{__version__}")
+            logger.info(f"PyVideoAI=={__version__}")
             logger.info(f"PyVideoAI git hash: {sha}")
             # save configs
 #            exp.dump_args(args)
