@@ -313,9 +313,21 @@ def train(args):
                 if len(best_metric_fieldname) > 1:
                     logger.warn(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
                 best_metric_fieldname = best_metric_fieldname[0]
+
             max_val_metric = None 
             max_val_epoch = -1
 
+            # Load the latest best metric until `start_epoch`
+            if args.load_epoch is not None:
+                all_stats_logical_idx = exp.summary['epoch'] < start_epoch
+                all_stats = exp.summary[all_stats_logical_idx]
+                for index_, row in all_stats.iterrows():
+                    val_metric = row[best_metric_fieldname]
+
+                    is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric)
+                    if is_better:
+                        max_val_metric = val_metric
+                        max_val_epoch = epoch
 
             # Plotting metrics
             metric_plotter = cfg.metric_plotter if hasattr(cfg, 'metric_plotter') else DefaultMetricPlotter()
@@ -461,7 +473,7 @@ def train(args):
 
                 val_metric = curr_stat[best_metric_fieldname]    # which metric to use for deciding the best model
 
-                is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric - 1e-6)
+                is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric)
                 if is_better:
                     max_val_metric = val_metric
                     max_val_epoch = epoch
