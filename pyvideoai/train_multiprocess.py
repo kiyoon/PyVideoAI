@@ -329,7 +329,7 @@ def train(args):
                     is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric)
                     if is_better:
                         max_val_metric = val_metric
-                        max_val_epoch = epoch
+                        max_val_epoch = row['epoch']
 
             # Plotting metrics
             metric_plotter = cfg.metric_plotter if hasattr(cfg, 'metric_plotter') else DefaultMetricPlotter()
