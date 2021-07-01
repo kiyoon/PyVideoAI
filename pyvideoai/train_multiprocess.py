@@ -238,10 +238,28 @@ def train(args):
         if isinstance(scheduler, ReduceLROnPlateau):
             logger.info("ReduceLROnPlateau scheduler is selected. The `scheduler.step(val_loss)` function will be called at the end of epoch (after validation), but not every iteration.")
             if args.load_epoch is not None:
-                logger.info("For the ReduceLROnPlateau scheduler, initialise using training stats (summary.csv) instead of the checkpoint.")
-                for i in range(start_epoch):
-                    with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
-                        scheduler.step(exp.summary['val_loss'][i])
+                if hasattr(cfg, 'load_scheduler_state'):
+                    load_scheduler_state = cfg.load_scheduler_state
+                else:
+                    logger.info("cfg.load_scheduler_state not found. By default, it will try to load.")
+                    load_scheduler_state = True
+                if load_scheduler_state:
+                    if checkpoint["scheduler_state"] is None:
+                        logger.warning(f"Scheduler appears to have changed. Initialise using training stats (summary.csv) instead of the checkpoint.")
+                        for i in range(start_epoch):
+                            with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
+                                scheduler.step(exp.summary['val_loss'][i])
+                    else:
+                        try:
+                            logger.info("Loading scheduler state from the checkpoint.")
+                            scheduler.load_state_dict(checkpoint["scheduler_state"])
+                        except Exception:
+                            logger.warning(f"Scheduler appears to have changed. Initialise using training stats (summary.csv) instead of the checkpoint.")
+                            for i in range(start_epoch):
+                                with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
+                                    scheduler.step(exp.summary['val_loss'][i])
+                else:
+                    logger.info("NOT loading scheduler state from the checkpoint.")
         else:
             logger.info("Scheduler is not ReduceLROnPlateau. The `scheduler.step()` function will be called every iteration (not every epoch).")
             if args.load_epoch is not None:

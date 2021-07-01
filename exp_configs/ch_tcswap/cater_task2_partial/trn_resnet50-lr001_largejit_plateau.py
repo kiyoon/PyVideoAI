@@ -49,7 +49,7 @@ from pyvideoai.utils.misc import has_gotten_lower, has_gotten_higher
 def early_stopping_condition(exp):
     patience=20
     if exp.summary['epoch'].count() >= patience:
-        if not has_gotten_lower(exp.summary['val_loss'][-patience:]) and not has_gotten_higher(exp.summary['val_vid_mAP'][-patience:]):
+        if not has_gotten_lower(exp.summary['val_loss'][-patience:]) and not has_gotten_higher(exp.summary['val_mAP'][-patience:]):
             logger.info(f"Validation loss and mAP haven't gotten better for {patience} epochs. Stopping training..")
             return True
 
