@@ -44,7 +44,7 @@ class DefaultMetricPlotter:
             for metric in metrics_in_split:
                 self.add_metric(metric)
 
-    def plot(self, exp: ExperimentBuilder):
+    def plot(self, exp: ExperimentBuilder) -> list:
         plt.rcParams.update({'font.size': 16})
         figs = []       # list of (plot_basename, fig)
         for plot_basename, metric_infos in self.basename_to_metrics.items():
@@ -78,5 +78,8 @@ class DefaultMetricPlotter:
                 fig.savefig(save_path_wo_ext + '.png')
 
                 figs.append((plot_basename, fig))
+            else:
+                # Eventually, no plot is generated. Close unused figure
+                plt.close(fig)
 
         return figs
