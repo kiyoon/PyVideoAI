@@ -1,3 +1,4 @@
+import math
 
 def has_gotten_lower(values: list, allow_same: bool = True, EPS: float = 1e-6) -> bool:
     """
