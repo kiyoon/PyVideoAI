@@ -156,7 +156,7 @@ def _get_torch_dataset(csv_path, split):
 
 def get_torch_dataset(split):
 
-    csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename1[split])
+    csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename[split])
 
     return _get_torch_dataset(csv_path, split)
 

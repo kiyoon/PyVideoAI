@@ -18,6 +18,7 @@ frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 split_file_basename1 = {'train': 'train1.csv', 'val': 'test1.csv', 'multicropval': 'test1.csv'}
 split_file_basename2 = {'train': 'train2.csv', 'val': 'test2.csv', 'multicropval': 'test2.csv'}
 split_file_basename3 = {'train': 'train3.csv', 'val': 'test3.csv', 'multicropval': 'test3.csv'}
+split_file_basename = split_file_basename1
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
 
 
