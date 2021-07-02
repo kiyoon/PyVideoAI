@@ -62,7 +62,7 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
     #return torch.optim.lr_scheduler.StepLR(optimiser, step_size = 50 * iters_per_epoch, gamma = 0.1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
     return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
-    #return None
+    return None
 
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
@@ -130,7 +130,7 @@ def _get_torch_dataset(csv_path, split):
 def get_torch_dataset(split):
 
     mode = dataset_cfg.split2mode[split]
-    csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename1[split])
+    csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename[split])
 
     return _get_torch_dataset(csv_path, split)
 

@@ -15,7 +15,7 @@ def batch_size():
         return 8
     return 4
 
-input_frame_length = 8
+input_frame_length = 9
 crop_size = 224
 train_jitter_min = 224
 train_jitter_max = 336
@@ -130,7 +130,7 @@ def _get_torch_dataset(csv_path, split):
 def get_torch_dataset(split):
 
     mode = dataset_cfg.split2mode[split]
-    csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename1[split])
+    csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename[split])
 
     return _get_torch_dataset(csv_path, split)
 
