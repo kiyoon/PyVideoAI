@@ -29,7 +29,7 @@ if __name__ == '__main__':
         output_dir = os.path.join(args.cater_dir, "splits_frames_partial")
     else:
         output_dir = os.path.join(args.cater_dir, "splits_frames")
-    frames_dir = os.path.join(args.cater_dir, "frames_q5")
+    frames_dir = os.path.join(args.cater_dir, "frames")
     
     action_types = ['actions_order_uniq', 'actions_present']
     num_classes_of_action_types = [NUM_CLASSES_TASK2, NUM_CLASSES_TASK1]
