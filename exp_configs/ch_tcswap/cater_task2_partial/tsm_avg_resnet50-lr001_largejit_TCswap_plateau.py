@@ -4,7 +4,7 @@ from pyvideoai.dataloaders.frames_sparsesample_dataset import FramesSparsesample
 
 import torch
 
-batch_size = 3  # per process (per GPU)
+batch_size = 6  # per process (per GPU)
 
 input_frame_length = 32
 crop_size = 224
@@ -64,7 +64,11 @@ def load_pretrained(model):
     return
 
 def _dataloader_shape_to_model_input_shape(inputs):
+<<<<<<< HEAD
     return inputs 
+=======
+    return inputs
+>>>>>>> 11d257b2627535ad2c10aee4f81b6f13ba09c8ff
 
 def get_input_reshape_func(split):
     '''

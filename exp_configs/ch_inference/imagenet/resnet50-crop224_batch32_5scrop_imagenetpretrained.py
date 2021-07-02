@@ -4,7 +4,16 @@ from pyvideoai.dataloaders.image_classification_dataset import ImageClassificati
 
 import torch
 
-batch_size = 32  # per process (per GPU)
+#batch_size = 32  # per process (per GPU)
+def batch_size():
+    '''batch_size can be either integer or function returning integer.
+    '''
+    vram = cuda.get_device_properties(0).total_memory
+    if vram > 20e+9:
+        return 128
+    elif vram > 10e+9:
+        return 64
+    return 32
 
 crop_size = 224
 train_jitter_min = 224

@@ -19,9 +19,9 @@ from . import config
 import argparse
 import copy
 
-#from dataloaders.DALI_video_loader import DALILoader
 from .utils import loader
 from torch.utils.data.distributed import DistributedSampler
+import time
 
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
@@ -85,7 +85,7 @@ def train(args):
         coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
         logging.getLogger('slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
-    perform_multicropval = args.multi_crop_val_freq > 0
+    perform_multicropval = args.multi_crop_val_period > 0
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
 
@@ -151,15 +151,17 @@ def train(args):
         torch_datasets = {split: cfg.get_torch_dataset(split) for split in splits}
         data_unpack_funcs = {split: cfg.get_data_unpack_func(split) for split in splits}
         input_reshape_funcs= {split: cfg.get_input_reshape_func(split) for split in splits}
+        batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
+        logger.info(f'Using batch size of {batch_size} per process (per GPU), resulting in total size of {batch_size * world_size}.')
 
         train_sampler = DistributedSampler(torch_datasets['train']) if world_size > 1 else None
         val_sampler = DistributedSampler(torch_datasets['val'], shuffle=False) if world_size > 1 else None
         if perform_multicropval:
             multi_crop_val_sampler = DistributedSampler(torch_datasets['multicropval'], shuffle=False) if world_size > 1 else None
-        train_dataloader = torch.utils.data.DataLoader(torch_datasets['train'], batch_size=cfg.batch_size, shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True)
-        val_dataloader = torch.utils.data.DataLoader(torch_datasets['val'], batch_size=cfg.batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+        train_dataloader = torch.utils.data.DataLoader(torch_datasets['train'], batch_size=batch_size, shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True)
+        val_dataloader = torch.utils.data.DataLoader(torch_datasets['val'], batch_size=batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
         if perform_multicropval:
-            multi_crop_val_dataloader = torch.utils.data.DataLoader(torch_datasets['multicropval'], batch_size=cfg.batch_size, shuffle=False, sampler=multi_crop_val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+            multi_crop_val_dataloader = torch.utils.data.DataLoader(torch_datasets['multicropval'], batch_size=batch_size, shuffle=False, sampler=multi_crop_val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
         # Use global seed because we have to maintain the consistency of shuffling between shards.
     #    train_dataloader = DALILoader(batch_size = 1, file_list = 'epic_verb_train_split.txt', uid2label = dataset_cfg.uid2label,
     #            sequence_length = 8, stride=16, crop_size= (224,224), num_threads=1, seed=args.seed, device_id=local_rank, shard_id=rank, num_shards=world_size, shuffle=True, pad_last_batch=True)
@@ -346,7 +348,7 @@ def train(args):
                     # writer.add_graph(model, inputs)
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss, 'train_acc': acc}#}}}
          
-                val_sample_seen, val_total_samples, val_loss, val_acc, _, _, val_elapsed_time, _, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], cfg.dataset_cfg.num_classes, cfg.batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
+                val_sample_seen, val_total_samples, val_loss, val_acc, _, _, val_elapsed_time, _, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], cfg.dataset_cfg.num_classes, batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
                 val_metric = val_acc    # which metric to use for deciding the best model
                 if rank == 0:#{{{
                     val_writer.add_scalar('Loss', val_loss, epoch)
@@ -356,8 +358,8 @@ def train(args):
                     val_writer.add_scalar('Total_samples', val_total_samples, epoch)
                     curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss, 'val_acc': val_acc})#}}}
 
-                if perform_multicropval and epoch % args.multi_crop_val_freq == args.multi_crop_val_freq -1:
-                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_acc, multi_crop_val_vid_acc_top1, multi_crop_val_vid_acc_top5, multi_crop_val_elapsed_time, _, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], cfg.dataset_cfg.num_classes, cfg.batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
+                if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
+                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_acc, multi_crop_val_vid_acc_top1, multi_crop_val_vid_acc_top5, multi_crop_val_elapsed_time, _, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], cfg.dataset_cfg.num_classes, batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
                     if rank == 0:#{{{
                         multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
                         multi_crop_val_writer.add_scalar('Accuracy', multi_crop_val_acc, epoch)
@@ -379,7 +381,7 @@ def train(args):
                     # writer.add_graph(model, inputs)
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss, 'train_vid_mAP': vid_mAP}#}}}
          
-                val_sample_seen, val_total_samples, val_loss, val_vid_mAP, val_elapsed_time, _, _ = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_funcs['val'], cfg.dataset_cfg.num_classes, cfg.batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
+                val_sample_seen, val_total_samples, val_loss, val_vid_mAP, val_elapsed_time, _, _ = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_funcs['val'], cfg.dataset_cfg.num_classes, batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
                 val_metric = val_vid_mAP    # which metric to use for deciding the best model
                 if rank == 0:#{{{
                     val_writer.add_scalar('Loss', val_loss, epoch)
@@ -389,8 +391,8 @@ def train(args):
                     val_writer.add_scalar('Total_samples', val_total_samples, epoch)
                     curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss, 'val_vid_mAP': val_vid_mAP})#}}}
 
-                if perform_multicropval and epoch % args.multi_crop_val_freq == args.multi_crop_val_freq -1:
-                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_vid_mAP, multi_crop_val_elapsed_time, _, _ = eval_epoch_multilabel(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], cfg.dataset_cfg.num_classes, cfg.batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
+                if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
+                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_vid_mAP, multi_crop_val_elapsed_time, _, _ = eval_epoch_multilabel(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], cfg.dataset_cfg.num_classes, batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
                     if rank == 0:#{{{
                         multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
                         multi_crop_val_writer.add_scalar('mAP', multi_crop_val_vid_mAP, epoch)
@@ -409,14 +411,24 @@ def train(args):
                 if hasattr(cfg, 'early_stopping_condition'):
                     early_stopping = cfg.early_stopping_condition(epoch, exp)
 
-                send_telegram = early_stopping or (epoch % args.telegram_post_freq == args.telegram_post_freq -1)
+                send_telegram = early_stopping or (epoch % args.telegram_post_period == args.telegram_post_period -1)
                 try:
+                    start_time_plot = time.time()
                     exp.plot_summary(send_telegram = send_telegram)
                 except (SSLCertVerificationError, OSError, NewConnectionError, MaxRetryError, ConnectionError) as e:
                     """Usually, max-retries exceeds when you run it for a while.
                     Therefore, even if it fails to send the plots, don't crash the programme and keep it running.
                     """
                     logger.exception('Failed to send plots to Telegram.')
+
+                elapsed_time_plot = time.time() - start_time_plot
+
+                if args.telegram_post_period < 100 and send_telegram and elapsed_time_plot > 5 * 60:
+                    # Sending plots to telegram took longer than 5 mins.
+                    # Telegram is limiting the traffic due to heavy usage.
+                    logger.warning('Sending plots to Telegram took over 5 mins. Setting the plotting period to 100 epochs.')
+                    args.telegram_post_period = 100
+
 
                 is_higher = val_metric >= max_val_metric - 1e-6
                 if is_higher:
@@ -459,11 +471,14 @@ def train(args):
                                 input("Press Enter to retry: ")
                 
             if hasattr(cfg, 'early_stopping_condition'):
-                # Broadcast the early stopping flag to the entire process.
-                early_stopping_flag = torch.ByteTensor([early_stopping]).to(cur_device)
-                dist.broadcast(early_stopping_flag, 0)
-                # Copy from GPU to CPU (sync point)
-                early_stopping_flag = bool(early_stopping_flag.item())
+                if world_size > 1:
+                    # Broadcast the early stopping flag to the entire process.
+                    early_stopping_flag = torch.ByteTensor([early_stopping]).to(cur_device)
+                    dist.broadcast(early_stopping_flag, 0)
+                    # Copy from GPU to CPU (sync point)
+                    early_stopping_flag = bool(early_stopping_flag.item())
+                else:
+                    early_stopping_flag = early_stopping
 
                 if early_stopping_flag:
                     logger.info("Early stopping triggered.")

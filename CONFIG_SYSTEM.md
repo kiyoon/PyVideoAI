@@ -68,7 +68,7 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
 ## Running the example
 To run the above example,  
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_train.py -D hmdb -M i3d_resnet50 -N testrun --local_world_size 4 -e 200
+CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_train.py -D hmdb -M i3d_resnet50 -E testrun --local_world_size 4 -e 200
 ```
 
 To resume, add `-l -1` argument.

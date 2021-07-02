@@ -40,7 +40,7 @@ All of the executable files are in `tools/`.
 # Usage
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_train.py -D {dataset_config_name} -M {model_config_name} -N {config_name} --local_world_size {num_GPUs} -e {num_epochs}
+CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_train.py -D {dataset_config_name} -M {model_config_name} -E {exp_config_name} --local_world_size {num_GPUs} -e {num_epochs}
 ```
 `--local_world_size` denotes the number of GPUs per computing node.
 
