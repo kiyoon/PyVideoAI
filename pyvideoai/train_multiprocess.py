@@ -32,8 +32,9 @@ from .utils import misc
 from .utils.stdout_logger import OutputLogger
 
 from .train_and_val import train_epoch, eval_epoch
-from .train_and_val_multilabel import train_epoch as train_epoch_multilabel
-from .train_and_val_multilabel import eval_epoch as eval_epoch_multilabel
+
+from .visualisations.metric_plotter import DefaultMetricPlotter
+from .visualisations.telegram_reporter import DefaultTelegramReporter
 
 import coloredlogs, logging, verboselogs
 logger = verboselogs.VerboseLogger(__name__)    # add logger.success
@@ -46,6 +47,7 @@ from requests import ConnectionError
 import configparser
 
 import git
+from . import __version__
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
@@ -83,16 +85,15 @@ def train(args):
     rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
-        logging.getLogger('slowfast.utils.checkpoint').setLevel(logging.WARNING)
+        #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     perform_multicropval = args.multi_crop_val_period > 0
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
 
-    if cfg.dataset_cfg.task == 'singlelabel_classification':
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_singlelabel(multicropval = perform_multicropval)
-    elif cfg.dataset_cfg.task == 'multilabel_classification':
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_multilabel(multicropval = perform_multicropval)
+    metrics = cfg.dataset_cfg.task.get_metrics(cfg)
+    summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
+
     exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
 
     if rank == 0:
@@ -120,7 +121,8 @@ def train(args):
         if rank == 0:
             repo = git.Repo(search_parent_directories=True)
             sha = repo.head.object.hexsha
-            logger.info("git hash: %s", sha)
+            logger.info(f"PyVideoAI=={__version__}")
+            logger.info(f"PyVideoAI git hash: {sha}")
 
             # save configs
             exp.dump_args(args)
@@ -196,7 +198,7 @@ def train(args):
             exp.load_summary()
 
             if args.load_epoch == -1:
-                load_epoch = int(exp.summary['epoch'][-1])
+                load_epoch = int(exp.summary['epoch'].iloc[-1])
             elif args.load_epoch >= 0:
                 load_epoch = args.load_epoch
             else:
@@ -215,20 +217,7 @@ def train(args):
             if hasattr(cfg, 'load_pretrained'):
                 cfg.load_pretrained(model)
 
-
-
-        if hasattr(cfg, 'criterion'):
-            criterion = cfg.criterion()
-        else:
-            if cfg.dataset_cfg.task == 'singlelabel_classification':
-                logger.info(f"cfg.criterion not defined. Using CrossEntropyLoss()")
-                criterion = nn.CrossEntropyLoss()
-            elif cfg.dataset_cfg.task == 'multilabel_classification':
-                logger.info(f"cfg.criterion not defined. Using BCEWithLogitsLoss()")
-                criterion = nn.BCEWithLogitsLoss()
-            else:
-                raise ValueError(f"cfg.dataset_cfg.task not known task: {cfg.dataset_cfg.task}")
-
+        criterion = cfg.dataset_cfg.task.get_criterion(cfg)
 
         optimiser = cfg.optimiser(policies)
         if args.load_epoch is not None:
@@ -251,10 +240,28 @@ def train(args):
         if isinstance(scheduler, ReduceLROnPlateau):
             logger.info("ReduceLROnPlateau scheduler is selected. The `scheduler.step(val_loss)` function will be called at the end of epoch (after validation), but not every iteration.")
             if args.load_epoch is not None:
-                logger.info("For the ReduceLROnPlateau scheduler, initialise using training stats (summary.csv) instead of the checkpoint.")
-                for i in range(start_epoch):
-                    with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
-                        scheduler.step(exp.summary['val_loss'][i])
+                if hasattr(cfg, 'load_scheduler_state'):
+                    load_scheduler_state = cfg.load_scheduler_state
+                else:
+                    logger.info("cfg.load_scheduler_state not found. By default, it will try to load.")
+                    load_scheduler_state = True
+                if load_scheduler_state:
+                    if checkpoint["scheduler_state"] is None:
+                        logger.warning(f"Scheduler appears to have changed. Initialise using training stats (summary.csv) instead of the checkpoint.")
+                        for i in range(start_epoch):
+                            with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
+                                scheduler.step(exp.summary['val_loss'][i])
+                    else:
+                        try:
+                            logger.info("Loading scheduler state from the checkpoint.")
+                            scheduler.load_state_dict(checkpoint["scheduler_state"])
+                        except Exception:
+                            logger.warning(f"Scheduler appears to have changed. Initialise using training stats (summary.csv) instead of the checkpoint.")
+                            for i in range(start_epoch):
+                                with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
+                                    scheduler.step(exp.summary['val_loss'][i])
+                else:
+                    logger.info("NOT loading scheduler state from the checkpoint.")
         else:
             logger.info("Scheduler is not ReduceLROnPlateau. The `scheduler.step()` function will be called every iteration (not every epoch).")
             if args.load_epoch is not None:
@@ -301,12 +308,27 @@ def train(args):
                 multi_crop_val_writer = None
 
             # to save maximum val_acc model, when option "args.save_mode" is "higher" or "last_and_peaks"
-            max_val_metric = 0.
+            best_metric, best_metric_fieldname = metrics.get_best_metric_and_fieldname()
+
+            max_val_metric = None 
             max_val_epoch = -1
-        else:
-            train_writer = None
-            val_writer = None
-            multi_crop_val_writer = None
+
+            # Load the latest best metric until `start_epoch`
+            if args.load_epoch is not None:
+                all_stats_logical_idx = exp.summary['epoch'] < start_epoch
+                all_stats = exp.summary[all_stats_logical_idx]
+                for index_, row in all_stats.iterrows():
+                    val_metric = row[best_metric_fieldname]
+
+                    is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric)
+                    if is_better:
+                        max_val_metric = val_metric
+                        max_val_epoch = row['epoch']
+
+            # Plotting metrics
+            metric_plotter = cfg.metric_plotter if hasattr(cfg, 'metric_plotter') else DefaultMetricPlotter()
+            metric_plotter.add_metrics(metrics)
+            telegram_reporter = cfg.telegram_reporter if hasattr(cfg, 'telegram_reporter') else DefaultTelegramReporter()
 
         for epoch in range(start_epoch, args.num_epochs):
             if hasattr(cfg, "epoch_start_script"):
@@ -337,91 +359,108 @@ def train(args):
                 print()
                 logger.info("Epoch %d/%d" % (epoch, args.num_epochs-1))
 
-            if cfg.dataset_cfg.task == 'singlelabel_classification':
-                sample_seen, total_samples, loss, acc, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, train_dataloader, data_unpack_funcs['train'], rank, world_size, input_reshape_func=input_reshape_funcs['train'])
-                if rank == 0:#{{{
-                    train_writer.add_scalar('Loss', loss, epoch)
-                    train_writer.add_scalar('Accuracy', acc, epoch)
-                    train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
-                    train_writer.add_scalar('Sample_seen', sample_seen, epoch)
-                    train_writer.add_scalar('Total_samples', total_samples, epoch)
-                    # writer.add_graph(model, inputs)
-                    curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss, 'train_acc': acc}#}}}
-         
-                val_sample_seen, val_total_samples, val_loss, val_acc, _, _, val_elapsed_time, _, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], cfg.dataset_cfg.num_classes, batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
-                val_metric = val_acc    # which metric to use for deciding the best model
-                if rank == 0:#{{{
-                    val_writer.add_scalar('Loss', val_loss, epoch)
-                    val_writer.add_scalar('Accuracy', val_acc, epoch)
-                    val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
-                    val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
-                    val_writer.add_scalar('Total_samples', val_total_samples, epoch)
-                    curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss, 'val_acc': val_acc})#}}}
+            sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, train_dataloader, data_unpack_funcs['train'], metrics['train'], rank, world_size, input_reshape_func=input_reshape_funcs['train'])
+            if rank == 0:#{{{
+                curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
+                
+                train_writer.add_scalar('Loss', loss, epoch)
+                train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
+                train_writer.add_scalar('Sample_seen', sample_seen, epoch)
+                train_writer.add_scalar('Total_samples', total_samples, epoch)
 
-                if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
-                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_acc, multi_crop_val_vid_acc_top1, multi_crop_val_vid_acc_top5, multi_crop_val_elapsed_time, _, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], cfg.dataset_cfg.num_classes, batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
-                    if rank == 0:#{{{
-                        multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
-                        multi_crop_val_writer.add_scalar('Accuracy', multi_crop_val_acc, epoch)
-                        multi_crop_val_writer.add_scalar('Video_accuracy_top-1', multi_crop_val_vid_acc_top1, epoch)
-                        multi_crop_val_writer.add_scalar('Video_accuracy_top-5', multi_crop_val_vid_acc_top5, epoch)
-                        multi_crop_val_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
-                        multi_crop_val_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
-                        multi_crop_val_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
-                        curr_stat.update({'multi_crop_val_runtime_sec': multi_crop_val_elapsed_time, 'multi_crop_val_loss': multi_crop_val_loss, 'multi_crop_val_acc': multi_crop_val_acc, 'multi_crop_val_vid_acc_top1': multi_crop_val_vid_acc_top1, 'multi_crop_val_vid_acc_top5': multi_crop_val_vid_acc_top5})#}}}
+                for metric in metrics['train']:
+                    tensorboard_tags = metric.tensorboard_tags()
+                    if not isinstance(tensorboard_tags, tuple):
+                        tensorboard_tags = (tensorboard_tags,)
+                    csv_fieldnames = metric.get_csv_fieldnames()
+                    if not isinstance(csv_fieldnames, tuple):
+                        csv_fieldnames = (csv_fieldnames,)
+                    last_calculated_metrics = metric.last_calculated_metrics
+                    if not isinstance(last_calculated_metrics, tuple):
+                        last_calculated_metrics = (last_calculated_metrics,)
 
-            elif cfg.dataset_cfg.task == 'multilabel_classification':
-                sample_seen, total_samples, loss, vid_mAP, elapsed_time, _ = train_epoch_multilabel(model, optimiser, scheduler, criterion, train_dataloader, data_unpack_funcs['train'], rank, world_size, input_reshape_func=input_reshape_funcs['train'])
-                if rank == 0:#{{{
-                    train_writer.add_scalar('Loss', loss, epoch)
-                    train_writer.add_scalar('mAP', vid_mAP, epoch)
-                    train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
-                    train_writer.add_scalar('Sample_seen', sample_seen, epoch)
-                    train_writer.add_scalar('Total_samples', total_samples, epoch)
-                    # writer.add_graph(model, inputs)
-                    curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss, 'train_vid_mAP': vid_mAP}#}}}
-         
-                val_sample_seen, val_total_samples, val_loss, val_vid_mAP, val_elapsed_time, _, _ = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_funcs['val'], cfg.dataset_cfg.num_classes, batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
-                val_metric = val_vid_mAP    # which metric to use for deciding the best model
-                if rank == 0:#{{{
-                    val_writer.add_scalar('Loss', val_loss, epoch)
-                    val_writer.add_scalar('mAP', val_vid_mAP, epoch)
-                    val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
-                    val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
-                    val_writer.add_scalar('Total_samples', val_total_samples, epoch)
-                    curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss, 'val_vid_mAP': val_vid_mAP})#}}}
+                    for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
+                        train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                        curr_stat[csv_fieldname] = last_calculated_metric
+                #}}}
+     
+            val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], cfg.dataset_cfg.num_classes, batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
+            if rank == 0:#{{{
+                curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
 
-                if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
-                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_vid_mAP, multi_crop_val_elapsed_time, _, _ = eval_epoch_multilabel(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], cfg.dataset_cfg.num_classes, batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
-                    if rank == 0:#{{{
-                        multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
-                        multi_crop_val_writer.add_scalar('mAP', multi_crop_val_vid_mAP, epoch)
-                        multi_crop_val_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
-                        multi_crop_val_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
-                        multi_crop_val_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
-                        curr_stat.update({'multi_crop_val_runtime_sec': multi_crop_val_elapsed_time, 'multi_crop_val_loss': multi_crop_val_loss, 'multi_crop_val_vid_mAP': multi_crop_val_vid_mAP})#}}}
-            else:
-                raise ValueError(f"Unknown task: {cfg.dataset_cfg.task}")
+                val_writer.add_scalar('Loss', val_loss, epoch)
+                val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
+                val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
+                val_writer.add_scalar('Total_samples', val_total_samples, epoch)
+
+                for metric in metrics['val']:
+                    tensorboard_tags = metric.tensorboard_tags()
+                    if not isinstance(tensorboard_tags, tuple):
+                        tensorboard_tags = (tensorboard_tags,)
+                    csv_fieldnames = metric.get_csv_fieldnames()
+                    if not isinstance(csv_fieldnames, tuple):
+                        csv_fieldnames = (csv_fieldnames,)
+                    last_calculated_metrics = metric.last_calculated_metrics
+                    if not isinstance(last_calculated_metrics, tuple):
+                        last_calculated_metrics = (last_calculated_metrics,)
+
+                    for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
+                        train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                        curr_stat[csv_fieldname] = last_calculated_metric
+                #}}}
+
+            if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
+                multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], cfg.dataset_cfg.num_classes, batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
+                if rank == 0:#{{{
+                    curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
+                    multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
+                    multi_crop_val_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
+                    multi_crop_val_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
+                    multi_crop_val_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
+
+                    for metric in metrics['multicropval']:
+                        tensorboard_tags = metric.tensorboard_tags()
+                        if not isinstance(tensorboard_tags, tuple):
+                            tensorboard_tags = (tensorboard_tags,)
+                        csv_fieldnames = metric.get_csv_fieldnames()
+                        if not isinstance(csv_fieldnames, tuple):
+                            csv_fieldnames = (csv_fieldnames,)
+                        last_calculated_metrics = metric.last_calculated_metrics
+                        if not isinstance(last_calculated_metrics, tuple):
+                            last_calculated_metrics = (last_calculated_metrics,)
+
+                        for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
+                            train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                            curr_stat[csv_fieldname] = last_calculated_metric
+                    #}}}
+
 
             early_stopping = False      # need it for the entire process, because later we'll broadcast
 
             if rank == 0:
                 exp.add_summary_line(curr_stat)
+                figs = metric_plotter.plot(exp)
 
                 if hasattr(cfg, 'early_stopping_condition'):
-                    early_stopping = cfg.early_stopping_condition(epoch, exp)
-
+                    metric_info = {'metrics': metrics,
+                            'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric.is_better}
+                    early_stopping = cfg.early_stopping_condition(exp, metric_info)
+                
                 send_telegram = early_stopping or (epoch % args.telegram_post_period == args.telegram_post_period -1)
-                try:
-                    start_time_plot = time.time()
-                    exp.plot_summary(send_telegram = send_telegram)
-                except (SSLCertVerificationError, OSError, NewConnectionError, MaxRetryError, ConnectionError) as e:
-                    """Usually, max-retries exceeds when you run it for a while.
-                    Therefore, even if it fails to send the plots, don't crash the programme and keep it running.
-                    """
-                    logger.exception('Failed to send plots to Telegram.')
+                if send_telegram:
+                    try:
+                        start_time_plot = time.time()
+                        telegram_reporter.report(metrics, exp, figs)
+                    except (SSLCertVerificationError, OSError, NewConnectionError, MaxRetryError, ConnectionError) as e:
+                        """Usually, max-retries exceeds when you run it for a while.
+                        Therefore, even if it fails to send the plots, don't crash the programme and keep it running.
+                        """
+                        logger.exception('Failed to send plots to Telegram.')
 
-                elapsed_time_plot = time.time() - start_time_plot
+                    elapsed_time_plot = time.time() - start_time_plot
+
+                for plot_basename, fig in figs:
+                    plt.close(fig)
 
                 if args.telegram_post_period < 100 and send_telegram and elapsed_time_plot > 5 * 60:
                     # Sending plots to telegram took longer than 5 mins.
@@ -430,12 +469,14 @@ def train(args):
                     args.telegram_post_period = 100
 
 
-                is_higher = val_metric >= max_val_metric - 1e-6
-                if is_higher:
+                val_metric = curr_stat[best_metric_fieldname]    # which metric to use for deciding the best model
+
+                is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric)
+                if is_better:
                     max_val_metric = val_metric
                     max_val_epoch = epoch
 
-                if is_higher or args.save_mode in ["all", "last_and_peaks"]:
+                if is_better or args.save_mode in ["all", "last_and_peaks"]:
                     # all, last_and_peaks: save always
                     # higher: save model when higher
                     model_path = exp.get_checkpoint_path(epoch) 

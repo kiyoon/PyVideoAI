@@ -4,16 +4,15 @@ from pyvideoai.dataloaders.frames_sparsesample_dataset import FramesSparsesample
 
 import torch
 
-#batch_size = 6  # per process (per GPU)
 def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
     vram = torch.cuda.get_device_properties(0).total_memory
     if vram > 20e+9:
-        return 6
-    return 3
+        return 16
+    return 8
 
-input_frame_length = 32
+input_frame_length = 9
 crop_size = 224
 train_jitter_min = 224
 train_jitter_max = 336
@@ -44,14 +43,17 @@ def get_optim_policies(model):
 
 import logging
 logger = logging.getLogger(__name__)
-from pyvideoai.utils.misc import has_gotten_lower, has_gotten_higher
+from pyvideoai.utils.misc import has_gotten_lower, has_gotten_better
 # optional
-def early_stopping_condition(exp):
+def early_stopping_condition(exp, metric_info):
     patience=20
     if exp.summary['epoch'].count() >= patience:
-        if not has_gotten_lower(exp.summary['val_loss'][-patience:]) and not has_gotten_higher(exp.summary['val_mAP'][-patience:]):
-            logger.info(f"Validation loss and mAP haven't gotten better for {patience} epochs. Stopping training..")
-            return True
+        if not has_gotten_lower(exp.summary['val_loss'][-patience:]):
+            best_metric_fieldname = metric_info['best_metric_fieldname']
+            best_metric_is_better = metric_info['best_metric_is_better_func']
+            if not has_gotten_better(exp.summary[best_metric_fieldname][-patience:], best_metric_is_better):
+                logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {patience} epochs. Stopping training..")
+                return True
 
     return False
 
@@ -71,7 +73,7 @@ def load_pretrained(model):
     return
 
 def _dataloader_shape_to_model_input_shape(inputs):
-    return model_cfg.NCTHW_to_model_input_shape(inputs)
+    return inputs
 
 def get_input_reshape_func(split):
     '''

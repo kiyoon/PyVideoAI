@@ -13,7 +13,7 @@ def batch_size():
         return 6
     return 3
 
-input_frame_length = 32
+input_frame_length = 33
 crop_size = 224
 train_jitter_min = 224
 train_jitter_max = 336
@@ -72,6 +72,7 @@ def load_pretrained(model):
 
 def _dataloader_shape_to_model_input_shape(inputs):
     return model_cfg.NCTHW_to_model_input_shape(inputs)
+
 
 def get_input_reshape_func(split):
     '''

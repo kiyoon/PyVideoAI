@@ -6,8 +6,8 @@ from video_datasets_api.something_something_v2.definitions import NUM_CLASSES as
 from video_datasets_api.something_something_v2.read_annotations import get_class_keys_shrinked, class_keys_to_int_labels, read_splits
 from pyvideoai.config import DATA_DIR
 
-
-task = 'singlelabel_classification'
+from pyvideoai.tasks import SingleLabelClassificationTask
+task = SingleLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'something-something-v2')

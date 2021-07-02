@@ -8,8 +8,8 @@ from video_datasets_api.epic_kitchens.read_annotations import get_verb_uid2label
 from video_datasets_api.epic_kitchens.epic_get_verb_class_keys import EPIC_get_verb_class_keys
 from pyvideoai.config import DATA_DIR
 
-
-task = 'singlelabel_classification'
+from pyvideoai.tasks import SingleLabelClassificationTask
+task = SingleLabelClassificationTask()
 
 
 # Paths

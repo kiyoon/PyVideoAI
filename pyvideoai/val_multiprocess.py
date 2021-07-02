@@ -21,7 +21,8 @@ from torch.utils.data.distributed import DistributedSampler
 from .utils import distributed as du
 from .utils import misc
 from .train_and_val import eval_epoch
-from .train_and_val_multilabel import eval_epoch as eval_epoch_multilabel
+
+from .metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 
 import coloredlogs, logging, verboselogs
 logger = verboselogs.VerboseLogger(__name__)    # add logger.success
@@ -30,6 +31,7 @@ logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 import configparser
 
 import git
+from . import __version__
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
@@ -62,24 +64,17 @@ def distributed_init(global_seed, local_world_size):
     return rank, world_size, local_rank, local_world_size, local_seed
 
 
-
-
-
-
 def val(args):
     rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
-        logging.getLogger('slowfast.utils.checkpoint').setLevel(logging.WARNING)
+        #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
-    perform_multicropval=True       # when loading, assume there was multicropval. Even if there was not, having more CSV field information doesn't hurt.
-    if cfg.dataset_cfg.task == 'singlelabel_classification':
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_singlelabel(multicropval = perform_multicropval)
-        best_metric_field = 'val_acc'
-    elif cfg.dataset_cfg.task == 'multilabel_classification':
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_multilabel(multicropval = perform_multicropval)
-        best_metric_field = 'val_vid_mAP'
+
+    metrics = cfg.dataset_cfg.task.get_metrics(cfg)
+
+    summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
     exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
 
 
@@ -109,7 +104,8 @@ def val(args):
         if rank == 0:
             repo = git.Repo(search_parent_directories=True)
             sha = repo.head.object.hexsha
-            logger.info("git hash: %s", sha)
+            logger.info(f"PyVideoAI=={__version__}")
+            logger.info(f"PyVideoAI git hash: {sha}")
             # save configs
 #            exp.dump_args(args)
             logger.info("args: " + json.dumps(args.__dict__, sort_keys=False, indent=4))
@@ -131,12 +127,22 @@ def val(args):
 
 
         # Dataset
-        if args.mode == 'oneclip':
-            split = 'val'
-        else:   # multicrop
-            split = 'multicropval'
+        if args.split is not None:
+            split = args.split
+        else:   # set split automatically
+            if args.mode == 'oneclip':
+                split = 'val'
+            else:   # multicrop
+                split = 'multicropval'
+
+        if args.save_predictions:
+            predictions_gatherer = cfg.dataset_cfg.task.get_predictions_gatherers(cfg)[split]
+            metrics[split].append(predictions_gatherer)
+
         val_dataset = cfg.get_torch_dataset(split)
         data_unpack_func = cfg.get_data_unpack_func(split)
+
+
         input_reshape_func = cfg.get_input_reshape_func(split)
         batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
         logger.info(f'Using batch size of {batch_size} per process (per GPU), resulting in total size of {batch_size * world_size}.')
@@ -162,10 +168,12 @@ def val(args):
 
         if args.load_epoch == -1:
             exp.load_summary()
-            load_epoch = int(exp.summary['epoch'][-1])
+            load_epoch = int(exp.summary['epoch'].iloc[-1])
         elif args.load_epoch == -2:
             exp.load_summary()
-            load_epoch = int(exp.get_best_model_stat(best_metric_field)['epoch'])
+            best_metric, best_metric_fieldname = metrics.get_best_metric_and_fieldname()
+            logger.info(f'Using the best metric from CSV field `{best_metric_fieldname}`')
+            load_epoch = int(exp.get_best_model_stat(best_metric_fieldname, best_metric.is_better)['epoch'])
         elif args.load_epoch is None:
             load_epoch = None
         elif args.load_epoch >= 0:
@@ -184,33 +192,15 @@ def val(args):
                 cfg.load_pretrained(model)
 
 
-
-        if hasattr(cfg, 'criterion'):
-            criterion = cfg.criterion()
-        else:
-            if cfg.dataset_cfg.task == 'singlelabel_classification':
-                logger.info(f"cfg.criterion not defined. Using CrossEntropyLoss()")
-                criterion = nn.CrossEntropyLoss()
-            elif cfg.dataset_cfg.task == 'multilabel_classification':
-                logger.info(f"cfg.criterion not defined. Using BCEWithLogitsLoss()")
-                criterion = nn.BCEWithLogitsLoss()
-            else:
-                raise ValueError(f"cfg.dataset_cfg.task not known task: {cfg.dataset_cfg.task}")
-
+        criterion = cfg.dataset_cfg.task.get_criterion(cfg)
 
         oneclip = args.mode == 'oneclip'
 
-        if cfg.dataset_cfg.task == 'singlelabel_classification':
-            _, _, _, _, _, _, _, video_metrics, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
-        elif cfg.dataset_cfg.task == 'multilabel_classification':
-            _, _, _, _, _, video_metrics, eval_log_str = eval_epoch_multilabel(model, criterion, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
-        else:
-            raise ValueError(f"Unknown task: {cfg.dataset_cfg.task}")
-
+        _, _, _, _, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
 
         if rank == 0:
             if args.save_predictions:
-                video_predictions, video_labels, video_ids = video_metrics.get_predictions_numpy()
+                video_predictions, video_labels, video_ids = predictions_gatherer.get_predictions_numpy()
 
                 if load_epoch is None:
                     predictions_file_path = os.path.join(exp.predictions_dir, 'pretrained_%sval.pkl' % (args.mode))
