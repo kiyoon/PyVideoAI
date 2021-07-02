@@ -9,9 +9,11 @@ def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
     vram = torch.cuda.get_device_properties(0).total_memory
-    if vram > 10e+9:
+    if vram > 20e+9:
         return 16
-    return 8
+    elif vram > 10e+9:
+        return 8
+    return 4
 
 input_frame_length = 8
 crop_size = 224
