@@ -443,7 +443,7 @@ def train(args):
 
                 if hasattr(cfg, 'early_stopping_condition'):
                     metric_info = {'metrics': metrics,
-                            'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric_is_better}
+                            'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric.is_better}
                     early_stopping = cfg.early_stopping_condition(exp, metric_info)
                 
                 send_telegram = early_stopping or (epoch % args.telegram_post_period == args.telegram_post_period -1)
