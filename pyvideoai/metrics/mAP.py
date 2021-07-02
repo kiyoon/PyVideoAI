@@ -53,8 +53,7 @@ class Clip_mAPMetric(ClipMetric):
         if self.split == 'train':
             prefix = ''
         else:
-            split = self.split.replace('multicrop', '')  # don't print multicrop for one clip evaluation
-            prefix = f'{split}_'
+            prefix = f'{self.split}_'
 
         return f'{prefix}mAP: {self.last_calculated_metrics:.4f}'
 
@@ -144,7 +143,6 @@ class Video_mAPMetric(AverageMetric):
         if self.split == 'train':
             prefix = ''
         else:
-            split = self.split.replace('multicrop', '')  # don't print multicrop for one clip evaluation
             prefix = f'{split}_'
 
         return f'{prefix}vid_mAP: {self.last_calculated_metrics:.4f}'

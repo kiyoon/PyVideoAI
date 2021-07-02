@@ -219,8 +219,10 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
 
             if one_clip:
                 eval_mode = "One-clip Eval"
+                split = 'val'
             else:
                 eval_mode = "Multi-crop Eval"
+                split = 'multicropval'
         """
         if world_size > 1:
             # Number of iterations can be different over processes. Some processes need to wait until others finish.
@@ -344,11 +346,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
                 #eta = int((total_samples-sample_seen) * elapsed_time / sample_seen)
                 eta = int((total_iters-(it+1)) * elapsed_time / (it+1))
 
-                if one_clip:
-                    eval_mode = "One-clip Eval"
-                else:
-                    eval_mode = "Multi-crop Eval"
-                write_str = "\r {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - ETA: {:4d}s - val_loss: {:.4f} - {:s}".format(eval_mode, it+1, total_iters, sample_seen, total_samples, eta, loss, final_logging_msg)
+                write_str = "\r {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - ETA: {:4d}s - {:s}_loss: {:.4f} - {:s}".format(eval_mode, it+1, total_iters, sample_seen, total_samples, eta, split, loss, final_logging_msg)
                 # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
                 if max_log_length < len(write_str):
                     max_log_length = len(write_str)
@@ -382,7 +380,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
         else:
             final_logging_msg = ''
 
-        eval_log_str = " {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - {:d}s - val_loss: {:.4f} - {:s}".format(eval_mode, it+1, total_iters, sample_seen, total_samples, round(elapsed_time), loss, final_logging_msg)
+        eval_log_str = " {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - {:d}s - {:s}_loss: {:.4f} - {:s}".format(eval_mode, it+1, total_iters, sample_seen, total_samples, round(elapsed_time), split, loss, final_logging_msg)
         # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
         if max_log_length < len(eval_log_str):
             max_log_length = len(eval_log_str)

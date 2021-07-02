@@ -82,8 +82,7 @@ class ClipAccuracyMetric(Metric):
         if self.split == 'train':
             prefix = ''
         else:
-            split = self.split.replace('multicrop', '')  # don't print multicrop for one clip evaluation
-            prefix = f'{split}_'
+            prefix = f'{self.split}_'
 
         messages = [f'{prefix}acc: {value:.4f}' if topk == 1 else f'{prefix}acc_top{topk}: {value:.4f}' for topk, value in zip(self.topk, self.last_calculated_metrics)]
         message = ' - '.join(messages)
