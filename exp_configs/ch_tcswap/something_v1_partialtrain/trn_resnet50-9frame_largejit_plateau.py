@@ -43,16 +43,20 @@ def get_optim_policies(model):
 
 import logging
 logger = logging.getLogger(__name__)
-from pyvideoai.utils.misc import has_gotten_lower, has_gotten_higher
+from pyvideoai.utils.misc import has_gotten_lower, has_gotten_better
 # optional
-def early_stopping_condition(exp):
+def early_stopping_condition(exp, metric_info):
     patience=20
     if exp.summary['epoch'].count() >= patience:
-        if not has_gotten_lower(exp.summary['val_loss'][-patience:]) and not has_gotten_higher(exp.summary['val_mAP'][-patience:]):
-            logger.info(f"Validation loss and mAP haven't gotten better for {patience} epochs. Stopping training..")
-            return True
+        if not has_gotten_lower(exp.summary['val_loss'][-patience:]):
+            best_metric_fieldname = metric_info['best_metric_fieldname']
+            best_metric_is_better = metric_info['best_metric_is_better_func']
+            if not has_gotten_better(exp.summary[best_metric_fieldname][-patience:], best_metric_is_better):
+                logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {patience} epochs. Stopping training..")
+                return True
 
     return False
+
 
 def optimiser(params):
     return torch.optim.SGD(params, lr = 0.001, momentum = 0.9, weight_decay = 5e-4)

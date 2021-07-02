@@ -1,5 +1,8 @@
 from abc import *
 
+import logging
+logger = logging.getLogger(__name__)
+
 import torch
 import numpy as np
 def is_numpy(instance):
@@ -412,3 +415,13 @@ class Metrics(dict):
 
     def get_best_metric(self):
         return self[self.best_metric_split][self.best_metric_index]
+
+    def get_best_metric_and_fieldname(self):
+        best_metric = self.get_best_metric()
+        best_metric_fieldname = best_metric.get_csv_fieldnames()
+        if isinstance(best_metric_fieldname, tuple):
+            if len(best_metric_fieldname) > 1:
+                logger.warn(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
+            best_metric_fieldname = best_metric_fieldname[0]
+
+        return best_metric, best_metric_fieldname

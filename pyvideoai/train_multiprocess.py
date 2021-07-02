@@ -308,13 +308,7 @@ def train(args):
                 multi_crop_val_writer = None
 
             # to save maximum val_acc model, when option "args.save_mode" is "higher" or "last_and_peaks"
-            best_metric = metrics.get_best_metric()
-            best_metric_fieldname = best_metric.get_csv_fieldnames()
-            best_metric_is_better = best_metric.is_better
-            if isinstance(best_metric_fieldname, tuple):
-                if len(best_metric_fieldname) > 1:
-                    logger.warn(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
-                best_metric_fieldname = best_metric_fieldname[0]
+            best_metric, best_metric_fieldname = metrics.get_best_metric_and_fieldname()
 
             max_val_metric = None 
             max_val_epoch = -1
@@ -448,7 +442,9 @@ def train(args):
                 figs = metric_plotter.plot(exp)
 
                 if hasattr(cfg, 'early_stopping_condition'):
-                    early_stopping = cfg.early_stopping_condition(exp)
+                    metric_info = {'metrics': metrics,
+                            'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric_is_better}
+                    early_stopping = cfg.early_stopping_condition(exp, metric_info)
                 
                 send_telegram = early_stopping or (epoch % args.telegram_post_period == args.telegram_post_period -1)
                 if send_telegram:

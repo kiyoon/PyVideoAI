@@ -171,16 +171,9 @@ def val(args):
             load_epoch = int(exp.summary['epoch'].iloc[-1])
         elif args.load_epoch == -2:
             exp.load_summary()
-            best_metric = metrics.get_best_metric()
-            best_metric_fieldname = best_metric.get_csv_fieldnames()
-            best_metric_is_better = best_metric.is_better
-            if isinstance(best_metric_fieldname, tuple):
-                if len(best_metric_fieldname) > 1:
-                    logger.warn(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
-                best_metric_fieldname = best_metric_fieldname[0]
-
+            best_metric, best_metric_fieldname = metrics.get_best_metric_and_fieldname()
             logger.info(f'Using the best metric from CSV field `{best_metric_fieldname}`')
-            load_epoch = int(exp.get_best_model_stat(best_metric_fieldname, best_metric_is_better)['epoch'])
+            load_epoch = int(exp.get_best_model_stat(best_metric_fieldname, best_metric.is_better)['epoch'])
         elif args.load_epoch is None:
             load_epoch = None
         elif args.load_epoch >= 0:
