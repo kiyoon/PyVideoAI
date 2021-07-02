@@ -66,17 +66,16 @@ input_channel_num=[3]   # RGB
 #
 #import logging
 #logger = logging.getLogger(__name__)
-#from pyvideoai.utils.misc import has_gotten_lower, has_gotten_better
+#from pyvideoai.utils.early_stopping import min_value_within_lastN, best_value_within_lastN
 ## optional
 #def early_stopping_condition(exp, metric_info):
 #    patience=20
-#    if exp.summary['epoch'].count() >= patience:
-#        if not has_gotten_lower(exp.summary['val_loss'][-patience:]):
-#            best_metric_fieldname = metric_info['best_metric_fieldname']
-#            best_metric_is_better = metric_info['best_metric_is_better_func']
-#            if not has_gotten_better(exp.summary[best_metric_fieldname][-patience:], best_metric_is_better):
-#                logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {patience} epochs. Stopping training..")
-#                return True
+#    if not min_value_within_lastN(exp.summary['val_loss'], patience):
+#        best_metric_fieldname = metric_info['best_metric_fieldname']
+#        best_metric_is_better = metric_info['best_metric_is_better_func']
+#        if not best_value_within_lastN(exp.summary[best_metric_fieldname], patience, best_metric_is_better):
+#            logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {patience} epochs. Stopping training..")
+#            return True
 #
 #    return False
 

@@ -449,6 +449,7 @@ def train(args):
                 send_telegram = early_stopping or (epoch % args.telegram_post_period == args.telegram_post_period -1)
                 if send_telegram:
                     try:
+                        logger.info('Sending plots to Telegram.')
                         start_time_plot = time.time()
                         telegram_reporter.report(metrics, exp, figs)
                     except (SSLCertVerificationError, OSError, NewConnectionError, MaxRetryError, ConnectionError) as e:
