@@ -21,8 +21,10 @@ def count_true_samples(distributed_sampler, batch_size_per_proc):
     shard_size = total_samples // world_size + int(rank < total_samples % world_size)
 
     # Because of padding, num_iters is the same across all processes.
+    # same as ceil(shard_size_padded / batch_size_per_proc) but without floating-point operations
     num_iters = shard_size_padded // batch_size_per_proc + int(shard_size_padded % batch_size_per_proc > 0)   
 
-    last_batch_size = shard_size % batch_size_per_proc
+    # same as `last_batch_size = batch_size_per_proc if shard_size % batch_size_per_proc == 0 else shard_size % batch_size_per_proc`
+    last_batch_size = (shard_size-1) % batch_size_per_proc + 1
 
     return shard_size, num_iters, last_batch_size
