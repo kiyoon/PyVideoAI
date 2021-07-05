@@ -237,7 +237,8 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
         if world_size > 1:
             shard_size, num_iters, last_batch_size = count_true_samples(dataloader.sampler, batch_size)
         else:
-            shard_size, num_iters, last_batch_size = total_samples, total_iters, total_samples % batch_size
+            shard_size, num_iters, last_batch_size = total_samples, total_iters, (total_samples-1) % batch_size + 1
+            # same as last_batch_size = batch_size if total_samples % batch_size == 0 else total_samples % batch_size
 
         if rank == 0 :
             assert num_iters == total_iters, "Implementation error"
