@@ -9,6 +9,8 @@ import pickle
 import torch
 import torch.distributed as dist
 import os
+import contextlib
+import sys
 
 
 def all_gather(tensors):
@@ -268,3 +270,41 @@ def write_pids_to_file(path_to_file):
         with open(path_to_file, "w") as f:
             for proc_id in proc_ids:
                 f.write("%d\n" % proc_id)
+
+
+
+class MultiprocessPrinter:
+    '''In every print, show which process rank is printing the message
+
+    with MultiprocessPrinter(output_stream=sys.__stdout__):
+        print('debug message')
+
+    This will print:
+    rank 0: debug message
+    rank 1: debug message
+    ...
+
+    '''
+    def __init__(self, rank=None, output_stream=sys.stdout):
+        if rank is None:
+            self.rank = get_rank()
+        else:
+            self.rank = rank
+        self._redirector = contextlib.redirect_stdout(self)
+        self.output_stream = output_stream
+
+    def write(self, msg):
+        if msg and not msg.isspace():
+            self.output_stream.write(f'rank {self.rank}: {msg}\n')
+
+
+    def flush(self):
+        self.output_stream.flush()
+
+    def __enter__(self):
+        self._redirector.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # let contextlib do any exception handling here
+        self._redirector.__exit__(exc_type, exc_value, traceback)

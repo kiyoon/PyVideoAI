@@ -5,7 +5,7 @@ from .utils import distributed as du
 from .utils import misc
 import time
 import sys
-from .utils.distributed_sampler_for_val import count_true_samples, get_last_batch_size
+from .utils.distributed_sampler_for_val import count_true_samples, get_last_batch_size_singleGPU
 
 from .utils.stdout_logger import OutputLogger
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -237,7 +237,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
         if world_size > 1:
             shard_size, num_iters, last_batch_size = count_true_samples(dataloader.sampler, batch_size)
         else:
-            shard_size, num_iters, last_batch_size = total_samples, total_iters, get_last_batch_size(total_samples, batch_size)
+            shard_size, num_iters, last_batch_size = total_samples, total_iters, get_last_batch_size_singleGPU(total_samples, batch_size)
 
         if rank == 0 :
             assert num_iters == total_iters, "Implementation error"
@@ -252,27 +252,29 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
             if it == num_iters - 1:
                 """last batch true data sampling"""
 
-                
-                #inputs = [inputs[0][:last_batch_size]]
+                #if last_batch_size > 0:
                 inputs = inputs[:last_batch_size]
                 labels = labels[:last_batch_size]
                 uids = uids[:last_batch_size]
+
+#                else:
+#                    # If #GPUs > last total batch size, some GPUs will get 0 inputs.
+#                    inputs = inputs[:1]
+#                    labels = labels[:1]
+#                    uids = uids[:1]
                 curr_batch_size = torch.LongTensor([last_batch_size]).to(cur_device, non_blocking=True)
 
 #                uids = torch.IntTensor([]).to(cur_device, non_blocking=True)
 #                labels = torch.IntTensor([]).to(cur_device, non_blocking=True)
 
+            # forward
             if perform_forward:
-                """Not the last batch"""
-                # forward
                 if input_reshape_func:
                     inputs = input_reshape_func(inputs)
                 outputs = model(inputs)
                 batch_loss = criterion(outputs, labels)
                 batch_loss_accum = batch_loss * curr_batch_size
-
             else:
-                #curr_batch_size = torch.LongTensor([0]).to(cur_device, non_blocking=True)
                 batch_loss_accum = torch.FloatTensor([0]).to(cur_device, non_blocking=True)
 
             # Gather data

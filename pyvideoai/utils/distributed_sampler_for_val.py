@@ -1,5 +1,6 @@
 
-def get_last_batch_size(num_samples, batch_size):
+def get_last_batch_size_singleGPU(num_samples, batch_size):
+    # ONLY for single process (single GPU)
     # The logic is as follows
     #
     # if num_samples == 0:  return 0
@@ -32,7 +33,8 @@ def count_true_samples(distributed_sampler, batch_size_per_proc):
     # same as ceil(shard_size_padded / batch_size_per_proc) but without floating-point operations
     num_iters = shard_size_padded // batch_size_per_proc + int(shard_size_padded % batch_size_per_proc > 0)   
 
-    # same as `last_batch_size = batch_size_per_proc if shard_size % batch_size_per_proc == 0 else shard_size % batch_size_per_proc`
-    last_batch_size = get_last_batch_size(shard_size, batch_size_per_proc)
+    # NOTE: last_batch_size can be 0.
+    # Previous bug is that it is calculated by shard_size % batch_size_per_proc, but if every process shard_size is divisible, than you get last iteration of all zeros.
+    last_batch_size = shard_size - (num_iters-1)*batch_size_per_proc
 
     return shard_size, num_iters, last_batch_size
