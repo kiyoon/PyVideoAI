@@ -42,6 +42,7 @@ def get_optim_policies(model):
 
 
 ddp_find_unused_parameters = True
+use_amp = True
 
 
 # input configs

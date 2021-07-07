@@ -74,8 +74,20 @@ test_num_spatial_crops = 5
 #    return False
 
 
+from pyvideoai.utils.distributed import get_world_size
 def optimiser(params):
-    return torch.optim.SGD(params, lr = 0.0001, momentum = 0.9, weight_decay = 5e-4)
+    """
+    LR should be proportional to the total batch size.
+    When distributing, LR should be multiplied by the number of processes (# GPUs)
+    Thus, LR = base_LR * batch_size_per_proc * (num_GPUs**2)
+    """
+    base_learning_rate = 1e-6      # when batch_size == 1 and #GPUs == 1
+
+    batchsize = batch_size() if callable(batch_size) else batch_size
+    world_size = get_world_size()
+    learning_rate = base_learning_rate * batchsize * (world_size**2)
+
+    return torch.optim.SGD(params, lr = learning_rate, momentum = 0.9, weight_decay = 5e-4)
 
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
@@ -156,19 +168,32 @@ def get_torch_dataset(split):
 
 
 
-## OPTIONAL: change metrics, plotting figures and reporting text.
-## when you resume from checkpoint, load optimiser/scheduler state?
-## Default values are True.
+"""
+OPTIONAL: change metrics, plotting figures and reporting text.
+when you resume from checkpoint, load optimiser/scheduler state?
+Default values are True.
+"""
 #load_optimiser_state = True
 #load_scheduler_state = True
-#
-##
+
+"""
+OPTIONAL but important: configure DDP and AMP
+Uncommenting following lines can speed up the training but also can introduce exceptions depending on your model.
+Recommeded to change this settings in model_configs
+"""
+#ddp_find_unused_parameters = False
+#use_amp = True
+
+"""
 ## For both train & val
-## Changing last_activation and leaving metrics/predictions_gatherers commented out will still change the default metrics and predictions_gatherers' activation function
+Changing last_activation and leaving metrics/predictions_gatherers commented out will still change the default metrics and predictions_gatherers' activation function
+"""
 #last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
-#
+
+"""
 ## For training, (tools/run_train.py)
-## how to calculate metrics
+how to calculate metrics
+"""
 #from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 #best_metric = ClipAccuracyMetric()
 #metrics = {'train': [ClipAccuracyMetric()],
@@ -176,14 +201,16 @@ def get_torch_dataset(split):
 #        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
 #        }
 #
+"""
 ## For validation, (tools/run_val.py)
-## how to gather predictions when --save_predictions is set
+how to gather predictions when --save_predictions is set
+"""
 #from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 #predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
 #        'multicropval': VideoPredictionsGatherer(last_activation),
 #        }
 #
-## How will you plot
+"""How will you plot"""
 #from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
 #metric_plotter = DefaultMetricPlotter()
 #from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter
