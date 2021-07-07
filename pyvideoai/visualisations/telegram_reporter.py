@@ -1,6 +1,7 @@
 
 from experiment_utils.experiment_builder import ExperimentBuilder
 from ..metrics import Metrics
+import socket
 
 class DefaultTelegramReporter:
     def report(self, metrics: Metrics, exp: ExperimentBuilder, figs) -> None:
