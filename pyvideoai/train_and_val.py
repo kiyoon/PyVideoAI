@@ -21,7 +21,7 @@ def get_lr(optimiser):
     for param_group in optimiser.param_groups:
         return param_group['lr']
 
-def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, train_metrics, start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0):
+def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0):
     inputs, uids, labels, _ = data_unpack_func(data)#{{{
     inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
 
@@ -36,11 +36,13 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, t
     # forward + backward + optimise
     if input_reshape_func:
         inputs = input_reshape_func(inputs)
-    outputs = model(inputs)
-    batch_loss = criterion(outputs, labels)
+    with torch.cuda.amp.autocast(enabled=use_amp):
+        outputs = model(inputs)
+        batch_loss = criterion(outputs, labels)
     misc.check_nan_losses(batch_loss)
-    batch_loss.backward()
-    optimiser.step()
+    amp_scaler.scale(batch_loss).backward()
+    amp_scaler.step(optimiser)
+    amp_scaler.update()
     if scheduler is not None and not isinstance(scheduler, ReduceLROnPlateau):      # Plateau scheduler will update at the end of epoch after validation.
         with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
             scheduler.step()
@@ -105,7 +107,7 @@ def train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, t
 
     return sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length#}}}
 
-def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_func, train_metrics, rank = 0, world_size = 1, input_reshape_func = None):
+def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dataloader, data_unpack_func, train_metrics, rank = 0, world_size = 1, input_reshape_func = None):
     """Train for one epoch.
 
     Args:
@@ -144,7 +146,7 @@ def train_epoch(model, optimiser, scheduler, criterion, dataloader, data_unpack_
     # In training, set pad_last_batch=True so that the shard size is always equivalent and it doesn't give you no batch for some processes at the last batch.
     for it, data in enumerate(dataloader):
 
-        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, data, data_unpack_func, train_metrics, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length)
+        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length)
 
     if rank == 0:
         if train_metrics is not None and len(train_metrics) > 0:

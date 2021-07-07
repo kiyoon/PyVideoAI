@@ -51,6 +51,8 @@ from . import __version__
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
+
+
 def _suppress_print():
     """
     Suppresses printing from the current process.
@@ -154,21 +156,36 @@ def train(args):
         data_unpack_funcs = {split: cfg.get_data_unpack_func(split) for split in splits}
         input_reshape_funcs= {split: cfg.get_input_reshape_func(split) for split in splits}
         batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
+        if hasattr(cfg, 'val_batch_size'):
+            val_batch_size = cfg.val_batch_size() if callable(cfg.val_batch_size) else cfg.val_batch_size
+        else:
+            val_batch_size = batch_size
         logger.info(f'Using batch size of {batch_size} per process (per GPU), resulting in total size of {batch_size * world_size}.')
+        logger.info(f'Using validation batch size of {val_batch_size} per process (per GPU), resulting in total size of {val_batch_size * world_size}.')
+
 
         train_sampler = DistributedSampler(torch_datasets['train']) if world_size > 1 else None
         val_sampler = DistributedSampler(torch_datasets['val'], shuffle=False) if world_size > 1 else None
         if perform_multicropval:
             multi_crop_val_sampler = DistributedSampler(torch_datasets['multicropval'], shuffle=False) if world_size > 1 else None
         train_dataloader = torch.utils.data.DataLoader(torch_datasets['train'], batch_size=batch_size, shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True)
-        val_dataloader = torch.utils.data.DataLoader(torch_datasets['val'], batch_size=batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+        val_dataloader = torch.utils.data.DataLoader(torch_datasets['val'], batch_size=val_batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
         if perform_multicropval:
-            multi_crop_val_dataloader = torch.utils.data.DataLoader(torch_datasets['multicropval'], batch_size=batch_size, shuffle=False, sampler=multi_crop_val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+            multi_crop_val_dataloader = torch.utils.data.DataLoader(torch_datasets['multicropval'], batch_size=val_batch_size, shuffle=False, sampler=multi_crop_val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
         # Use global seed because we have to maintain the consistency of shuffling between shards.
     #    train_dataloader = DALILoader(batch_size = 1, file_list = 'epic_verb_train_split.txt', uid2label = dataset_cfg.uid2label,
     #            sequence_length = 8, stride=16, crop_size= (224,224), num_threads=1, seed=args.seed, device_id=local_rank, shard_id=rank, num_shards=world_size, shuffle=True, pad_last_batch=True)
     #    val_dataloader = DALILoader(batch_size = 1, file_list = 'epic_verb_val_split.txt', uid2label = dataset_cfg.uid2label,
     #            sequence_length = 8, stride=16, crop_size= (224,224), test=True, num_threads=1, seed=args.seed, device_id=local_rank, shard_id=rank, num_shards=world_size, shuffle=False, pad_last_batch=False)
+
+
+        def search_expcfg_then_modelcfg(name, default):
+            if hasattr(cfg, name):
+                return getattr(cfg, name)
+            elif hasattr(cfg.model_cfg, name):
+                return getattr(cfg.model_cfg, name)
+            return default
+
 
         # Network
         # Construct the model
@@ -185,10 +202,15 @@ def train(args):
         model = model.to(device=cur_device, non_blocking=True)
         # Use multi-process data parallel model in the multi-gpu setting
         if world_size > 1:
+            ddp_find_unused_parameters = search_expcfg_then_modelcfg('ddp_find_unused_parameters', True)
+            if ddp_find_unused_parameters:
+                logger.info('Will find unused parameters for distributed training. This introduces extra overheads, so set ddp_find_unused_parameters to True only when necessary.')
+            else:
+                logger.info('Will NOT find unused parameters for distributed training. If you see an error, consider setting ddp_find_unused_parameters=True.')
             # Make model replica operate on the current device
             model = nn.parallel.DistributedDataParallel(
                 module=model, device_ids=[cur_device], output_device=cur_device,
-                find_unused_parameters=cfg.model_cfg.ddp_find_unused_parameters
+                find_unused_parameters=ddp_find_unused_parameters
             )
 
         misc.log_model_info(model)
@@ -211,6 +233,14 @@ def train(args):
         else:
             start_epoch = 0
             # Save training and validation stats
+
+            if os.path.isfile(exp.summary_file):
+                raise FileExistsError(f'Summary file "{exp.summary_file}" already exists and trying to initialise new experiment. Consider removing the experiment directory entirely to start new, or resume training by adding -l -1')
+
+            # All processes have to check if exp.summary_file exists, before rank0 will create the file.
+            # Otherwise, rank1 can see the empty file and throw an error after rank0 creates it.
+            dist.barrier()
+
             if rank == 0:
                 exp.init_summary()
 
@@ -298,6 +328,21 @@ def train(args):
         #del checkpoint  # dereference seems crucial
         #torch.cuda.empty_cache()
 
+        use_amp = search_expcfg_then_modelcfg('use_amp', False)
+        if use_amp:
+            logger.info('use_amp=True and this will speed up the training. If you encounter an error, consider updating the model to support AMP or setting this to False.')
+        else:
+            logger.info('use_amp=False. Consider setting it to True to speed up the training.')
+
+        amp_scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+        if use_amp:
+            if args.load_epoch is not None:
+                if "amp_scaler" in checkpoint.keys() and checkpoint["amp_scaler"] is not None:
+                    logger.info("Loading Automatic Mixed Precision (AMP) state from the checkpoint.")
+                    amp_scaler.load_state_dict(checkpoint["amp_scaler"])
+                else:
+                    logger.info("Could NOT load Automatic Mixed Precision (AMP) state from the checkpoint.")
+
 
         if rank == 0:
             train_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'train'), comment='train')
@@ -359,7 +404,7 @@ def train(args):
                 print()
                 logger.info("Epoch %d/%d" % (epoch, args.num_epochs-1))
 
-            sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, train_dataloader, data_unpack_funcs['train'], metrics['train'], rank, world_size, input_reshape_func=input_reshape_funcs['train'])
+            sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], rank, world_size, input_reshape_func=input_reshape_funcs['train'])
             if rank == 0:#{{{
                 curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
                 
@@ -384,7 +429,7 @@ def train(args):
                         curr_stat[csv_fieldname] = last_calculated_metric
                 #}}}
      
-            val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], cfg.dataset_cfg.num_classes, batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
+            val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], cfg.dataset_cfg.num_classes, val_batch_size, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
             if rank == 0:#{{{
                 curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
 
@@ -410,7 +455,7 @@ def train(args):
                 #}}}
 
             if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
-                multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], cfg.dataset_cfg.num_classes, batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
+                multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], cfg.dataset_cfg.num_classes, val_batch_size, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
                 if rank == 0:#{{{
                     curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
                     multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
@@ -490,7 +535,8 @@ def train(args):
                                     "epoch": epoch,
                                     "model_state": state_dict,
                                     "optimiser_state": optimiser.state_dict(),
-                                    "scheduler_state": None if scheduler is None else scheduler.state_dict()
+                                    "scheduler_state": None if scheduler is None else scheduler.state_dict(),
+                                    "amp_scaler_state": None if not use_amp else amp_scaler.state_dict(),
                                 }
                             torch.save(checkpoint, model_path)
                             io_error = False

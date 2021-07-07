@@ -10,10 +10,13 @@ def batch_size():
     '''
     vram = torch.cuda.get_device_properties(0).total_memory
     if vram > 20e+9:
-        return 16
+        return 32
     elif vram > 10e+9:
-        return 8
-    return 4
+        return 16
+    return 8
+
+def val_batch_size():
+    return batch_size() if callable(batch_size) else batch_size
 
 input_frame_length = 8
 crop_size = 224
@@ -22,7 +25,7 @@ train_jitter_max = 336
 val_scale = 256
 val_num_spatial_crops = 1
 test_scale = 256
-test_num_spatial_crops = 5
+test_num_spatial_crops = 10
 
 #### OPTIONAL
 #def criterion():
@@ -55,8 +58,20 @@ def early_stopping_condition(exp, metric_info):
     return False
 
 
+from pyvideoai.utils.distributed import get_world_size
 def optimiser(params):
-    return torch.optim.SGD(params, lr = 0.001, momentum = 0.9, weight_decay = 5e-4)
+    """
+    LR should be proportional to the total batch size.
+    When distributing, LR should be multiplied by the number of processes (# GPUs)
+    Thus, LR = base_LR * batch_size_per_proc * (num_GPUs**2)
+    """
+    base_learning_rate = 1e-5      # when batch_size == 1 and #GPUs == 1
+
+    batchsize = batch_size() if callable(batch_size) else batch_size
+    world_size = get_world_size()
+    learning_rate = base_learning_rate * batchsize * (world_size**2)
+
+    return torch.optim.SGD(params, lr = learning_rate, momentum = 0.9, weight_decay = 5e-4)
 
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
@@ -72,7 +87,8 @@ def load_model():
 #    return
 
 def _dataloader_shape_to_model_input_shape(inputs):
-    return model_cfg.NCTHW_to_model_input_shape(inputs)
+    N, C, T, H, W = inputs.shape        # C = 1
+    return inputs.view((N,3,T//3,H,W)).reshape((N,-1,H,W))
 
 def get_input_reshape_func(split):
     '''
@@ -119,12 +135,13 @@ def _get_torch_dataset(csv_path, split):
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
     return FramesSparsesampleDataset(csv_path, mode,
-            input_frame_length, 
+            input_frame_length*3, 
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
             test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
             crop_size=crop_size,
-            mean = model_cfg.input_mean, std = model_cfg.input_std,
+            mean = [model_cfg.input_mean[0]], std = [model_cfg.input_std[0]],
             normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+            greyscale = True,
             path_prefix=dataset_cfg.frames_dir)
 
 def get_torch_dataset(split):
@@ -135,19 +152,32 @@ def get_torch_dataset(split):
     return _get_torch_dataset(csv_path, split)
 
 
-## OPTIONAL: change metrics, plotting figures and reporting text.
-## when you resume from checkpoint, load optimiser/scheduler state?
-## Default values are True.
+"""
+OPTIONAL: change metrics, plotting figures and reporting text.
+when you resume from checkpoint, load optimiser/scheduler state?
+Default values are True.
+"""
 #load_optimiser_state = True
 #load_scheduler_state = True
-#
-##
+
+"""
+OPTIONAL but important: configure DDP and AMP
+Uncommenting following lines can speed up the training but also can introduce exceptions depending on your model.
+Recommeded to change this settings in model_configs
+"""
+#ddp_find_unused_parameters = False
+#use_amp = True
+
+"""
 ## For both train & val
-## Changing last_activation and leaving metrics/predictions_gatherers commented out will still change the default metrics and predictions_gatherers' activation function
+Changing last_activation and leaving metrics/predictions_gatherers commented out will still change the default metrics and predictions_gatherers' activation function
+"""
 #last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
-#
+
+"""
 ## For training, (tools/run_train.py)
-## how to calculate metrics
+how to calculate metrics
+"""
 #from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 #best_metric = ClipAccuracyMetric()
 #metrics = {'train': [ClipAccuracyMetric()],
@@ -155,14 +185,16 @@ def get_torch_dataset(split):
 #        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
 #        }
 #
+"""
 ## For validation, (tools/run_val.py)
-## how to gather predictions when --save_predictions is set
+how to gather predictions when --save_predictions is set
+"""
 #from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 #predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
 #        'multicropval': VideoPredictionsGatherer(last_activation),
 #        }
 #
-## How will you plot
+"""How will you plot"""
 #from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
 #metric_plotter = DefaultMetricPlotter()
 #from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter

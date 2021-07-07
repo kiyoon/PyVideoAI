@@ -72,3 +72,5 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_train.py -D hmdb -M i3d_resnet50 -
 ```
 
 To resume, add `-l -1` argument.
+
+Note that the config files above are illustrative, so see [examples](https://github.com/kiyoon/PyVideoAI-examples) to learn.
