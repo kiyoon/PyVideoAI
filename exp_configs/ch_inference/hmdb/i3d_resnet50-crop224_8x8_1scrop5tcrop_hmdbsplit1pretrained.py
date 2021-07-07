@@ -13,6 +13,9 @@ def batch_size():
         return 16
     return 8
 
+def val_batch_size():
+    return batch_size() if callable(batch_size) else batch_size
+
 input_frame_length = 8
 input_sample_rate = 8
 crop_size = 224
