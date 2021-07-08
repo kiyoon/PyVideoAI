@@ -58,7 +58,7 @@ class ClipAccuracyMetric(Metric):
 
 
     def calculate_metrics(self):
-        self.last_calculated_metrics = tuple([(num_correct / self.num_seen_samples).item() for num_correct in self.num_correct_preds])
+        self.last_calculated_metrics = tuple([(num_correct / self.num_seen_samples).item() if len(self) > 0 else 0 for num_correct in self.num_correct_preds])
 
 
     def types_of_metrics(self):
@@ -153,8 +153,11 @@ class VideoAccuracyMetric(AverageMetric):
         self.last_calculated_metrics = (0.,) * len(self.topk)
 
     def calculate_metrics(self):
-        video_predictions, video_labels, _ = self.get_predictions_torch()
-        self.last_calculated_metrics = accuracy(video_predictions, video_labels, self.topk)
+        if len(self) > 0:
+            video_predictions, video_labels, _ = self.get_predictions_torch()
+            self.last_calculated_metrics = accuracy(video_predictions, video_labels, self.topk)
+        else:
+            self.last_calculated_metrics = (0.,) * len(self.topk)
 
 
     def types_of_metrics(self):

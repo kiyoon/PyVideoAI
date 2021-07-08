@@ -14,13 +14,16 @@ class Clip_mAPMetric(ClipMetric):
 
 
     def calculate_metrics(self):
-        video_predictions, video_labels, _ = self.get_predictions_numpy()
-        if self.backend == 'CATER':
-            self.last_calculated_metrics = mAP(video_labels, video_predictions)
-        elif self.backend == 'sklearn':
-            self.last_calculated_metrics = average_precision_score(video_labels, video_predictions, average='macro')
+        if len(self) > 0:
+            video_predictions, video_labels, _ = self.get_predictions_numpy()
+            if self.backend == 'CATER':
+                self.last_calculated_metrics = mAP(video_labels, video_predictions)
+            elif self.backend == 'sklearn':
+                self.last_calculated_metrics = average_precision_score(video_labels, video_predictions, average='macro')
+            else:
+                raise ValueError(f'self.backend not recognised: {self.backend}')
         else:
-            raise ValueError(f'self.backend not recognised: {self.backend}')
+            self.last_calculated_metrics = 0.
 
 
     def types_of_metrics(self):
@@ -104,13 +107,16 @@ class Video_mAPMetric(AverageMetric):
 
 
     def calculate_metrics(self):
-        video_predictions, video_labels, _ = self.get_predictions_numpy()
-        if self.backend == 'CATER':
-            self.last_calculated_metrics = mAP(video_labels, video_predictions)
-        elif self.backend == 'sklearn':
-            self.last_calculated_metrics = average_precision_score(video_labels, video_predictions, average='macro')
+        if len(self) > 0:
+            video_predictions, video_labels, _ = self.get_predictions_numpy()
+            if self.backend == 'CATER':
+                self.last_calculated_metrics = mAP(video_labels, video_predictions)
+            elif self.backend == 'sklearn':
+                self.last_calculated_metrics = average_precision_score(video_labels, video_predictions, average='macro')
+            else:
+                raise ValueError(f'self.backend not recognised: {self.backend}')
         else:
-            raise ValueError(f'self.backend not recognised: {self.backend}')
+            self.last_calculated_metrics = 0.
 
 
     def types_of_metrics(self):
@@ -143,7 +149,7 @@ class Video_mAPMetric(AverageMetric):
         if self.split == 'train':
             prefix = ''
         else:
-            prefix = f'{split}_'
+            prefix = f'{self.split}_'
 
         return f'{prefix}vid_mAP: {self.last_calculated_metrics:.4f}'
 
