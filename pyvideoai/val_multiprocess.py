@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import torch
 import torch.distributed as dist
 from torch import nn, optim
@@ -49,8 +50,8 @@ def distributed_init(global_seed, local_world_size):
     world_size = dist.get_world_size() if dist.is_initialized() else 1
     local_rank = rank % local_world_size
 
-    #local_seed = global_seed + rank
-    local_seed = global_seed
+    local_seed = global_seed + rank
+    #local_seed = global_seed
 
     # Set GPU
     torch.cuda.set_device(local_rank)
@@ -59,6 +60,7 @@ def distributed_init(global_seed, local_world_size):
     torch.manual_seed(local_seed)
     torch.cuda.manual_seed(local_seed)
     np.random.seed(local_seed)
+    random.seed(local_seed)
     # DALI seed
 
     return rank, world_size, local_rank, local_world_size, local_seed
