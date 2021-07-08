@@ -337,11 +337,11 @@ def train(args):
         amp_scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
         if use_amp:
             if args.load_epoch is not None:
-                if "amp_scaler" in checkpoint.keys() and checkpoint["amp_scaler"] is not None:
+                if "amp_scaler_state" in checkpoint.keys() and checkpoint["amp_scaler_state"] is not None:
                     logger.info("Loading Automatic Mixed Precision (AMP) state from the checkpoint.")
-                    amp_scaler.load_state_dict(checkpoint["amp_scaler"])
+                    amp_scaler.load_state_dict(checkpoint["amp_scaler_state"])
                 else:
-                    logger.info("Could NOT load Automatic Mixed Precision (AMP) state from the checkpoint.")
+                    logger.error("Could NOT load Automatic Mixed Precision (AMP) state from the checkpoint.")
 
 
         if rank == 0:
