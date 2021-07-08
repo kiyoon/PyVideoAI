@@ -81,6 +81,9 @@ TL;DR,
 conda create -n videoai python=3.8
 conda activate videoai
 conda install pytorch==1.8.1 torchvision==0.9.1 cudatoolkit=10.2 -c pytorch
+### For RTX 30xx GPUs,
+#conda install pytorch==1.8.1 torchvision==0.9.1 cudatoolkit=11.1 -c pytorch -c nvidia
+ 
 
 git clone --recurse-submodules https://github.com/kiyoon/PyVideoAI.git
 cd PyVideoAI
