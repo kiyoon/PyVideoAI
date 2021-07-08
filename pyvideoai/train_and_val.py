@@ -21,7 +21,7 @@ def get_lr(optimiser):
     for param_group in optimiser.param_groups:
         return param_group['lr']
 
-def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0):
+def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, batch_size, speed = 'standard', start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0):
     inputs, uids, labels, _ = data_unpack_func(data)#{{{
     inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
 
@@ -52,18 +52,25 @@ def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data
 
     # sync
     if world_size > 1:
-        for tensor in [curr_batch_size, batch_loss_accum]:
-            dist.reduce(tensor, dst=0)
+        if speed == 'standard':
+            for tensor in [curr_batch_size, batch_loss_accum]:
+                dist.reduce(tensor, dst=0)
 
-        if train_metrics is not None and len(train_metrics) > 0:
-            (uids,labels,outputs) = du.all_gather([uids, labels, outputs])
+            if train_metrics is not None and len(train_metrics) > 0:
+                (uids,labels,outputs) = du.all_gather([uids, labels, outputs])
+        elif speed == 'faster':
+            curr_batch_size = batch_size * world_size   # just infer from what we know
+            batch_loss_accum = 0
+        else:
+            raise NotImplementedError()
 
     if rank == 0:
-        # Copy the stats from GPU to CPU (sync point).
-        curr_batch_size, batch_loss_accum = (
-                curr_batch_size.item(),
-                batch_loss_accum.item(),
-            )
+        if speed == 'standard':
+            # Copy the stats from GPU to CPU (sync point).
+            curr_batch_size, batch_loss_accum = (
+                    curr_batch_size.item(),
+                    batch_loss_accum.item(),
+                )
 
         # Recalculate batch loss using the gathered data
         batch_loss = batch_loss_accum / curr_batch_size
@@ -76,7 +83,8 @@ def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data
         if train_metrics is not None and len(train_metrics) > 0:
             logging_msgs = []
             for metric in train_metrics:
-                metric.add_clip_predictions(uids, outputs, labels)
+                if speed == 'standard':
+                    metric.add_clip_predictions(uids, outputs, labels)
                 if metric.logging_msg_iter() is not None:
                     metric.calculate_metrics()
                     logging_msg = metric.logging_msg_iter()
@@ -107,7 +115,7 @@ def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data
 
     return sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length#}}}
 
-def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dataloader, data_unpack_func, train_metrics, rank = 0, world_size = 1, input_reshape_func = None):
+def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dataloader, data_unpack_func, train_metrics, speed = 'standard', rank = 0, world_size = 1, input_reshape_func = None):
     """Train for one epoch.
 
     Args:
@@ -146,7 +154,7 @@ def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dat
     # In training, set pad_last_batch=True so that the shard size is always equivalent and it doesn't give you no batch for some processes at the last batch.
     for it, data in enumerate(dataloader):
 
-        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length)
+        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, dataloader.batch_size, speed, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length)
 
     if rank == 0:
         if train_metrics is not None and len(train_metrics) > 0:
@@ -179,7 +187,7 @@ def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dat
     return sample_seen, total_samples, loss, elapsed_time#}}}
 
 
-def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_classes, batch_size, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, PAD_VALUE = -1):
+def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, PAD_VALUE = -1):
     """Test for one epoch.
 
     Args:
@@ -237,9 +245,9 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
         """
 
         if world_size > 1:
-            shard_size, num_iters, last_batch_size = count_true_samples(dataloader.sampler, batch_size)
+            shard_size, num_iters, last_batch_size = count_true_samples(dataloader.sampler, dataloader.batch_size)
         else:
-            shard_size, num_iters, last_batch_size = total_samples, total_iters, get_last_batch_size_singleGPU(total_samples, batch_size)
+            shard_size, num_iters, last_batch_size = total_samples, total_iters, get_last_batch_size_singleGPU(total_samples, dataloader.batch_size)
 
         if rank == 0 :
             assert num_iters == total_iters, "Implementation error"
