@@ -1,22 +1,25 @@
 import torch
 from torch import optim
 
-from pyvideoai.models.TRN.models import TSN
+from pyvideoai.models.epic.tsn import MTRN
 
 def load_model(num_classes, input_frame_length):
     #class_counts = (num_classes,352)
     class_counts = num_classes
     segment_count = input_frame_length
     base_model = 'BNInception'
+    #pretrained = 'epic_kitchens'
+    pretrained = 'imagenet'
+#    repo = 'epic-kitchens/action-models'
+#    model = torch.hub.load(repo, 'TRN', class_counts, segment_count, 'RGB',
+#            base_model = base_model,
+#            pretrained='epic-kitchens')
 
-    # By default it is pretrained
-    model = TSN(class_counts, segment_count, 'RGB',
+    model = MTRN(class_counts, segment_count, 'RGB',
             base_model = base_model,
-            consensus_type = 'TRNmultiscale',
-            dropout = 0.8,
-            img_feature_dim=256,
-            partial_bn=True)
-            
+            pretrained=pretrained)
+
+
     return model
 
 def NCTHW_to_model_input_shape(inputs):
@@ -36,7 +39,7 @@ def get_optim_policies(model):
     return model.get_optim_policies()
 
 
-ddp_find_unused_parameters = True 
+ddp_find_unused_parameters = True
 use_amp = True
 
 
