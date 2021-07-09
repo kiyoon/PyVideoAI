@@ -35,8 +35,6 @@ import git
 from . import __version__
 
 
-from collections.abc import Iterable
-
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
 def _suppress_print():
@@ -209,10 +207,10 @@ def evaluation(args):
 
             for metric in metrics[split]:
                 csv_fieldnames = metric.get_csv_fieldnames()
-                if not isinstance(csv_fieldnames, Iterable):
+                if not isinstance(csv_fieldnames, (list, tuple)):
                     csv_fieldnames = (csv_fieldnames,)
                 last_calculated_metrics = metric.last_calculated_metrics
-                if not isinstance(last_calculated_metrics, Iterable):
+                if not isinstance(last_calculated_metrics, (list, tuple)):
                     last_calculated_metrics = (last_calculated_metrics,)
 
                 for csv_fieldname, last_calculated_metric in zip(csv_fieldnames, last_calculated_metrics):
