@@ -32,7 +32,7 @@ import json
 from .utils import misc
 from .utils.stdout_logger import OutputLogger
 
-from .train_and_val import train_epoch, eval_epoch
+from .train_and_eval import train_epoch, eval_epoch
 
 from .visualisations.metric_plotter import DefaultMetricPlotter
 from .visualisations.telegram_reporter import DefaultTelegramReporter
