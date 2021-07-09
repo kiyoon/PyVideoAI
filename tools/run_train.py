@@ -63,7 +63,7 @@ from pyvideoai import config
 def add_train_args(parser):
     parser.add_argument("-e", "--num_epochs", type=int, default=100, help="Number of epochs for training.")
     add_exp_arguments(parser, 
-            root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_lr0001_8x8_largejit_plateau_1scrop5tcrop_split1',
+            root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_8x8_largejit_plateau_1scrop5tcrop_split1',
             dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)
     parser.add_argument("-s", "--save_mode", type=str, default="last_and_peaks", choices=["all", "higher", "last_and_peaks"],  help="Checkpoint saving condition. all: save all epochs, higher: save whenever the highest validation performance model is found, last_and_peaks: save all epochs, but remove previous epoch if that wasn't the best.")
     parser.add_argument("-S", "--training_speed", type=str, default="standard", choices=["standard", "faster"],  help="Only applicable when using distributed multi-GPU training. 'faster' skips multiprocess commuication and CPU-GPU synchronisation for calculating training metrics (loss, accuracy) so they will be reported as 0. This probably won't give you any benefit on a single node, but for multi-node, it depends on the internet connection.")

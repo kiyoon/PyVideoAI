@@ -8,7 +8,7 @@ import sys
 import torch
 
 import pyvideoai.utils.multiprocessing_helper as mpu
-from pyvideoai.val_multiprocess import val
+from pyvideoai.eval_multiprocess import evaluation
 from experiment_utils.argparse_utils import add_exp_arguments
 
 
@@ -61,9 +61,9 @@ import model_configs
 import exp_configs
 from pyvideoai import config
 
-def add_val_args(parser):
+def add_eval_args(parser):
     add_exp_arguments(parser, 
-            root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='epic_verb', model_default='i3d_resnet50', name_default='test',
+            root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_8x8_largejit_plateau_1scrop5tcrop_split1',
             dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)
     parser.add_argument("-l", "--load_epoch", type=int, default=None, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
     parser.add_argument("--seed", type=int, default=12, help="Random seed for np, torch, torch.cuda, DALI.")
@@ -79,7 +79,7 @@ def get_parser():
     parser = argparse.ArgumentParser(description="Evaluate an action model",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     add_distributed_args(parser)
-    add_val_args(parser)
+    add_eval_args(parser)
     return parser
 
 
@@ -97,7 +97,7 @@ def main():
             nprocs=args.local_world_size,
             args=(
                 args.local_world_size,
-                val,
+                evaluation,
                 args.init_method,
                 args.shard_id,
                 args.num_shards,
@@ -107,7 +107,7 @@ def main():
             daemon=False,
         )
     else:
-        val(args)
+        evaluation(args)
 
 
 

@@ -21,7 +21,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from .utils import distributed as du
 from .utils import misc
-from .train_and_val import eval_epoch
+from .train_and_eval import eval_epoch
 
 from .metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 
@@ -66,7 +66,7 @@ def distributed_init(global_seed, local_world_size):
     return rank, world_size, local_rank, local_world_size, local_seed
 
 
-def val(args):
+def evaluation(args):
     rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
@@ -198,7 +198,7 @@ def val(args):
 
         oneclip = args.mode == 'oneclip'
 
-        _, _, _, _, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], cfg.dataset_cfg.num_classes, batch_size, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+        _, _, _, _, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
 
         if rank == 0:
             if args.save_predictions:
