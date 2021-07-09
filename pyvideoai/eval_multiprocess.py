@@ -34,6 +34,9 @@ import configparser
 import git
 from . import __version__
 
+
+from collections.abc import Iterable
+
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
 def _suppress_print():
@@ -198,9 +201,26 @@ def evaluation(args):
 
         oneclip = args.mode == 'oneclip'
 
-        _, _, _, _, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+        _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
 
         if rank == 0:
+            # Update summary.csv
+            curr_stat = {'epoch': load_epoch, f'{split}_runtime_sec': elapsed_time, f'{split}_loss': loss}
+
+            for metric in metrics[split]:
+                csv_fieldnames = metric.get_csv_fieldnames()
+                if not isinstance(csv_fieldnames, Iterable):
+                    csv_fieldnames = (csv_fieldnames,)
+                last_calculated_metrics = metric.last_calculated_metrics
+                if not isinstance(last_calculated_metrics, Iterable):
+                    last_calculated_metrics = (last_calculated_metrics,)
+
+                for csv_fieldname, last_calculated_metric in zip(csv_fieldnames, last_calculated_metrics):
+                    curr_stat[csv_fieldname] = last_calculated_metric
+
+            exp.update_summary_line(curr_stat)
+
+            # save predictions
             if args.save_predictions:
                 video_predictions, video_labels, video_ids = predictions_gatherer.get_predictions_numpy()
 

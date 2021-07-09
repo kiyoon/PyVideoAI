@@ -281,7 +281,7 @@ class AverageMetric(Metric):
 
     def __len__(self):
         num_clips_added = 0
-        for data in self.data:
+        for key, data in self.data.items():
             num_clips_added += data['num_clips']
 
         return num_clips_added

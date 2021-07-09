@@ -368,6 +368,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
                 sys.stdout.write(write_str)
                 sys.stdout.flush()
 
+
         # Reset the iterator. Needs to be done at the end of epoch when __next__ is directly called instead of doing iteration.
 #        dataloader.reset()
 

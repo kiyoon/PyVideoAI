@@ -40,6 +40,7 @@ from .visualisations.telegram_reporter import DefaultTelegramReporter
 import coloredlogs, logging, verboselogs
 logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
+from collections.abc import Iterable
 
 from ssl import SSLCertVerificationError
 from urllib3.exceptions import NewConnectionError, MaxRetryError
@@ -417,13 +418,13 @@ def train(args):
 
                 for metric in metrics['train']:
                     tensorboard_tags = metric.tensorboard_tags()
-                    if not isinstance(tensorboard_tags, tuple):
+                    if not isinstance(tensorboard_tags, Iterable):
                         tensorboard_tags = (tensorboard_tags,)
                     csv_fieldnames = metric.get_csv_fieldnames()
-                    if not isinstance(csv_fieldnames, tuple):
+                    if not isinstance(csv_fieldnames, Iterable):
                         csv_fieldnames = (csv_fieldnames,)
                     last_calculated_metrics = metric.last_calculated_metrics
-                    if not isinstance(last_calculated_metrics, tuple):
+                    if not isinstance(last_calculated_metrics, Iterable):
                         last_calculated_metrics = (last_calculated_metrics,)
 
                     for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
@@ -442,13 +443,13 @@ def train(args):
 
                 for metric in metrics['val']:
                     tensorboard_tags = metric.tensorboard_tags()
-                    if not isinstance(tensorboard_tags, tuple):
+                    if not isinstance(tensorboard_tags, Iterable):
                         tensorboard_tags = (tensorboard_tags,)
                     csv_fieldnames = metric.get_csv_fieldnames()
-                    if not isinstance(csv_fieldnames, tuple):
+                    if not isinstance(csv_fieldnames, Iterable):
                         csv_fieldnames = (csv_fieldnames,)
                     last_calculated_metrics = metric.last_calculated_metrics
-                    if not isinstance(last_calculated_metrics, tuple):
+                    if not isinstance(last_calculated_metrics, Iterable):
                         last_calculated_metrics = (last_calculated_metrics,)
 
                     for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
@@ -467,13 +468,13 @@ def train(args):
 
                     for metric in metrics['multicropval']:
                         tensorboard_tags = metric.tensorboard_tags()
-                        if not isinstance(tensorboard_tags, tuple):
+                        if not isinstance(tensorboard_tags, Iterable):
                             tensorboard_tags = (tensorboard_tags,)
                         csv_fieldnames = metric.get_csv_fieldnames()
-                        if not isinstance(csv_fieldnames, tuple):
+                        if not isinstance(csv_fieldnames, Iterable):
                             csv_fieldnames = (csv_fieldnames,)
                         last_calculated_metrics = metric.last_calculated_metrics
-                        if not isinstance(last_calculated_metrics, tuple):
+                        if not isinstance(last_calculated_metrics, Iterable):
                             last_calculated_metrics = (last_calculated_metrics,)
 
                         for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):

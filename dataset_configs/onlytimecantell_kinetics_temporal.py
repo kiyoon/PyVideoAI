@@ -1,3 +1,6 @@
+"""
+Kinetics-400 Temporal set suggested by Only Time Can Tell (WACV 2021, Sevilla-Lara et al.)
+"""
 import os
 import numpy as np
 import pandas as pd
