@@ -484,7 +484,6 @@ def train(args):
             early_stopping = False      # need it for the entire process, because later we'll broadcast
 
             if rank == 0:
-                logging.info(curr_stat)
                 exp.add_summary_line(curr_stat)
                 figs = metric_plotter.plot(exp)
 
