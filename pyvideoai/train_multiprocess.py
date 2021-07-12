@@ -560,9 +560,10 @@ def train(args):
                                 input("Press Enter to retry: ")
                 
                 # Whatever the save mode is, make the best model symlink (keep it up-to-date)
-                best_model_path = exp.get_checkpoint_path(max_val_epoch) 
-                os.symlink(best_model_path, os.path.join(exp.weights_dir, 'best.pth'))
-                
+                best_model_name = exp.checkpoints_format.format(max_val_epoch)
+                best_symlink_path = os.path.join(exp.weights_dir, 'best.pth')
+                os.remove(best_symlink_path)
+                os.symlink(best_model_name, best_symlink_path)  # first argument not full path -> make relative symlink
 
                 
             if hasattr(cfg, 'early_stopping_condition'):
