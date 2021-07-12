@@ -1,3 +1,12 @@
+############
+"""
+The dataset_config needs:
+
+(required)  num_classes (int)
+            task (pyvideoai.tasks.task)
+(suggested) class_keys (list of str)
+"""
+
 import os
 import numpy as np
 import pandas as pd
@@ -12,6 +21,10 @@ task = SingleLabelClassificationTask()
 # Paths
 class_keys = pd.DataFrame(get_class_keys(), columns=['class_keys'])['class_keys']
 
+
+"""
+Optional, but better to keep the format consistent so that the experiment_config doesn't need to change much between datasets.
+"""
 dataset_root = os.path.join(DATA_DIR, 'hmdb51')
 frames_dir = os.path.join(dataset_root, "frames_q5")
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")

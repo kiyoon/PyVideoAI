@@ -240,7 +240,8 @@ def train(args):
 
             # All processes have to check if exp.summary_file exists, before rank0 will create the file.
             # Otherwise, rank1 can see the empty file and throw an error after rank0 creates it.
-            dist.barrier()
+            if world_size > 1:
+                dist.barrier()
 
             if rank == 0:
                 exp.init_summary()
