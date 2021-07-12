@@ -559,6 +559,12 @@ def train(args):
                                 logger.exception("IOError whilst removing the model.")
                                 input("Press Enter to retry: ")
                 
+                # Whatever the save mode is, make the best model symlink (keep it up-to-date)
+                best_model_path = exp.get_checkpoint_path(max_val_epoch) 
+                os.symlink(best_model_path, os.path.join(exp.weights_dir, 'best.pth'))
+                
+
+                
             if hasattr(cfg, 'early_stopping_condition'):
                 if world_size > 1:
                     # Broadcast the early stopping flag to the entire process.
