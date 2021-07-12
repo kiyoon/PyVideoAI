@@ -562,7 +562,8 @@ def train(args):
                 # Whatever the save mode is, make the best model symlink (keep it up-to-date)
                 best_model_name = exp.checkpoints_format.format(max_val_epoch)
                 best_symlink_path = os.path.join(exp.weights_dir, 'best.pth')
-                os.remove(best_symlink_path)
+                if os.path.islink(best_symlink_path):
+                    os.remove(best_symlink_path)
                 os.symlink(best_model_name, best_symlink_path)  # first argument not full path -> make relative symlink
 
                 

@@ -15,10 +15,10 @@ annotations_root = os.path.join(dataset_root, 'annotations')
 vocab_json_path = os.path.join(annotations_root, 'Diving48_vocab.json')
 class_keys = pd.DataFrame(get_class_keys(vocab_json_path), columns=['class_keys'])['class_keys']
 
-image_frames_dir = os.path.join(dataset_root, "frames_q5")
+frames_dir = os.path.join(dataset_root, "frames_q5")
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 split_file_basename = {'train': 'train_V2.csv', 'val': 'test_V2.csv', 'multicropval': 'test_V2.csv'}
-split2mode = {'train': 'train', 'val': 'val', 'multicropval': 'test', 'test': 'test'}
+split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
 
 
 # Misc
