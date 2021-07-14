@@ -364,13 +364,12 @@ def train(args):
             if args.load_epoch is not None:
                 all_stats_logical_idx = exp.summary['epoch'] < start_epoch
                 all_stats = exp.summary[all_stats_logical_idx]
-                for index_, row in all_stats.iterrows():
-                    val_metric = row[best_metric_fieldname]
-
+                for row in all_stats.itertuples():
+                    val_metric = getattr(row, best_metric_fieldname) 
                     is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric)
                     if is_better:
                         max_val_metric = val_metric
-                        max_val_epoch = row['epoch']
+                        max_val_epoch = row.epoch
 
             # Plotting metrics
             metric_plotter = cfg.metric_plotter if hasattr(cfg, 'metric_plotter') else DefaultMetricPlotter()
