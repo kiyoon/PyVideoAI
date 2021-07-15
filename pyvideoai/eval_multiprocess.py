@@ -51,8 +51,12 @@ def distributed_init(global_seed, local_world_size):
     world_size = dist.get_world_size() if dist.is_initialized() else 1
     local_rank = rank % local_world_size
 
-    local_seed = global_seed + rank
-    #local_seed = global_seed
+    """You have to set the seed equally across processes.
+    Reason: during model initialisation and training, the models across processes must be in sync.
+    On the other hand, dataloader will have multiple workers with different seed, so dataloading randomness will be different across processes.
+    """
+    #local_seed = global_seed + rank
+    local_seed = global_seed
 
     # Set GPU
     torch.cuda.set_device(local_rank)
