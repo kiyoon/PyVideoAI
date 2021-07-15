@@ -31,6 +31,7 @@ from .utils import distributed as du
 import json
 from .utils import misc
 from .utils.stdout_logger import OutputLogger
+from .utils.distributed import MultiprocessPrinter, check_random_seed_in_sync
 
 from .train_and_eval import train_epoch, eval_epoch
 
@@ -191,6 +192,10 @@ def train(args):
                 return getattr(cfg.model_cfg, name)
             return default
 
+        # check it before and after loading the model.
+        if world_size > 1:
+            logger.info('Checking if random seeds are in sync across processes, before and after loading the model. This ensures that the model is initialised with the same weights across processes.')
+            check_random_seed_in_sync()
 
         # Network
         # Construct the model
@@ -217,6 +222,8 @@ def train(args):
                 module=model, device_ids=[cur_device], output_device=cur_device,
                 find_unused_parameters=ddp_find_unused_parameters
             )
+
+        check_random_seed_in_sync()
 
         misc.log_model_info(model)
 
@@ -380,6 +387,8 @@ def train(args):
             metric_plotter.add_metrics(metrics)
             telegram_reporter = cfg.telegram_reporter if hasattr(cfg, 'telegram_reporter') else DefaultTelegramReporter()
 
+        # Because there are a lot of custom functions, we need to make sure that they're not doing anything wrong, by checking random values frequently!
+        check_random_seed_in_sync()
         for epoch in range(start_epoch, args.num_epochs):
             if hasattr(cfg, "epoch_start_script"):
                 # structurise
@@ -584,6 +593,8 @@ def train(args):
                 if early_stopping_flag:
                     logger.info("Early stopping triggered.")
                     break
+
+            check_random_seed_in_sync()
 
 
         logger.success('Finished training')
