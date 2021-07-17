@@ -272,6 +272,21 @@ def write_pids_to_file(path_to_file):
                 f.write("%d\n" % proc_id)
 
 
+def check_random_seed_in_sync(num_values_per_process=3):
+    """
+    Check if random seed is in sync across processes.
+    This is REQUIRED especially for model initialisation, because different seed will make parameters different across processes (GPUs).
+    This will be desynced when: (AVOID below)
+        1. Each process has different random seed
+        2. Each process has different number of random calls.
+    """
+    if get_world_size() > 1:
+        cur_device = torch.cuda.current_device()
+        rand_values = torch.rand(1,num_values_per_process).to(cur_device)
+        (rand_values,) = all_gather([rand_values])          # shape: (num_processes, num_values_per_process)
+        if rand_values.unique(dim=0).size(0) != 1:          # shape has to be (1, num_values_per_process) if all values are equal over the processes.
+            raise RuntimeError('Random seed not in sync over the multiple processes. Make sure you are not calling more random calls on only some of the processes.')
+
 
 class MultiprocessPrinter:
     '''In every print, show which process rank is printing the message
