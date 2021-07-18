@@ -199,7 +199,6 @@ if __name__ == '__main__':
     data_unpack_funcs = {split: cfg.get_data_unpack_func(split) for split in splits}
     input_reshape_funcs= {split: cfg.get_input_reshape_func(split) for split in splits}
     batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
-    batch_size *= 2
     if hasattr(cfg, 'val_batch_size'):
         val_batch_size = cfg.val_batch_size() if callable(cfg.val_batch_size) else cfg.val_batch_size
     else:
