@@ -79,7 +79,7 @@ from pytorch_lightning.plugins.training_type import DDPPlugin
 from typing import Any, Dict, List, Optional, Union
 
 MY_ADDR = '127.0.0.1'
-class CustomEnvironment(ClusterEnvironment):
+class CustomClusterEnvironment(ClusterEnvironment):
     def __init__(self, num_nodes=1):
         super().__init__()
         self._num_nodes = num_nodes
@@ -371,7 +371,7 @@ if __name__ == '__main__':
             logger.info('Will find unused parameters for distributed training. This introduces extra overheads, so set ddp_find_unused_parameters to True only when necessary.')
         else:
             logger.info('Will NOT find unused parameters for distributed training. If you see an error, consider setting ddp_find_unused_parameters=True.')
-        trainer = pl.Trainer(gpus = args.local_world_size, num_nodes= args.num_shards, accelerator='ddp', precision=16 if use_amp else 32, plugins=DDPPlugin(find_unused_parameters=ddp_find_unused_parameters, num_nodes=args.num_shards),
+        trainer = pl.Trainer(gpus = args.local_world_size, num_nodes= args.num_shards, accelerator='ddp', precision=16 if use_amp else 32, plugins=DDPPlugin(find_unused_parameters=ddp_find_unused_parameters, num_nodes=args.num_shards, cluster_environment=CustomClusterEnvironment(num_nodes=args.num_shards)),
                 callbacks = [TimeCallback()],
                 max_epochs = args.num_epochs)
     else:
