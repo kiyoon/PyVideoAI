@@ -73,6 +73,59 @@ def get_parser():
     add_train_args(parser)
     return parser
 
+# https://github.com/PyTorchLightning/pytorch-lightning/discussions/6454
+from pytorch_lightning.plugins.environments.cluster_environment import ClusterEnvironment
+from pytorch_lightning.plugins.training_type import DDPPlugin
+from typing import Any, Dict, List, Optional, Union
+
+MY_ADDR = '127.0.0.1'
+class CustomEnvironment(ClusterEnvironment):
+    def __init__(self, num_nodes=1):
+        super().__init__()
+        self._num_nodes = num_nodes
+        self._master_port = None
+
+    def master_address(self):
+        if self._num_nodes > 1:
+            MASTER_ADDR = MY_ADDR
+        else:
+            MASTER_ADDR = os.environ.get("MASTER_ADDR", "127.0.0.1")
+        #log.debug(f"MASTER_ADDR: {MASTER_ADDR}")
+        return MASTER_ADDR
+
+    def master_port(self):
+        if self._master_port is None:
+            if self._num_nodes > 1:
+                self._master_port = MY_PORT
+            else:
+                #self._master_port = os.environ.get("MASTER_PORT", find_free_network_port())
+                self._master_port = os.environ.get("MASTER_PORT", '5910')
+        #log.debug(f"MASTER_PORT: {self._master_port}")
+        return int(self._master_port)
+
+    def world_size(self):
+        #return None
+        return os.environ.get("WORLD_SIZE", '1')
+
+    def node_rank(self):
+        #log.debug(f"NODE_RANK: {MY_RANK}")
+        #return int(MY_RANK)
+        return os.environ.get("NODE_RANK", '0')
+
+    def local_rank(self) -> int:
+        LOCAL_RANK = int(os.environ.get("LOCAL_RANK", 0))
+        #log.debug(f"local_rank: {LOCAL_RANK}")
+        return LOCAL_RANK
+
+
+class ClusterDDPPlugin(DDPPlugin):
+    def __init__(self, num_nodes=1, **kwargs: Union[Any, Dict[str, Any]]) -> None:
+        super().__init__(
+            num_nodes=num_nodes,
+            cluster_environment=CustomEnvironment(),
+            **kwargs,
+        )
+
 def get_lr(optimiser):
     ''' Works ONLY IF there's one parameter group only.
     Usually there's multiple groups with different learning rate.
@@ -318,7 +371,7 @@ if __name__ == '__main__':
             logger.info('Will find unused parameters for distributed training. This introduces extra overheads, so set ddp_find_unused_parameters to True only when necessary.')
         else:
             logger.info('Will NOT find unused parameters for distributed training. If you see an error, consider setting ddp_find_unused_parameters=True.')
-        trainer = pl.Trainer(gpus = args.local_world_size, num_nodes= args.num_shards, accelerator='ddp', precision=16 if use_amp else 32, plugins=DDPPlugin(find_unused_parameters=ddp_find_unused_parameters),
+        trainer = pl.Trainer(gpus = args.local_world_size, num_nodes= args.num_shards, accelerator='ddp', precision=16 if use_amp else 32, plugins=DDPPlugin(find_unused_parameters=ddp_find_unused_parameters, num_nodes=args.num_shards),
                 callbacks = [TimeCallback()],
                 max_epochs = args.num_epochs)
     else:
