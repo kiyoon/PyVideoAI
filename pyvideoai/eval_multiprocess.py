@@ -188,7 +188,7 @@ def evaluation(args):
                     if csv_fieldname is not None:   # PredictionsGatherers return None for the CSV fieldname.
                         curr_stat[csv_fieldname] = last_calculated_metric
 
-            print(curr_stat)
+            log.info(f'Updating exp--summary.csv line with {curr_stat}.')
             exp.update_summary_line(curr_stat)
 
             # save predictions
