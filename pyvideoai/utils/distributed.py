@@ -12,6 +12,8 @@ import os
 import contextlib
 import sys
 
+import numpy as np
+import random
 
 def all_gather(tensors):
     """
@@ -365,5 +367,5 @@ def seed_worker(worker_id):
     This function seeds numpy and random's random seed.
     """
     worker_seed = torch.initial_seed() % 2**32
-    numpy.random.seed(worker_seed)
+    np.random.seed(worker_seed)
     random.seed(worker_seed)
