@@ -185,8 +185,10 @@ def evaluation(args):
                     last_calculated_metrics = (last_calculated_metrics,)
 
                 for csv_fieldname, last_calculated_metric in zip(csv_fieldnames, last_calculated_metrics):
-                    curr_stat[csv_fieldname] = last_calculated_metric
+                    if csv_fieldname is not None:   # PredictionsGatherers return None for the CSV fieldname.
+                        curr_stat[csv_fieldname] = last_calculated_metric
 
+            print(curr_stat)
             exp.update_summary_line(curr_stat)
 
             # save predictions
