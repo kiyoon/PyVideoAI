@@ -54,43 +54,10 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
 
 
-def _suppress_print():
-    """
-    Suppresses printing from the current process.
-    """
-
-    sys.stdout = open(os.devnull,'w')
-    sys.stderr = open(os.devnull,'w')
-
-
-def distributed_init(global_seed, local_world_size):
-    rank = dist.get_rank() if dist.is_initialized() else 0
-    world_size = dist.get_world_size() if dist.is_initialized() else 1
-    local_rank = rank % local_world_size
-
-    """You have to set the seed equally across processes.
-    Reason: during model initialisation and training, the models across processes must be in sync.
-    On the other hand, dataloader will have multiple workers with different seed, so dataloading randomness will be different across processes.
-    """
-    #local_seed = global_seed + rank
-    local_seed = global_seed
-
-    # Set GPU
-    torch.cuda.set_device(local_rank)
-
-    # Set seed
-    torch.manual_seed(local_seed)
-    torch.cuda.manual_seed(local_seed)
-    np.random.seed(local_seed)
-    random.seed(local_seed)
-    # DALI seed
-
-    return rank, world_size, local_rank, local_world_size, local_seed
-
 
 
 def train(args):
-    rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
+    rank, world_size, local_rank, local_world_size, local_seed = du.distributed_init(args.seed, args.local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
         #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
@@ -119,7 +86,7 @@ def train(args):
         root_logger = logging.getLogger()
         root_logger.addHandler(f_handler)
     else:
-        _suppress_print()
+        du.suppress_print()
 
     try:
         # Writes the pids to file, to make killing processes easier.    
@@ -174,10 +141,10 @@ def train(args):
         val_sampler = DistributedSampler(torch_datasets['val'], shuffle=False) if world_size > 1 else None
         if perform_multicropval:
             multi_crop_val_sampler = DistributedSampler(torch_datasets['multicropval'], shuffle=False) if world_size > 1 else None
-        train_dataloader = torch.utils.data.DataLoader(torch_datasets['train'], batch_size=batch_size, shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True)
-        val_dataloader = torch.utils.data.DataLoader(torch_datasets['val'], batch_size=val_batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+        train_dataloader = torch.utils.data.DataLoader(torch_datasets['train'], batch_size=batch_size, shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
+        val_dataloader = torch.utils.data.DataLoader(torch_datasets['val'], batch_size=val_batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False, worker_init_fn = du.seed_worker)
         if perform_multicropval:
-            multi_crop_val_dataloader = torch.utils.data.DataLoader(torch_datasets['multicropval'], batch_size=val_batch_size, shuffle=False, sampler=multi_crop_val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+            multi_crop_val_dataloader = torch.utils.data.DataLoader(torch_datasets['multicropval'], batch_size=val_batch_size, shuffle=False, sampler=multi_crop_val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False, worker_init_fn = du.seed_worker)
         # Use global seed because we have to maintain the consistency of shuffling between shards.
     #    train_dataloader = DALILoader(batch_size = 1, file_list = 'epic_verb_train_split.txt', uid2label = dataset_cfg.uid2label,
     #            sequence_length = 8, stride=16, crop_size= (224,224), num_threads=1, seed=args.seed, device_id=local_rank, shard_id=rank, num_shards=world_size, shuffle=True, pad_last_batch=True)

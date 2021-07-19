@@ -37,42 +37,9 @@ from . import __version__
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
-def _suppress_print():
-    """
-    Suppresses printing from the current process.
-    """
-
-    sys.stdout = open(os.devnull,'w')
-    sys.stderr = open(os.devnull,'w')
-
-
-def distributed_init(global_seed, local_world_size):
-    rank = dist.get_rank() if dist.is_initialized() else 0
-    world_size = dist.get_world_size() if dist.is_initialized() else 1
-    local_rank = rank % local_world_size
-
-    """You have to set the seed equally across processes.
-    Reason: during model initialisation and training, the models across processes must be in sync.
-    On the other hand, dataloader will have multiple workers with different seed, so dataloading randomness will be different across processes.
-    """
-    #local_seed = global_seed + rank
-    local_seed = global_seed
-
-    # Set GPU
-    torch.cuda.set_device(local_rank)
-
-    # Set seed
-    torch.manual_seed(local_seed)
-    torch.cuda.manual_seed(local_seed)
-    np.random.seed(local_seed)
-    random.seed(local_seed)
-    # DALI seed
-
-    return rank, world_size, local_rank, local_world_size, local_seed
-
 
 def evaluation(args):
-    rank, world_size, local_rank, local_world_size, local_seed = distributed_init(args.seed, args.local_world_size)
+    rank, world_size, local_rank, local_world_size, local_seed = du.distributed_init(args.seed, args.local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
         #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
@@ -101,7 +68,7 @@ def evaluation(args):
         root_logger = logging.getLogger()
         root_logger.addHandler(f_handler)
     else:
-        _suppress_print()
+        du.suppress_print()
 
     try:
         # Writes the pids to file, to make killing processes easier.    
@@ -155,7 +122,7 @@ def evaluation(args):
         logger.info(f'Using batch size of {batch_size} per process (per GPU), resulting in total size of {batch_size * world_size}.')
 
         val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
-        val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+        val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, sampler=val_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False, worker_init_fn = du.seed_worker)
 
         # Network
         # Construct the model

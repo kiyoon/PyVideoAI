@@ -323,3 +323,47 @@ class MultiprocessPrinter:
     def __exit__(self, exc_type, exc_value, traceback):
         # let contextlib do any exception handling here
         self._redirector.__exit__(exc_type, exc_value, traceback)
+
+
+def suppress_print():
+    """
+    Suppresses printing from the current process.
+    """
+
+    sys.stdout = open(os.devnull,'w')
+    sys.stderr = open(os.devnull,'w')
+
+
+def distributed_init(global_seed, local_world_size):
+    rank = dist.get_rank() if dist.is_initialized() else 0
+    world_size = dist.get_world_size() if dist.is_initialized() else 1
+    local_rank = rank % local_world_size
+
+    """You have to set the seed equally across processes.
+    Reason: during model initialisation and training, the models across processes must be in sync.
+    On the other hand, dataloader will have multiple workers with different seed, so dataloading randomness will be different across processes.
+    """
+    #local_seed = global_seed + rank
+    local_seed = global_seed
+
+    # Set GPU
+    torch.cuda.set_device(local_rank)
+
+    # Set seed
+    torch.manual_seed(local_seed)
+    torch.cuda.manual_seed(local_seed)
+    np.random.seed(local_seed)
+    random.seed(local_seed)
+    # DALI seed
+
+    return rank, world_size, local_rank, local_world_size, local_seed
+
+
+def seed_worker(worker_id):
+    """By default, each worker will have its PyTorch seed set to base_seed + worker_id.
+    However, seeds for other libraries may be duplicated upon initializing workers, causing each worker to return identical random numbers.
+    This function seeds numpy and random's random seed.
+    """
+    worker_seed = torch.initial_seed() % 2**32
+    numpy.random.seed(worker_seed)
+    random.seed(worker_seed)
