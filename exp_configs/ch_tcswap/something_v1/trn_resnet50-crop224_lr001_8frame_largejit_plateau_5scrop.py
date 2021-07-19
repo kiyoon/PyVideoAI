@@ -22,7 +22,7 @@ train_jitter_max = 336
 val_scale = 256
 val_num_spatial_crops = 1
 test_scale = 256
-test_num_spatial_crops = 5
+test_num_spatial_crops = 10
 
 #### OPTIONAL
 #def criterion():
