@@ -78,6 +78,7 @@ def evaluation(args):
         if rank == 0:
             repo = git.Repo(search_parent_directories=True)
             sha = repo.head.object.hexsha
+            logger.info(f"PyTorch=={torch.__version__}")
             logger.info(f"PyVideoAI=={__version__}")
             logger.info(f"PyVideoAI git hash: {sha}")
             # save configs
@@ -170,7 +171,7 @@ def evaluation(args):
 
         oneclip = args.mode == 'oneclip'
 
-        _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+        _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], None, cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
 
         if rank == 0:
             # Update summary.csv

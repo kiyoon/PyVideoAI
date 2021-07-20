@@ -25,6 +25,7 @@ from torch.utils.data.distributed import DistributedSampler
 import time
 
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from .utils.lr_scheduling import ReduceLROnPlateauMultiple
 
 #import slowfast.utils.checkpoint as cu
 from .utils import distributed as du
@@ -96,6 +97,7 @@ def train(args):
         if rank == 0:
             repo = git.Repo(search_parent_directories=True)
             sha = repo.head.object.hexsha
+            logger.info(f"PyTorch=={torch.__version__}")
             logger.info(f"PyVideoAI=={__version__}")
             logger.info(f"PyVideoAI git hash: {sha}")
 
@@ -249,6 +251,9 @@ def train(args):
         scheduler = cfg.scheduler(optimiser, iters_per_epoch)
         if isinstance(scheduler, ReduceLROnPlateau):
             logger.info("ReduceLROnPlateau scheduler is selected. The `scheduler.step(val_loss)` function will be called at the end of epoch (after validation), but not every iteration.")
+        if isinstance(scheduler, ReduceLROnPlateauMultiple):
+            logger.info("ReduceLROnPlateauMultiple scheduler is selected. The `scheduler.step(val_loss, val_best_metric)` function will be called at the end of epoch (after validation), but not every iteration.")
+        if isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple)):
             if args.load_epoch is not None:
                 if hasattr(cfg, 'load_scheduler_state'):
                     load_scheduler_state = cfg.load_scheduler_state
@@ -324,6 +329,10 @@ def train(args):
                     logger.error("Could NOT load Automatic Mixed Precision (AMP) state from the checkpoint.")
 
 
+        # to save maximum val_acc model, when option "args.save_mode" is "higher" or "last_and_peaks"
+        # Also for ReduceLROnPlateauMultiple scheduling.
+        best_metric, best_metric_fieldname = metrics.get_best_metric_and_fieldname()
+
         if rank == 0:
             train_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'train'), comment='train')
             val_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'val'), comment='val')
@@ -332,8 +341,6 @@ def train(args):
             else:
                 multi_crop_val_writer = None
 
-            # to save maximum val_acc model, when option "args.save_mode" is "higher" or "last_and_peaks"
-            best_metric, best_metric_fieldname = metrics.get_best_metric_and_fieldname()
 
             max_val_metric = None 
             max_val_epoch = -1
@@ -410,7 +417,7 @@ def train(args):
                         curr_stat[csv_fieldname] = last_calculated_metric
                 #}}}
      
-            val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], cfg.dataset_cfg.num_classes, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
+            val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
             if rank == 0:#{{{
                 curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
 
@@ -436,7 +443,7 @@ def train(args):
                 #}}}
 
             if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
-                multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], cfg.dataset_cfg.num_classes, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
+                multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
                 if rank == 0:#{{{
                     curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
                     multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
