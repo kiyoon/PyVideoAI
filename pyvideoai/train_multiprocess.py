@@ -70,7 +70,15 @@ def train(args):
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+    if args.version == 'auto':      # auto
+        if args.load_epoch == -1:
+            _expversion = -2    # chooses the last version
+        else:
+            _expversion = -1    # creates new version
+    else:
+        _expversion = int(args.version)
+
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
 
     if rank == 0:
         exp.make_dirs_for_training()
