@@ -21,6 +21,7 @@ def get_parser():
     parser.add_argument("--split", type=str, default='temporal', choices=['temporal', 'static', 'random'], help="The split from Only Time Can Tell.")
     parser.add_argument("--mode", type=str, default='frames', choices=['video', 'frames'], help="Dataset stored as videos or extracted frames?")
     parser.add_argument("--partial", action='store_true', help="Choose 25%% of the data.")
+    parser.add_argument("--seed", type=int, default=12, help="Random seed for partial data generation")
     return parser
 
 parser = get_parser()
@@ -28,6 +29,7 @@ args = parser.parse_args()
 
 
 if __name__ == '__main__':
+    random.seed(args.seed)
 
     def split_name(base_name = 'train'):
         name = base_name
