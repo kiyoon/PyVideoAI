@@ -31,8 +31,10 @@ logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
 import configparser
 
+# Version checking
 import git
 from . import __version__
+import socket
 
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
@@ -86,6 +88,8 @@ def evaluation(args):
             logger.info(f"PyTorch=={torch.__version__}")
             logger.info(f"PyVideoAI=={__version__}")
             logger.info(f"PyVideoAI git hash: {sha}")
+            logger.info(f"Experiment folder: {exp.experiment_dir} on host {socket.gethostname()}")
+
             # save configs
 #            exp.dump_args(args)
             logger.info("args: " + json.dumps(args.__dict__, sort_keys=False, indent=4))

@@ -48,8 +48,10 @@ from requests import ConnectionError
 
 import configparser
 
+# Version checking
 import git
 from . import __version__
+import socket
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
@@ -108,6 +110,7 @@ def train(args):
             logger.info(f"PyTorch=={torch.__version__}")
             logger.info(f"PyVideoAI=={__version__}")
             logger.info(f"PyVideoAI git hash: {sha}")
+            logger.info(f"Experiment folder: {exp.experiment_dir} on host {socket.gethostname()}")
 
             # save configs
             exp.dump_args(args)
