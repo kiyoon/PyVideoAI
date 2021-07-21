@@ -406,8 +406,10 @@ def train(args):
                         last_calculated_metrics = (last_calculated_metrics,)
 
                     for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
-                        train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                        curr_stat[csv_fieldname] = last_calculated_metric
+                        if tensorboard_tag is not None:
+                            train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                        if csv_fieldname is not None:
+                            curr_stat[csv_fieldname] = last_calculated_metric
                 #}}}
      
             val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], cfg.dataset_cfg.num_classes, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
@@ -431,8 +433,10 @@ def train(args):
                         last_calculated_metrics = (last_calculated_metrics,)
 
                     for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
-                        train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                        curr_stat[csv_fieldname] = last_calculated_metric
+                        if tensorboard_tag is not None:
+                            train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                        if csv_fieldname is not None:
+                            curr_stat[csv_fieldname] = last_calculated_metric
                 #}}}
 
             if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
@@ -456,8 +460,10 @@ def train(args):
                             last_calculated_metrics = (last_calculated_metrics,)
 
                         for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
-                            train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                            curr_stat[csv_fieldname] = last_calculated_metric
+                            if tensorboard_tag is not None:
+                                train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                            if csv_fieldname is not None:
+                                curr_stat[csv_fieldname] = last_calculated_metric
                     #}}}
 
 

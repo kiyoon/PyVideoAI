@@ -76,6 +76,8 @@ class Metric(ABC):
             self._check_num_classes(clip_predictions, labels)
             clip_predictions = self._apply_activation(clip_predictions)
 
+        return video_ids, clip_predictions, labels
+
 
 
 
@@ -212,7 +214,7 @@ class ClipMetric(Metric):
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
         """We will ignore the video_ids and store all the clip predictions independently without aggregating (like averaging).
         """ 
-        super().add_clip_predictions(video_ids, clip_predictions, labels)
+        video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
         with torch.no_grad():
             if 'video_ids' in self.data.keys():
                 self.data['video_ids'] = torch.cat((self.data['video_ids'], video_ids), dim=0)
@@ -243,7 +245,7 @@ class AverageMetric(Metric):
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
         """We will average the clip predictions with the same video_ids.
         """ 
-        super().add_clip_predictions(video_ids, clip_predictions, labels)
+        video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
         with torch.no_grad():
             for video_id, clip_prediction, label in zip(video_ids, clip_predictions, labels):
                 video_id = video_id.item()
