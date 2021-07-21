@@ -33,7 +33,7 @@ if __name__ == '__main__':
 
     def split_name(base_name = 'train'):
         name = base_name
-        name += '_kinetics'
+        name += '_kinetics_'
         name += args.split
 
         if args.partial:
