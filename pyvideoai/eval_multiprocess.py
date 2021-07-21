@@ -31,8 +31,10 @@ logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
 import configparser
 
+# Version checking
 import git
 from . import __version__
+import socket
 
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
@@ -48,8 +50,13 @@ def evaluation(args):
 
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
 
+    if args.version == 'auto':
+        _expversion = -2    # last version (do not create new)
+    else:
+        _expversion = int(args.version)
+
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
 
 
 
@@ -78,8 +85,11 @@ def evaluation(args):
         if rank == 0:
             repo = git.Repo(search_parent_directories=True)
             sha = repo.head.object.hexsha
+            logger.info(f"PyTorch=={torch.__version__}")
             logger.info(f"PyVideoAI=={__version__}")
             logger.info(f"PyVideoAI git hash: {sha}")
+            logger.info(f"Experiment folder: {exp.experiment_dir} on host {socket.gethostname()}")
+
             # save configs
 #            exp.dump_args(args)
             logger.info("args: " + json.dumps(args.__dict__, sort_keys=False, indent=4))
@@ -170,7 +180,7 @@ def evaluation(args):
 
         oneclip = args.mode == 'oneclip'
 
-        _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
+        _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], None, cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func)
 
         if rank == 0:
             # Update summary.csv

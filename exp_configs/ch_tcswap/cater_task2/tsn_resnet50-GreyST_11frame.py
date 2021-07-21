@@ -1,0 +1,14 @@
+import os
+_SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
+exec(open(f'{_SCRIPT_DIR}/../sparsesample_GreyST_crop224_8frame_largejit_plateau_10scrop.py').read())
+
+input_frame_length = 11
+def batch_size():
+    '''batch_size can be either integer or function returning integer.
+    '''
+    vram = torch.cuda.get_device_properties(0).total_memory
+    if vram > 20e+9:
+        return 32
+    elif vram > 10e+9:
+        return 16
+    return 8

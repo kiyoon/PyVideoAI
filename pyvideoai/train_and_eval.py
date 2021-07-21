@@ -9,6 +9,7 @@ from .utils.distributed_sampler_for_val import count_true_samples, get_last_batc
 
 from .utils.stdout_logger import OutputLogger
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+from .utils.lr_scheduling import ReduceLROnPlateauMultiple
 
 
 import logging
@@ -25,7 +26,7 @@ def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data
     inputs, uids, labels, _ = data_unpack_func(data)#{{{
     inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
 
-    if scheduler is not None and not isinstance(scheduler, ReduceLROnPlateau):
+    if scheduler is not None and not isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple)):
         lr = scheduler.get_last_lr()[0]
     else:
         lr = get_lr(optimiser)
@@ -43,7 +44,7 @@ def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data
     amp_scaler.scale(batch_loss).backward()
     amp_scaler.step(optimiser)
     amp_scaler.update()
-    if scheduler is not None and not isinstance(scheduler, ReduceLROnPlateau):      # Plateau scheduler will update at the end of epoch after validation.
+    if scheduler is not None and not isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple)):      # Plateau scheduler will update at the end of epoch after validation.
         with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
             scheduler.step()
 
@@ -187,13 +188,15 @@ def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dat
     return sample_seen, total_samples, loss, elapsed_time#}}}
 
 
-def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, PAD_VALUE = -1):
+def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best_metric, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, PAD_VALUE = -1):
     """Test for one epoch.
 
     Args:
         model: PyTorch model
         criterion: PyTorch loss criterion (e.g. nn.CrossEntropyLoss())
         dataloader (iterator): Mini-batch data iterator. Requires self.epoch_size and self.num_iters variable.
+        val_metrics (list of pyvideoai.metrics.Metric)
+        best_metric (pyvideoai.metrics.Metric): Has to be a part of val_metrics. Only required when one_clip=True and scheduler is ReduceLROnPlateauMultiple. Used for the scheduling.
         rank (int): Rank of the process in distributed training.
         world_size (int): Total number of processes in distributed training.
         scheduler (torch scheduler): Only needed when the scheduler is ReduceLROnPlateau, and using one clip eval.
@@ -205,7 +208,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
 
     cur_device = torch.cuda.current_device()
 
-    is_scheduler_plateau = one_clip and isinstance(scheduler, ReduceLROnPlateau)
+    is_scheduler_plateau = one_clip and isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple))
 
     with torch.no_grad():#{{{
         model.eval()
@@ -372,9 +375,6 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
         # Reset the iterator. Needs to be done at the end of epoch when __next__ is directly called instead of doing iteration.
 #        dataloader.reset()
 
-    if is_scheduler_plateau:
-        with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
-            scheduler.step(loss)
 
     if rank == 0:
         sys.stdout.write("\r")
@@ -403,7 +403,39 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, num_
 
         logger.info(eval_log_str)
 
-    else:
+
+
+    # Update ReduceLROnPlateau scheduling
+    if one_clip:
+        if rank == 0:
+            if best_metric.logging_msg_epoch() is None:
+                # Metric not calculated. Calculate now
+                best_metric.calculate_metrics()
+
+        if isinstance(scheduler, ReduceLROnPlateau):
+            with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
+                scheduler.step(loss)
+        elif isinstance(scheduler, ReduceLROnPlateauMultiple):
+            """This gets complicated.
+            Since all metrics are only calculated on rank 0, we have to broadcast the final calculated value across the world.
+            """
+            if rank == 0:
+                last_best_metric = best_metric.last_calculated_metrics
+                if isinstance(last_best_metric, (list,tuple)):
+                    last_best_metric = last_best_metric[0]  # use the first one. Maybe it is top1 acc.
+
+                last_best_metric = torch.FloatTensor([last_best_metric]).to(cur_device, non_blocking=True)
+            else:
+                last_best_metric = torch.FloatTensor([-100]).to(cur_device, non_blocking=True)
+
+            dist.broadcast(last_best_metric, 0)
+            last_best_metric = last_best_metric.item()
+
+            with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
+                scheduler.step(loss, last_best_metric, best_metric.is_better)
+
+
+    if rank != 0:
         sample_seen = None
         total_samples = None
         loss = None

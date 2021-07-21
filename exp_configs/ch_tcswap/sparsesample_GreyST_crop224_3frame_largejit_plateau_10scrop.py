@@ -10,15 +10,15 @@ def batch_size():
     '''
     vram = torch.cuda.get_device_properties(0).total_memory
     if vram > 20e+9:
-        return 32
+        return 128
     elif vram > 10e+9:
-        return 16
-    return 8
+        return 32
+    return 16
 
 def val_batch_size():
     return batch_size() if callable(batch_size) else batch_size
 
-input_frame_length = 8
+input_frame_length = 3
 crop_size = 224
 train_jitter_min = 224
 train_jitter_max = 336
