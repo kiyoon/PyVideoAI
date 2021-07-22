@@ -49,7 +49,6 @@ from requests import ConnectionError
 import configparser
 
 # Version checking
-import git
 from . import __version__
 import socket
 
@@ -105,11 +104,8 @@ def train(args):
             du.write_pids_to_file(os.path.join(config.PYVIDEOAI_DIR, 'tools', "last_pids.txt"))
 
         if rank == 0:
-            repo = git.Repo(search_parent_directories=True)
-            sha = repo.head.object.hexsha
             logger.info(f"PyTorch=={torch.__version__}")
             logger.info(f"PyVideoAI=={__version__}")
-            logger.info(f"PyVideoAI git hash: {sha}")
             logger.info(f"Experiment folder: {exp.experiment_dir} on host {socket.gethostname()}")
 
             # save configs

@@ -15,7 +15,7 @@ setup(
     packages=['pyvideoai', 'dataset_configs', 'model_configs', 'exp_configs'],
     python_requires='>=3.6',
     install_requires=['numpy>=1.16.0',
-       'gitpython', 'coloredlogs', 'verboselogs',
+       'coloredlogs', 'verboselogs',
        'matplotlib', 'scipy', 'scikit-learn',
        'seaborn',               # confusion matrix plots
        'pandas>=1.2.4',
