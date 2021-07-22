@@ -71,7 +71,7 @@ def train(args):
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
 
-    if args.version == 'auto':      # auto
+    if args.version == 'auto':
         if args.load_epoch == -1:
             _expversion = -2    # chooses the last version
         else:
