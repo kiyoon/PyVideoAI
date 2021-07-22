@@ -374,6 +374,7 @@ def train(args):
 
         # Because there are a lot of custom functions, we need to make sure that they're not doing anything wrong, by checking random values frequently!
         check_random_seed_in_sync()
+        exp.tg_send_text_with_expname(f'Starting experiment on host {socket.gethostname()}..')
         for epoch in range(start_epoch, args.num_epochs):
             if hasattr(cfg, "epoch_start_script"):
                 # structurise
