@@ -157,7 +157,7 @@ def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dat
     # In training, set pad_last_batch=True so that the shard size is always equivalent and it doesn't give you no batch for some processes at the last batch.
     for it, data in enumerate(dataloader):
 
-        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, dataloader.batch_size, speed, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length)
+        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, dataloader.batch_size, speed, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length, refresh_period=refresh_period)
 
     if rank == 0:
         if train_metrics is not None and len(train_metrics) > 0:
