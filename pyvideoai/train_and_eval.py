@@ -22,7 +22,7 @@ def get_lr(optimiser):
     for param_group in optimiser.param_groups:
         return param_group['lr']
 
-def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, batch_size, speed = 'standard', start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0):
+def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, batch_size, speed = 'standard', start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0, refresh_period=1):
     inputs, uids, labels, _ = data_unpack_func(data)#{{{
     inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
 
@@ -107,8 +107,10 @@ def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data
         else:
             # Pad empty spaces
             write_str += ' ' * (max_log_length - len(write_str))
-        sys.stdout.write(write_str)
-        sys.stdout.flush()
+
+        if it % refresh_period == 0:
+            sys.stdout.write(write_str)
+            sys.stdout.flush()
     else:
         loss = None
         elapsed_time = None
@@ -116,7 +118,7 @@ def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data
 
     return sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length#}}}
 
-def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dataloader, data_unpack_func, train_metrics, speed = 'standard', rank = 0, world_size = 1, input_reshape_func = None):
+def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dataloader, data_unpack_func, train_metrics, speed = 'standard', rank = 0, world_size = 1, input_reshape_func = None, refresh_period=1):
     """Train for one epoch.
 
     Args:
@@ -188,7 +190,7 @@ def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dat
     return sample_seen, total_samples, loss, elapsed_time#}}}
 
 
-def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best_metric, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, PAD_VALUE = -1):
+def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best_metric, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, refresh_period = 1, PAD_VALUE = -1):
     """Test for one epoch.
 
     Args:
@@ -368,8 +370,10 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
                 else:
                     # Pad empty spaces
                     write_str += ' ' * (max_log_length - len(write_str))
-                sys.stdout.write(write_str)
-                sys.stdout.flush()
+
+                if it % refresh_period == 0:
+                    sys.stdout.write(write_str)
+                    sys.stdout.flush()
 
 
         # Reset the iterator. Needs to be done at the end of epoch when __next__ is directly called instead of doing iteration.

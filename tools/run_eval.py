@@ -72,6 +72,7 @@ def add_eval_args(parser):
     parser.add_argument("-p", "--save_predictions", action='store_true',  help="Save the predictions after the evaluation.")
     parser.add_argument("-w", "--dataloader_num_workers", type=int, default=4, help="num_workers for PyTorch Dataset loader.")
     parser.add_argument("-B", "--telegram_bot_idx", type=int, default=0, help="Which Telegram bot to use defined in key.ini?")
+    parser.add_argument("-r", "--refresh_period", type=int, default=1, help="How many iterations until printing stats. Increase this if stdio is your bottleneck (such as Slurm printing to network file).")
     parser.add_argument("-v", "--version", type=str, default='auto', help="Experiment version (`auto` or integer). `auto` chooses the last version.")
 
 

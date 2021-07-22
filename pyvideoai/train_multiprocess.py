@@ -370,7 +370,8 @@ def train(args):
 
         # Because there are a lot of custom functions, we need to make sure that they're not doing anything wrong, by checking random values frequently!
         check_random_seed_in_sync()
-        exp.tg_send_text_with_expname(f'Starting experiment on host {socket.gethostname()}..')
+        if rank == 0:
+            exp.tg_send_text_with_expname(f'Starting experiment on host {socket.gethostname()}..')
         for epoch in range(start_epoch, args.num_epochs):
             if hasattr(cfg, "epoch_start_script"):
                 # structurise
@@ -400,7 +401,7 @@ def train(args):
                 print()
                 logger.info("Epoch %d/%d" % (epoch, args.num_epochs-1))
 
-            sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'])
+            sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
             if rank == 0:#{{{
                 curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
                 
@@ -427,7 +428,7 @@ def train(args):
                             curr_stat[csv_fieldname] = last_calculated_metric
                 #}}}
      
-            val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler)
+            val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler, refresh_period=args.refresh_period)
             if rank == 0:#{{{
                 curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
 
@@ -455,7 +456,7 @@ def train(args):
                 #}}}
 
             if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
-                multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None)  # No scheduler needed for multicropval
+                multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None, refresh_period=args.refresh_period)  # No scheduler needed for multicropval
                 if rank == 0:#{{{
                     curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
                     multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)

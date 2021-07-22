@@ -73,6 +73,7 @@ def add_train_args(parser):
     parser.add_argument("-T", "--telegram_post_period", type=int, default=10, help="Period (in epochs) to send the training stats on Telegram.")
     parser.add_argument("-B", "--telegram_bot_idx", type=int, default=0, help="Which Telegram bot to use defined in key.ini?")
     parser.add_argument("-w", "--dataloader_num_workers", type=int, default=4, help="num_workers for PyTorch Dataset loader.")
+    parser.add_argument("-r", "--refresh_period", type=int, default=1, help="How many iterations until printing stats. Increase this if stdio is your bottleneck (such as Slurm printing to network file).")
     parser.add_argument("-v", "--version", type=str, default='auto', help="Experiment version (`auto` or integer). `auto` chooses the last version when resuming from the last, otherwise creates new version.")
 
 
