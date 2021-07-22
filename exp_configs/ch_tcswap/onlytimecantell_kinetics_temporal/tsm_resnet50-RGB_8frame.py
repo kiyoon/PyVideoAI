@@ -1,0 +1,1 @@
+trn_resnet50-RGB_8frame.py
