@@ -71,15 +71,37 @@ def train(args):
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
 
+    load_version = None
     if args.version == 'auto':
         if args.load_epoch == -1:
-            _expversion = -2    # chooses the last version
+            _expversion = -2    # choose the last version
+        elif args.load_epoch is None:
+            _expversion = -1    # create new version
         else:
-            _expversion = -1    # creates new version
-    else:
-        _expversion = int(args.version)
+            # Load from intermediate (not last) checkpoint.
+            # Copy stats from the last version (until the loading epoch) and continue with a new version.
+            # Thus, load_version and _expversion is different
+            load_version = -2   # load from last version
+            _expversion = -1    # create new version
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+    else:
+        if args.load_epoch == -1 or args.load_epoch is None:
+            _expversion = int(args.version)
+        else:
+            load_version = int(args.version)
+            _expversion = -1
+
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
+            summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
+            version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+    if load_version is None:
+        load_exp = exp
+    else:
+        load_exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
+                summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
+                version = load_version, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+        load_exp.load_summary()
+        exp.copy_from(load_exp, copy_dirs = rank == 0, exclude_weights=True)
 
     if rank == 0:
         exp.make_dirs_for_training()
@@ -97,6 +119,7 @@ def train(args):
         root_logger.addHandler(f_handler)
     else:
         du.suppress_print()
+
 
     try:
         # Writes the pids to file, to make killing processes easier.    
@@ -203,20 +226,21 @@ def train(args):
 
         misc.log_model_info(model)
 
-        if args.load_epoch is not None:
-            # Training and validation stats
-            exp.load_summary()
 
+        if args.load_epoch is not None:
             if args.load_epoch == -1:
-                load_epoch = int(exp.summary['epoch'].iloc[-1])
+                load_epoch = int(load_exp.summary['epoch'].iloc[-1])
             elif args.load_epoch >= 0:
                 load_epoch = args.load_epoch
             else:
                 raise ValueError("Wrong args.load_epoch value: {:d}".format(args.load_epoch))
 
-            weights_path = exp.get_checkpoint_path(load_epoch)
+            weights_path = load_exp.get_checkpoint_path(load_epoch)
             checkpoint = loader.model_load_weights_GPU(model, weights_path, cur_device, world_size)
             start_epoch = load_epoch + 1
+
+            # Crop summary. We don't need stats later than `start_epoch`
+            exp.clip_summary_from_epoch(start_epoch)
 
         else:
             start_epoch = 0
