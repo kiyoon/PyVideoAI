@@ -228,6 +228,8 @@ def train(args):
 
 
         if args.load_epoch is not None:
+            if load_exp.summary is None:
+                load_exp.load_summary()
             if args.load_epoch == -1:
                 load_epoch = int(load_exp.summary['epoch'].iloc[-1])
             elif args.load_epoch >= 0:
