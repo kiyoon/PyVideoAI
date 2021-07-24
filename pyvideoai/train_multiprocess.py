@@ -96,6 +96,8 @@ def train(args):
             version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
     if world_size > 1:
         dist.barrier()      # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
+    if rank == 0:
+        exp._check_old_structure_and_move()
 
     if load_version is None:
         load_exp = exp
