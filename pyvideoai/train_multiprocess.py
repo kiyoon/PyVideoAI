@@ -589,8 +589,7 @@ def train(args):
                                 os.remove(model_path)
                                 io_error = False
                             except IOError as e:
-                                logger.exception("IOError whilst removing the model.")
-                                input("Press Enter to retry: ")
+                                logger.exception("IOError whilst removing the model. Skipping..")
                 
                 # Whatever the save mode is, make the best model symlink (keep it up-to-date)
                 best_model_name = exp.checkpoints_format.format(max_val_epoch)
