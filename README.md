@@ -90,11 +90,11 @@ cd PyVideoAI
 git checkout v0.1
 git submodule update --recursive
 cd submodules/video_datasets_api
-python setup.py develop
+pip install -e .
 cd ../experiment_utils
-python setup.py develop
+pip install -e .
 cd ../..
-python setup.py develop
+pip install -e .
 ```
 
 
