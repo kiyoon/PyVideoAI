@@ -432,7 +432,8 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
             else:
                 last_best_metric = torch.FloatTensor([-100]).to(cur_device, non_blocking=True)
 
-            dist.broadcast(last_best_metric, 0)
+            if world_size > 1:
+                dist.broadcast(last_best_metric, 0)
             last_best_metric = last_best_metric.item()
 
             with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
