@@ -10,5 +10,5 @@ def batch_size():
     if vram > 20e+9:
         return 12
     elif vram > 10e+9:
-        return 6
-    return 3
+        return 4
+    return 2
