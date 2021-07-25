@@ -8,7 +8,8 @@ import torch
 def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
-    vram = torch.cuda.get_device_properties(0).total_memory
+    devices=list(range(torch.cuda.device_count()))
+    vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
     if vram > 10e+9:
         return 16
     return 8
