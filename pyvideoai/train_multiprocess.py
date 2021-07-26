@@ -94,8 +94,7 @@ def train(args):
     exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
             summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
             version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
-    if world_size > 1:
-        dist.barrier()      # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
+    du.synchronize() # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
     if rank == 0:
         exp._check_old_structure_and_move()
 
@@ -105,8 +104,8 @@ def train(args):
         load_exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
                 summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
                 version = load_version, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
-        if world_size > 1:
-            dist.barrier()      # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
+        du.synchronize() # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
+
         load_exp.load_summary()
         exp.copy_from(load_exp, copy_dirs = rank == 0, exclude_weights=True)
 
@@ -260,8 +259,7 @@ def train(args):
 
             # All processes have to check if exp.summary_file exists, before rank0 will create the file.
             # Otherwise, rank1 can see the empty file and throw an error after rank0 creates it.
-            if world_size > 1:
-                dist.barrier()
+            du.synchronize() # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
 
             if rank == 0:
                 exp.init_summary()
