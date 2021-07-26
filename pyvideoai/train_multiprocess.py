@@ -584,14 +584,11 @@ def train(args):
                     if epoch > 0 and epoch - 1 != max_val_epoch:
                         # delete previous checkpoint if not best
                         model_path = exp.get_checkpoint_path(epoch-1) 
-                        io_error = True 
-                        while io_error:
-                            try:
-                                logger.info(f"Removing previous model: {model_path}")
-                                os.remove(model_path)
-                                io_error = False
-                            except IOError as e:
-                                logger.exception("IOError whilst removing the model. Skipping..")
+                        try:
+                            logger.info(f"Removing previous model: {model_path}")
+                            os.remove(model_path)
+                        except IOError as e:
+                            logger.exception("IOError whilst removing the model. Skipping..")
                 
                 # Whatever the save mode is, make the best model symlink (keep it up-to-date)
                 best_model_name = exp.checkpoints_format.format(max_val_epoch)
