@@ -121,7 +121,6 @@ def load_pretrained(model):
 
 def _dataloader_shape_to_model_input_shape(inputs):
     N, C, T, H, W = inputs.shape        # C = 1
-    logger.info(N, C, T, H, W)
     GreyST = inputs.view(N,3,T//3,H,W).reshape(N, T//3, 3, H, W).permute(0,2,1,3,4)
     return model_cfg.NCTHW_to_model_input_shape(GreyST)
 
