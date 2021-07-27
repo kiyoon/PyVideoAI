@@ -73,6 +73,12 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
 
         self.crop_size = crop_size
 
+        if greyscale:
+            assert len(mean) == 1
+            assert len(std) == 1
+        else:
+            assert len(mean) in [1, 3]
+            assert len(std) in [1, 3]
         self.mean = torch.FloatTensor(mean)
         self.std = torch.FloatTensor(std)
 

@@ -10,7 +10,9 @@ def batch_size():
     '''
     devices=list(range(torch.cuda.device_count()))
     vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
-    if vram > 10e+9:
+    if vram > 20e+9:
+        return 32 
+    elif vram > 10e+9:
         return 16
     return 8
 
@@ -20,7 +22,7 @@ def batch_size():
 #    return batch_size() if callable(batch_size) else batch_size
 
 input_frame_length = 8
-input_sample_rate = 8
+input_sample_rate = 3
 crop_size = 224
 train_jitter_min = 224
 train_jitter_max = 336
@@ -28,8 +30,8 @@ val_scale = 224
 val_num_ensemble_views = 1
 val_num_spatial_crops = 1
 test_scale = 224
-test_num_ensemble_views = 5
-test_num_spatial_crops = 1
+test_num_ensemble_views = 10
+test_num_spatial_crops = 3
 
 input_channel_num=[3]   # RGB
 
@@ -70,20 +72,20 @@ input_channel_num=[3]   # RGB
 #        },
 #    ]
 #
-#import logging
-#logger = logging.getLogger(__name__)
-#from pyvideoai.utils.early_stopping import min_value_within_lastN, best_value_within_lastN
-## optional
-#def early_stopping_condition(exp, metric_info):
-#    patience=20
-#    if not min_value_within_lastN(exp.summary['val_loss'], patience):
-#        best_metric_fieldname = metric_info['best_metric_fieldname']
-#        best_metric_is_better = metric_info['best_metric_is_better_func']
-#        if not best_value_within_lastN(exp.summary[best_metric_fieldname], patience, best_metric_is_better):
-#            logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {patience} epochs. Stopping training..")
-#            return True
-#
-#    return False
+import logging
+logger = logging.getLogger(__name__)
+from pyvideoai.utils.early_stopping import min_value_within_lastN, best_value_within_lastN
+# optional
+def early_stopping_condition(exp, metric_info):
+    patience=20
+    if not min_value_within_lastN(exp.summary['val_loss'], patience):
+        best_metric_fieldname = metric_info['best_metric_fieldname']
+        best_metric_is_better = metric_info['best_metric_is_better_func']
+        if not best_value_within_lastN(exp.summary[best_metric_fieldname], patience, best_metric_is_better):
+            logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {patience} epochs. Stopping training..")
+            return True
+
+    return False
 
 
 
@@ -118,7 +120,10 @@ def load_pretrained(model):
     model_cfg.load_pretrained_kinetics400(model, model_cfg.kinetics400_pretrained_path_8x8)
 
 def _dataloader_shape_to_model_input_shape(inputs):
-    return model_cfg.NCTHW_to_model_input_shape(inputs)
+    N, C, T, H, W = inputs.shape        # C = 1
+    logger.info(N, C, T, H, W)
+    GreyST = inputs.view(N,3,T//3,H,W).reshape(N, T//3, 3, H, W).permute(0,2,1,3,4)
+    return model_cfg.NCTHW_to_model_input_shape(GreyST)
 
 def get_input_reshape_func(split):
     '''
@@ -166,12 +171,13 @@ def _get_torch_dataset(csv_path, split):
         _test_num_ensemble_views = test_num_ensemble_views
         _test_num_spatial_crops = test_num_spatial_crops
     return FramesDensesampleDataset(csv_path, mode,
-            input_frame_length, input_sample_rate,
+            input_frame_length*3, input_sample_rate,
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
             test_scale=_test_scale, test_num_ensemble_views=_test_num_ensemble_views, test_num_spatial_crops=_test_num_spatial_crops,
             crop_size=crop_size,
-            mean = model_cfg.input_mean, std = model_cfg.input_std,
+            mean = [model_cfg.input_mean[0]], std = [model_cfg.input_std[0]],
             normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+            greyscale=True,
             path_prefix=dataset_cfg.frames_dir)
 
 def get_torch_dataset(split):
