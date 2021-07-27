@@ -16,8 +16,10 @@ def batch_size():
         return 16
     return 8
 
-def val_batch_size():
-    return batch_size() if callable(batch_size) else batch_size
+"""By default, val_batch_size is the same as batch_size
+"""
+#def val_batch_size():
+#    return batch_size() if callable(batch_size) else batch_size
 
 input_frame_length = 8
 crop_size = 224
@@ -74,10 +76,12 @@ def optimiser(params):
 
     return torch.optim.SGD(params, lr = learning_rate, momentum = 0.9, weight_decay = 5e-4)
 
+from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
     #return torch.optim.lr_scheduler.StepLR(optimiser, step_size = 50 * iters_per_epoch, gamma = 0.1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
-    return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+    #return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+    return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
     #return None
 
 def load_model():
