@@ -10,7 +10,7 @@ def batch_size():
     devices=list(range(torch.cuda.device_count()))
     vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
     if vram > 20e+9:
-        return 16
-    elif vram > 10e+9:
         return 8
-    return 4
+    elif vram > 10e+9:
+        return 4
+    return 2
