@@ -13,8 +13,8 @@ from pyvideoai.tasks import SingleLabelClassificationTask
 task = SingleLabelClassificationTask()
 
 # Paths
-dataset_root = os.path.join(DATA_DIR, 'something-something-v1')
-frames_dir = '/dev/shm/something-something-v1/frames'
+dataset_root = '/dev/shm/datasets/something-something-v1'
+frames_dir = os.path.join(dataset_root, 'frames')
 annotations_root = os.path.join(dataset_root, 'annotations')
 label_csv = os.path.join(annotations_root, 'something-something-v1-labels.csv')
 class_keys = pd.DataFrame(get_class_keys_shrinked(label_csv), columns=['class_keys'])['class_keys']
