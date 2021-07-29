@@ -401,101 +401,100 @@ def train(args):
 
         # Because there are a lot of custom functions, we need to make sure that they're not doing anything wrong, by checking random values frequently!
         check_random_seed_in_sync()
-        if rank == 0:
-            exp.tg_send_text_with_expname(f'Starting experiment..')
-        for epoch in range(start_epoch, args.num_epochs):
-            if hasattr(cfg, "epoch_start_script"):
-                # structurise
-                train_kit = {}
-                train_kit["model"] = model
-                train_kit["optimiser"] = optimiser 
-                train_kit["scheduler"] = scheduler 
-                train_kit["criterion"] = criterion 
-                train_kit["train_dataloader"] = train_dataloader 
-                train_kit["data_unpack_funcs"] = data_unpack_funcs 
-                train_kit["input_reshape_funcs"] = input_reshape_funcs 
-                # train_kit can be modified in the function
-                cfg.epoch_start_script(epoch, copy.deepcopy(exp), copy.deepcopy(args), rank, world_size, train_kit)
-                # unpack and apply the modifications
-                model = train_kit["model"]
-                optimiser = train_kit["optimiser"]
-                scheduler = train_kit["scheduler"]
-                criterion = train_kit["criterion"]
-                train_dataloader = train_kit["train_dataloader"]
-                data_unpack_funcs = train_kit["data_unpack_funcs"]
-                input_reshape_funcs = train_kit["input_reshape_funcs"]
 
-            # Shuffle the dataset.
-            loader.shuffle_dataset(train_dataloader, epoch, args.seed)
-
+        # Before training, check if it already meets the early stopping condition.
+        early_stopping_flag = False
+        if hasattr(cfg, 'early_stopping_condition'):
             if rank == 0:
-                print()
-                logger.info("Epoch %d/%d" % (epoch, args.num_epochs-1))
+                metric_info = {'metrics': metrics,
+                        'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric.is_better}
+                early_stopping = cfg.early_stopping_condition(exp, metric_info)
+            else:
+                early_stopping=-1   #dummy
 
-            sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
-            if rank == 0:#{{{
-                curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
-                
-                train_writer.add_scalar('Loss', loss, epoch)
-                train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
-                train_writer.add_scalar('Sample_seen', sample_seen, epoch)
-                train_writer.add_scalar('Total_samples', total_samples, epoch)
+            if world_size > 1:
+                # Broadcast the early stopping flag to the entire process.
+                early_stopping_flag = torch.ByteTensor([early_stopping]).to(cur_device)
+                dist.broadcast(early_stopping_flag, 0)
+                # Copy from GPU to CPU (sync point)
+                early_stopping_flag = bool(early_stopping_flag.item())
+            else:
+                early_stopping_flag = early_stopping
 
-                for metric in metrics['train']:
-                    tensorboard_tags = metric.tensorboard_tags()
-                    if not isinstance(tensorboard_tags, (list, tuple)):
-                        tensorboard_tags = (tensorboard_tags,)
-                    csv_fieldnames = metric.get_csv_fieldnames()
-                    if not isinstance(csv_fieldnames, (list, tuple)):
-                        csv_fieldnames = (csv_fieldnames,)
-                    last_calculated_metrics = metric.last_calculated_metrics
-                    if not isinstance(last_calculated_metrics, (list, tuple)):
-                        last_calculated_metrics = (last_calculated_metrics,)
+        if early_stopping_flag:
+            logger.info("Early stopping triggered.")
+            if rank == 0:
+                exp.tg_send_text_with_expname(f'Early stopping triggered.')
+        else:
+            if rank == 0:
+                exp.tg_send_text_with_expname(f'Starting experiment..')
 
-                    for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
-                        if tensorboard_tag is not None:
-                            train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                        if csv_fieldname is not None:
-                            curr_stat[csv_fieldname] = last_calculated_metric
-                #}}}
-     
-            val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler, refresh_period=args.refresh_period)
-            if rank == 0:#{{{
-                curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
+            for epoch in range(start_epoch, args.num_epochs):
+                if hasattr(cfg, "epoch_start_script"):
+                    # structurise
+                    train_kit = {}
+                    train_kit["model"] = model
+                    train_kit["optimiser"] = optimiser 
+                    train_kit["scheduler"] = scheduler 
+                    train_kit["criterion"] = criterion 
+                    train_kit["train_dataloader"] = train_dataloader 
+                    train_kit["data_unpack_funcs"] = data_unpack_funcs 
+                    train_kit["input_reshape_funcs"] = input_reshape_funcs 
+                    # train_kit can be modified in the function
+                    cfg.epoch_start_script(epoch, copy.deepcopy(exp), copy.deepcopy(args), rank, world_size, train_kit)
+                    # unpack and apply the modifications
+                    model = train_kit["model"]
+                    optimiser = train_kit["optimiser"]
+                    scheduler = train_kit["scheduler"]
+                    criterion = train_kit["criterion"]
+                    train_dataloader = train_kit["train_dataloader"]
+                    data_unpack_funcs = train_kit["data_unpack_funcs"]
+                    input_reshape_funcs = train_kit["input_reshape_funcs"]
 
-                val_writer.add_scalar('Loss', val_loss, epoch)
-                val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
-                val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
-                val_writer.add_scalar('Total_samples', val_total_samples, epoch)
+                # Shuffle the dataset.
+                loader.shuffle_dataset(train_dataloader, epoch, args.seed)
 
-                for metric in metrics['val']:
-                    tensorboard_tags = metric.tensorboard_tags()
-                    if not isinstance(tensorboard_tags, (list, tuple)):
-                        tensorboard_tags = (tensorboard_tags,)
-                    csv_fieldnames = metric.get_csv_fieldnames()
-                    if not isinstance(csv_fieldnames, (list, tuple)):
-                        csv_fieldnames = (csv_fieldnames,)
-                    last_calculated_metrics = metric.last_calculated_metrics
-                    if not isinstance(last_calculated_metrics, (list, tuple)):
-                        last_calculated_metrics = (last_calculated_metrics,)
+                if rank == 0:
+                    print()
+                    logger.info("Epoch %d/%d" % (epoch, args.num_epochs-1))
 
-                    for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
-                        if tensorboard_tag is not None:
-                            train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                        if csv_fieldname is not None:
-                            curr_stat[csv_fieldname] = last_calculated_metric
-                #}}}
-
-            if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
-                multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None, refresh_period=args.refresh_period)  # No scheduler needed for multicropval
+                sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
                 if rank == 0:#{{{
-                    curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
-                    multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
-                    multi_crop_val_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
-                    multi_crop_val_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
-                    multi_crop_val_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
+                    curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
+                    
+                    train_writer.add_scalar('Loss', loss, epoch)
+                    train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
+                    train_writer.add_scalar('Sample_seen', sample_seen, epoch)
+                    train_writer.add_scalar('Total_samples', total_samples, epoch)
 
-                    for metric in metrics['multicropval']:
+                    for metric in metrics['train']:
+                        tensorboard_tags = metric.tensorboard_tags()
+                        if not isinstance(tensorboard_tags, (list, tuple)):
+                            tensorboard_tags = (tensorboard_tags,)
+                        csv_fieldnames = metric.get_csv_fieldnames()
+                        if not isinstance(csv_fieldnames, (list, tuple)):
+                            csv_fieldnames = (csv_fieldnames,)
+                        last_calculated_metrics = metric.last_calculated_metrics
+                        if not isinstance(last_calculated_metrics, (list, tuple)):
+                            last_calculated_metrics = (last_calculated_metrics,)
+
+                        for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
+                            if tensorboard_tag is not None:
+                                train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                            if csv_fieldname is not None:
+                                curr_stat[csv_fieldname] = last_calculated_metric
+                    #}}}
+         
+                val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler, refresh_period=args.refresh_period)
+                if rank == 0:#{{{
+                    curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
+
+                    val_writer.add_scalar('Loss', val_loss, epoch)
+                    val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
+                    val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
+                    val_writer.add_scalar('Total_samples', val_total_samples, epoch)
+
+                    for metric in metrics['val']:
                         tensorboard_tags = metric.tensorboard_tags()
                         if not isinstance(tensorboard_tags, (list, tuple)):
                             tensorboard_tags = (tensorboard_tags,)
@@ -513,109 +512,136 @@ def train(args):
                                 curr_stat[csv_fieldname] = last_calculated_metric
                     #}}}
 
+                if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
+                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None, refresh_period=args.refresh_period)  # No scheduler needed for multicropval
+                    if rank == 0:#{{{
+                        curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
+                        multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
+                        multi_crop_val_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
+                        multi_crop_val_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
+                        multi_crop_val_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
 
-            early_stopping = False      # need it for the entire process, because later we'll broadcast
+                        for metric in metrics['multicropval']:
+                            tensorboard_tags = metric.tensorboard_tags()
+                            if not isinstance(tensorboard_tags, (list, tuple)):
+                                tensorboard_tags = (tensorboard_tags,)
+                            csv_fieldnames = metric.get_csv_fieldnames()
+                            if not isinstance(csv_fieldnames, (list, tuple)):
+                                csv_fieldnames = (csv_fieldnames,)
+                            last_calculated_metrics = metric.last_calculated_metrics
+                            if not isinstance(last_calculated_metrics, (list, tuple)):
+                                last_calculated_metrics = (last_calculated_metrics,)
 
-            if rank == 0:
-                exp.add_summary_line(curr_stat)
-                figs = metric_plotter.plot(exp)
+                            for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
+                                if tensorboard_tag is not None:
+                                    train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                                if csv_fieldname is not None:
+                                    curr_stat[csv_fieldname] = last_calculated_metric
+                        #}}}
 
+
+                early_stopping = False      # need it for the entire process, because later we'll broadcast
+
+                if rank == 0:
+                    exp.add_summary_line(curr_stat)
+                    figs = metric_plotter.plot(exp)
+
+                    if hasattr(cfg, 'early_stopping_condition'):
+                        metric_info = {'metrics': metrics,
+                                'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric.is_better}
+                        early_stopping = cfg.early_stopping_condition(exp, metric_info)
+                    
+                    send_telegram = early_stopping or (epoch % args.telegram_post_period == args.telegram_post_period -1)
+                    if send_telegram:
+                        try:
+                            logger.info('Sending plots to Telegram.')
+                            start_time_plot = time.time()
+                            telegram_reporter.report(metrics, exp, figs)
+                        except (SSLCertVerificationError, OSError, NewConnectionError, MaxRetryError, ConnectionError) as e:
+                            """Usually, max-retries exceeds when you run it for a while.
+                            Therefore, even if it fails to send the plots, don't crash the programme and keep it running.
+                            """
+                            logger.exception('Failed to send plots to Telegram.')
+
+                        elapsed_time_plot = time.time() - start_time_plot
+
+                    for plot_basename, fig in figs:
+                        plt.close(fig)
+
+                    if args.telegram_post_period < 100 and send_telegram and elapsed_time_plot > 5 * 60:
+                        # Sending plots to telegram took longer than 5 mins.
+                        # Telegram is limiting the traffic due to heavy usage.
+                        logger.warning('Sending plots to Telegram took over 5 mins. Setting the plotting period to 100 epochs.')
+                        args.telegram_post_period = 100
+
+
+                    val_metric = curr_stat[best_metric_fieldname]    # which metric to use for deciding the best model
+
+                    is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric)
+                    if is_better:
+                        max_val_metric = val_metric
+                        max_val_epoch = epoch
+
+                    if is_better or args.save_mode in ["all", "last_and_peaks"]:
+                        # all, last_and_peaks: save always
+                        # higher: save model when higher
+                        model_path = exp.get_checkpoint_path(epoch) 
+                        io_error = True 
+                        while io_error:
+                            try:
+                                logger.info(f"Saving model to {model_path}")
+                                state_dict = model.module.state_dict() if world_size > 1 else model.state_dict()
+                                checkpoint = {
+                                        "epoch": epoch,
+                                        "model_state": state_dict,
+                                        "optimiser_state": optimiser.state_dict(),
+                                        "scheduler_state": None if scheduler is None else scheduler.state_dict(),
+                                        "amp_scaler_state": None if not use_amp else amp_scaler.state_dict(),
+                                    }
+                                torch.save(checkpoint, model_path)
+                                io_error = False
+                            except IOError as e:
+                                logger.exception("IOError whilst saving the model.")
+                                input("Press Enter to retry: ")
+
+                    if args.save_mode == "last_and_peaks":
+                        if epoch > 0 and epoch - 1 != max_val_epoch:
+                            # delete previous checkpoint if not best
+                            model_path = exp.get_checkpoint_path(epoch-1) 
+                            try:
+                                logger.info(f"Removing previous model: {model_path}")
+                                os.remove(model_path)
+                            except IOError as e:
+                                logger.exception("IOError whilst removing the model. Skipping..")
+                    
+                    # Whatever the save mode is, make the best model symlink (keep it up-to-date)
+                    best_model_name = exp.checkpoints_format.format(max_val_epoch)
+                    best_symlink_path = os.path.join(exp.weights_dir, 'best.pth')
+                    if os.path.islink(best_symlink_path):
+                        os.remove(best_symlink_path)
+                    os.symlink(best_model_name, best_symlink_path)  # first argument not full path -> make relative symlink
+
+                    
                 if hasattr(cfg, 'early_stopping_condition'):
-                    metric_info = {'metrics': metrics,
-                            'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric.is_better}
-                    early_stopping = cfg.early_stopping_condition(exp, metric_info)
-                
-                send_telegram = early_stopping or (epoch % args.telegram_post_period == args.telegram_post_period -1)
-                if send_telegram:
-                    try:
-                        logger.info('Sending plots to Telegram.')
-                        start_time_plot = time.time()
-                        telegram_reporter.report(metrics, exp, figs)
-                    except (SSLCertVerificationError, OSError, NewConnectionError, MaxRetryError, ConnectionError) as e:
-                        """Usually, max-retries exceeds when you run it for a while.
-                        Therefore, even if it fails to send the plots, don't crash the programme and keep it running.
-                        """
-                        logger.exception('Failed to send plots to Telegram.')
+                    if world_size > 1:
+                        # Broadcast the early stopping flag to the entire process.
+                        early_stopping_flag = torch.ByteTensor([early_stopping]).to(cur_device)
+                        dist.broadcast(early_stopping_flag, 0)
+                        # Copy from GPU to CPU (sync point)
+                        early_stopping_flag = bool(early_stopping_flag.item())
+                    else:
+                        early_stopping_flag = early_stopping
 
-                    elapsed_time_plot = time.time() - start_time_plot
+                    if early_stopping_flag:
+                        logger.info("Early stopping triggered.")
+                        break
 
-                for plot_basename, fig in figs:
-                    plt.close(fig)
-
-                if args.telegram_post_period < 100 and send_telegram and elapsed_time_plot > 5 * 60:
-                    # Sending plots to telegram took longer than 5 mins.
-                    # Telegram is limiting the traffic due to heavy usage.
-                    logger.warning('Sending plots to Telegram took over 5 mins. Setting the plotting period to 100 epochs.')
-                    args.telegram_post_period = 100
+                check_random_seed_in_sync()
 
 
-                val_metric = curr_stat[best_metric_fieldname]    # which metric to use for deciding the best model
-
-                is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric)
-                if is_better:
-                    max_val_metric = val_metric
-                    max_val_epoch = epoch
-
-                if is_better or args.save_mode in ["all", "last_and_peaks"]:
-                    # all, last_and_peaks: save always
-                    # higher: save model when higher
-                    model_path = exp.get_checkpoint_path(epoch) 
-                    io_error = True 
-                    while io_error:
-                        try:
-                            logger.info(f"Saving model to {model_path}")
-                            state_dict = model.module.state_dict() if world_size > 1 else model.state_dict()
-                            checkpoint = {
-                                    "epoch": epoch,
-                                    "model_state": state_dict,
-                                    "optimiser_state": optimiser.state_dict(),
-                                    "scheduler_state": None if scheduler is None else scheduler.state_dict(),
-                                    "amp_scaler_state": None if not use_amp else amp_scaler.state_dict(),
-                                }
-                            torch.save(checkpoint, model_path)
-                            io_error = False
-                        except IOError as e:
-                            logger.exception("IOError whilst saving the model.")
-                            input("Press Enter to retry: ")
-
-                if args.save_mode == "last_and_peaks":
-                    if epoch > 0 and epoch - 1 != max_val_epoch:
-                        # delete previous checkpoint if not best
-                        model_path = exp.get_checkpoint_path(epoch-1) 
-                        try:
-                            logger.info(f"Removing previous model: {model_path}")
-                            os.remove(model_path)
-                        except IOError as e:
-                            logger.exception("IOError whilst removing the model. Skipping..")
-                
-                # Whatever the save mode is, make the best model symlink (keep it up-to-date)
-                best_model_name = exp.checkpoints_format.format(max_val_epoch)
-                best_symlink_path = os.path.join(exp.weights_dir, 'best.pth')
-                if os.path.islink(best_symlink_path):
-                    os.remove(best_symlink_path)
-                os.symlink(best_model_name, best_symlink_path)  # first argument not full path -> make relative symlink
-
-                
-            if hasattr(cfg, 'early_stopping_condition'):
-                if world_size > 1:
-                    # Broadcast the early stopping flag to the entire process.
-                    early_stopping_flag = torch.ByteTensor([early_stopping]).to(cur_device)
-                    dist.broadcast(early_stopping_flag, 0)
-                    # Copy from GPU to CPU (sync point)
-                    early_stopping_flag = bool(early_stopping_flag.item())
-                else:
-                    early_stopping_flag = early_stopping
-
-                if early_stopping_flag:
-                    logger.info("Early stopping triggered.")
-                    break
-
-            check_random_seed_in_sync()
-
-
-        logger.success('Finished training')
-        if rank == 0:
-            exp.tg_send_text_with_expname('Finished training')
+            logger.success('Finished training')
+            if rank == 0:
+                exp.tg_send_text_with_expname('Finished training')
 
     except Exception as e:
         logger.exception("Exception occurred")
