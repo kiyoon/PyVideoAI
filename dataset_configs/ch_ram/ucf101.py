@@ -13,7 +13,7 @@ task = SingleLabelClassificationTask()
 
 dataset_root = os.path.join('/dev/shm/datasets/ucf101')
 annotations_root = os.path.join(dataset_root, 'ucfTrainTestlist')
-class_keys = pd.DataFrame(get_class_keys(os.path.join(annotations_root, 'classInd.txt')), columns=['class_keys'])['class_keys']
+#class_keys = pd.DataFrame(get_class_keys(os.path.join(annotations_root, 'classInd.txt')), columns=['class_keys'])['class_keys']
 frames_dir = os.path.join(dataset_root, "frames_q5")
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 split_file_basename1 = {'train': 'trainlist01.txt', 'val': 'testlist01.txt', 'multicropval': 'testlist01.txt'}
