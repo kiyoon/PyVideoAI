@@ -404,22 +404,23 @@ def train(args):
 
         # Before training, check if it already meets the early stopping condition.
         early_stopping_flag = False
-        if hasattr(cfg, 'early_stopping_condition'):
-            if rank == 0:
-                metric_info = {'metrics': metrics,
-                        'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric.is_better}
-                early_stopping = cfg.early_stopping_condition(exp, metric_info)
-            else:
-                early_stopping=-1   #dummy
+        if start_epoch > 0:
+            if hasattr(cfg, 'early_stopping_condition'):
+                if rank == 0:
+                    metric_info = {'metrics': metrics,
+                            'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric.is_better}
+                    early_stopping = cfg.early_stopping_condition(exp, metric_info)
+                else:
+                    early_stopping=-1   #dummy
 
-            if world_size > 1:
-                # Broadcast the early stopping flag to the entire process.
-                early_stopping_flag = torch.ByteTensor([early_stopping]).to(cur_device)
-                dist.broadcast(early_stopping_flag, 0)
-                # Copy from GPU to CPU (sync point)
-                early_stopping_flag = bool(early_stopping_flag.item())
-            else:
-                early_stopping_flag = early_stopping
+                if world_size > 1:
+                    # Broadcast the early stopping flag to the entire process.
+                    early_stopping_flag = torch.ByteTensor([early_stopping]).to(cur_device)
+                    dist.broadcast(early_stopping_flag, 0)
+                    # Copy from GPU to CPU (sync point)
+                    early_stopping_flag = bool(early_stopping_flag.item())
+                else:
+                    early_stopping_flag = early_stopping
 
         if early_stopping_flag:
             logger.info("Early stopping triggered.")
