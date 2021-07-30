@@ -92,7 +92,7 @@ def load_model():
 def _dataloader_shape_to_model_input_shape(inputs):
     N, C, T, H, W = inputs.shape
     # supposed to be N, C, T, H, W -> N, T, C, H, W -> N, TC, H, W
-    ordering = list(map(lambda x: x*3 % T, range(T)))
+    ordering = list(map(lambda x: x*11 % T, range(T)))
     return inputs.reshape(N, T, C, H, W)[:,ordering,:,:,:].view(N, -1, H, W)
 
 def get_input_reshape_func(split):
