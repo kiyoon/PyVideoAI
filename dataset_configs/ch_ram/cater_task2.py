@@ -11,7 +11,7 @@ task = MultiLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, "cater/max2action")
-frames_dir = '/dev/shm/cater/max2action/frames'
+frames_dir = '/dev/shm/datasets/cater/max2action/frames'
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames/actions_order_uniq")
 split_file_basename = {'train': 'train.txt', 'val': 'val.txt', 'multicropval': 'val.txt'}
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
