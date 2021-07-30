@@ -89,15 +89,16 @@ def load_model():
 #def load_pretrained(model):
 #    return
 
+T = input_frame_length
+if T % 3 == 0:
+    ordering = [int(x*(T/3) + x//3) % T for x in range(T)]
+elif T % 3 == 1:
+    ordering = [(x*((2*T+1)//3)) % T for x in range(T)]
+else:
+    ordering = [(x*((T+1)//3)) % T for x in range(T)]
 def _dataloader_shape_to_model_input_shape(inputs):
     N, C, T, H, W = inputs.shape
     # supposed to be N, C, T, H, W -> N, T, C, H, W -> N, TC, H, W
-    if T % 3 == 0:
-        ordering = [int(x*(T/3) + x//3) % T for x in range(T)]
-    elif T % 3 == 1:
-        ordering = [(x*((2*T+1)//3)) % T for x in range(T)]
-    else:
-        ordering = [(x*((T+1)//3)) % T for x in range(T)]
     return inputs.reshape(N, T, C, H, W)[:,ordering,:,:,:].view(N, -1, H, W)
 
 def get_input_reshape_func(split):

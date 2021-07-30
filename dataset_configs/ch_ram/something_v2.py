@@ -11,7 +11,7 @@ task = SingleLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'something-something-v2')
-frames_dir = '/dev/shm/something-something-v2/frames_q5'
+frames_dir = '/dev/shm/datasets/something-something-v2/frames_q5'
 annotations_root = os.path.join(dataset_root, 'annotations')
 label_json = os.path.join(annotations_root, 'something-something-v2-labels.json')
 class_keys = pd.DataFrame(get_class_keys_shrinked(label_json), columns=['class_keys'])['class_keys']
