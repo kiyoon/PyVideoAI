@@ -2,7 +2,7 @@ import os
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 exec(open(f'{_SCRIPT_DIR}/../sparsesample_OrderedTCswap_crop224_8frame_largejit_plateau_10scrop.py').read())
 
-input_frame_length = 32
+input_frame_length = 33
 T = input_frame_length
 if T % 3 == 0:
     ordering = [(x*(T//3) + x//3) % T for x in range(T)]
