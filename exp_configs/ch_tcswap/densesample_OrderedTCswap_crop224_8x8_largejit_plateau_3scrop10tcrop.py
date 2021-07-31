@@ -1,6 +1,6 @@
 import os
 
-from pyvideoai.dataloaders.frames_sparsesample_dataset import FramesSparsesampleDataset
+from pyvideoai.dataloaders.frames_densesample_dataset import FramesDensesampleDataset
 
 import torch
 
@@ -11,22 +11,30 @@ def batch_size():
     devices=list(range(torch.cuda.device_count()))
     vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
     if vram > 20e+9:
-        return 32
+        return 32 
     elif vram > 10e+9:
         return 16
     return 8
 
-def val_batch_size():
-    return batch_size() if callable(batch_size) else batch_size
+"""By default, val_batch_size is the same as batch_size
+"""
+#def val_batch_size():
+#    return batch_size() if callable(batch_size) else batch_size
 
 input_frame_length = 8
+input_sample_rate = 8
 crop_size = 224
 train_jitter_min = 224
 train_jitter_max = 336
-val_scale = 256
+val_scale = 224
+val_num_ensemble_views = 1
 val_num_spatial_crops = 1
-test_scale = 256
-test_num_spatial_crops = 10
+test_scale = 224
+test_num_ensemble_views = 10
+test_num_spatial_crops = 3
+
+input_channel_num=[3]   # RGB
+
 
 #### OPTIONAL
 #def criterion():
@@ -34,15 +42,36 @@ test_num_spatial_crops = 10
 #
 #def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
 #    return None
-
-# optional
-def get_optim_policies(model):
-    """
-    You can set different learning rates on different blocks of the network.
-    Refer to `get_optim_policies()` in pyvideoai/models/epic/tsn.py
-    """
-    return model_cfg.get_optim_policies(model)
-
+#
+#def get_optim_policies(model):
+#    """
+#    You can set different learning rates on different blocks of the network.
+#    Refer to `get_optim_policies()` in pyvideoai/models/epic/tsn.py
+#    """
+#    conv_weight = []
+#    conv_bias = []
+#    for m in model.parameters():
+#        if isinstance(m, torch.nn.Conv2d) or isinstance(m, torch.nn.Conv1d):
+#            ps = list(m.parameters())
+#            conv_weight.append(ps[0])
+#            if len(ps) == 2:
+#                conv_bias.append(ps[1])
+#        # ...
+#    return [
+#        {   
+#            "params": conv_weight,
+#            "lr_mult": 1,
+#            "decay_mult": 1,
+#            "name": "conv_weight",
+#        },
+#        {   
+#            "params": conv_bias,
+#            "lr_mult": 2,
+#            "decay_mult": 0,
+#            "name": "conv_bias",
+#        },
+#    ]
+#
 import logging
 logger = logging.getLogger(__name__)
 from pyvideoai.utils.early_stopping import min_value_within_lastN, best_value_within_lastN
@@ -59,6 +88,7 @@ def early_stopping_condition(exp, metric_info):
     return False
 
 
+
 from pyvideoai.utils.distributed import get_world_size
 def optimiser(params):
     """
@@ -66,7 +96,7 @@ def optimiser(params):
     When distributing, LR should be multiplied by the number of processes (# GPUs)
     Thus, LR = base_LR * batch_size_per_proc * (num_GPUs**2)
     """
-    base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
+    base_learning_rate = 1e-5      # when batch_size == 1 and #GPUs == 1
 
     batchsize = batch_size() if callable(batch_size) else batch_size
     world_size = get_world_size()
@@ -83,11 +113,11 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return None
 
 def load_model():
-    return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
+    return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, crop_size, input_channel_num)
 
 # optional
-#def load_pretrained(model):
-#    return
+def load_pretrained(model):
+    model_cfg.load_pretrained_kinetics400(model, model_cfg.kinetics400_pretrained_path_8x8)
 
 T = input_frame_length
 if T % 3 == 0:
@@ -98,8 +128,8 @@ else:
     ordering = [(x*((T+1)//3)) % T for x in range(T)]
 def _dataloader_shape_to_model_input_shape(inputs):
     N, C, T, H, W = inputs.shape
-    # supposed to be N, C, T, H, W -> N, T, C, H, W -> N, TC, H, W
-    return inputs.reshape(N, T, C, H, W)[:,ordering,:,:,:].view(N, -1, H, W)
+    inputs = inputs.reshape(N, T, C, H, W)[:,ordering,:,:,:].permute(0,2,1,3,4)
+    return model_cfg.NCTHW_to_model_input_shape(inputs)
 
 def get_input_reshape_func(split):
     '''
@@ -119,9 +149,8 @@ def _unpack_data(data):
     '''
     From dataloader returning values to (inputs, uids, labels, [reserved]) format
     '''
-    inputs, uids, labels, spatial_idx, _, _ = data
-    return inputs, uids, labels, spatial_idx
-
+    inputs, uids, labels, spatial_idx, temporal_idx, _, _ = data
+    return inputs, uids, labels, {"spatial_idx": spatial_idx, "temporal_idx": temporal_idx}
 
 def get_data_unpack_func(split):
     '''
@@ -132,34 +161,37 @@ def get_data_unpack_func(split):
     elif split == 'multicropval':
         return _unpack_data
     else:
-        assert False, 'unknown split'
+        raise ValueError(f'Unknown split: {split}')
     '''
     return _unpack_data
 
-
 def _get_torch_dataset(csv_path, split):
     mode = dataset_cfg.split2mode[split]
+
     if split == 'val':
         _test_scale = val_scale
+        _test_num_ensemble_views = val_num_ensemble_views
         _test_num_spatial_crops = val_num_spatial_crops
     else:
         _test_scale = test_scale
+        _test_num_ensemble_views = test_num_ensemble_views
         _test_num_spatial_crops = test_num_spatial_crops
-    return FramesSparsesampleDataset(csv_path, mode,
-            input_frame_length, 
+    return FramesDensesampleDataset(csv_path, mode,
+            input_frame_length, input_sample_rate,
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
-            test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+            test_scale=_test_scale, test_num_ensemble_views=_test_num_ensemble_views, test_num_spatial_crops=_test_num_spatial_crops,
             crop_size=crop_size,
             mean = model_cfg.input_mean, std = model_cfg.input_std,
             normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+            greyscale=False,
             path_prefix=dataset_cfg.frames_dir)
 
 def get_torch_dataset(split):
 
-    mode = dataset_cfg.split2mode[split]
     csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename[split])
 
     return _get_torch_dataset(csv_path, split)
+
 
 
 """
