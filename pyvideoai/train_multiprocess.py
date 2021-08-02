@@ -286,6 +286,13 @@ def train(args):
                 logger.error(f"Loading optimiser state_dict failed: {repr(e)}")
         iters_per_epoch = len(train_dataloader)
 
+        # Gradient Clipping
+        if hasattr(cfg, 'clip_grad_max_norm'):
+            clip_grad_max_norm = cfg.clip_grad_max_norm() if callable(cfg.clip_grad_max_norm) else cfg.clip_grad_max_norm
+        else:
+            clip_grad_max_norm = None
+
+        # Scheduling
         scheduler = cfg.scheduler(optimiser, iters_per_epoch)
         if isinstance(scheduler, ReduceLROnPlateau):
             logger.info("ReduceLROnPlateau scheduler is selected. The `scheduler.step(val_loss)` function will be called at the end of epoch (after validation), but not every iteration.")
@@ -459,7 +466,7 @@ def train(args):
                     print()
                     logger.info("Epoch %d/%d" % (epoch, args.num_epochs-1))
 
-                sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
+                sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
                 if rank == 0:#{{{
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
                     

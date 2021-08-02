@@ -22,7 +22,7 @@ def get_lr(optimiser):
     for param_group in optimiser.param_groups:
         return param_group['lr']
 
-def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, batch_size, speed = 'standard', start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0, refresh_period=1):
+def train_iter(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_amp, amp_scaler, data, data_unpack_func, train_metrics, batch_size, speed = 'standard', start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0, refresh_period=1):
     inputs, uids, labels, _ = data_unpack_func(data)#{{{
     inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
 
@@ -40,8 +40,15 @@ def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data
     with torch.cuda.amp.autocast(enabled=use_amp):
         outputs = model(inputs)
         batch_loss = criterion(outputs, labels)
-    misc.check_nan_losses(batch_loss)
+
+    if clip_grad_max_norm is None:
+        misc.check_nan_losses(batch_loss)
+
     amp_scaler.scale(batch_loss).backward()
+    if clip_grad_max_norm is not None:
+        torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_max_norm)
+        #torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_max_norm, error_if_nonfinite=False)   # For PyTorch 1.9.0 and above
+
     amp_scaler.step(optimiser)
     amp_scaler.update()
     if scheduler is not None and not isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple)):      # Plateau scheduler will update at the end of epoch after validation.
@@ -118,7 +125,7 @@ def train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data
 
     return sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length#}}}
 
-def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dataloader, data_unpack_func, train_metrics, speed = 'standard', rank = 0, world_size = 1, input_reshape_func = None, refresh_period=1):
+def train_epoch(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_amp, amp_scaler, dataloader, data_unpack_func, train_metrics, speed = 'standard', rank = 0, world_size = 1, input_reshape_func = None, refresh_period=1):
     """Train for one epoch.
 
     Args:
@@ -157,7 +164,13 @@ def train_epoch(model, optimiser, scheduler, criterion, use_amp, amp_scaler, dat
     # In training, set pad_last_batch=True so that the shard size is always equivalent and it doesn't give you no batch for some processes at the last batch.
     for it, data in enumerate(dataloader):
 
-        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler, criterion, use_amp, amp_scaler, data, data_unpack_func, train_metrics, dataloader.batch_size, speed, start_time, it, total_iters, sample_seen, total_samples, loss_accum, rank, world_size, input_reshape_func, max_log_length, refresh_period=refresh_period)
+        sample_seen, loss_accum, loss, elapsed_time, lr, max_log_length = train_iter(model, optimiser, scheduler,
+                criterion, clip_grad_max_norm, use_amp, amp_scaler,
+                data, data_unpack_func,
+                train_metrics, dataloader.batch_size, speed, start_time,
+                it, total_iters, sample_seen, total_samples, loss_accum,
+                rank, world_size,
+                input_reshape_func, max_log_length, refresh_period=refresh_period)
 
     if rank == 0:
         if train_metrics is not None and len(train_metrics) > 0:
