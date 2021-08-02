@@ -1,24 +1,25 @@
 # PyVideoAI: Action Recognition Framework
 
-Ultimate computer vision (video action recognition focused) training framework for researchers!  
+The only framework that completes your computer vision, action recognition research environment.  
 
 ** Key features **  
 - Supports multi-gpu, multi-node training.  
-- STOA models such as I3D, Non-local, TSN, TRN, ..., and even ImageNet training!
+- STOA models such as I3D, Non-local, TSN, TRN, TSM, ..., and even ImageNet training!
 - Many datasets such as Kinetics-400, EPIC-Kitchens-55, Something-Something-V1/V2, HMDB-51, UCF-101, Diving48, CATER, ...
 - Supports both video decoding (straight from .avi/mp4) and frame extracted (.jpg/png) dataloaders, sparse-sample and dense-sample.
-- Any popular LR scheduling like Cosine Annealing with Warm Restart, Step LR, and Reduce LR on Plateau (when val loss doesn't decrease)
+- Any popular LR scheduling like Cosine Annealing with Warm Restart, Step LR, and Reduce LR on Plateau.
 - Early stopping when training doesn't improve (customise your condition)
 - **Easily add custom model, optimiser, scheduler, loss and dataloader!**
 - Telegram bot reporting experiment status.  
 - TensorBoard reporting stats.  
 - Colour logging  
+- All of the above come with no extra setup. Trust me and try some [examples](https://github.com/kiyoon/PyVideoAI-examples.git).
 
-This package is a re-write of PySlowFast by Facebook AI. The PySlowFast is a cool framework, but it depends too much on their config system and it was difficult to add new models (other codes) or reuse part of the modules from the framework.  
+This package is motivated by PySlowFast from Facebook AI. The PySlowFast is a cool framework, but it depends too much on their config system and it was difficult to add new models (other codes) or reuse part of the modules from the framework.  
 This framework by Kiyoon, is designed to replace all the configuration systems to Python files, which enables **easy-addition of custom models/LR scheduling/dataloader** etc.  
 Just modify the function bodies in the config files!
 
-Difference between the two config systems can be found in [CONFIG_SYSTEM.md](CONFIG_SYSTEM.md).
+Difference between the two config systems can be found in [CONFIG_SYSTEM.md](docs/CONFIG_SYSTEM.md).
 
 # Getting Started
 Jupyter Notebook examples to run:  
@@ -39,6 +40,12 @@ All of the executable files are in `tools/`.
 
 # Usage
 
+## Preparing datasets
+
+This package supports many action recognition datasets such as HMDB-51, EPIC-Kitchens-55, Something-Something-V1, CATER, etc.  
+Refer to [DATASET.md](docs/DATASET.md).
+
+## Training command
 ```bash
 CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_train.py -D {dataset_config_name} -M {model_config_name} -E {exp_config_name} --local_world_size {num_GPUs} -e {num_epochs}
 ```
@@ -70,10 +77,10 @@ chat_id=
 
 
 # Model Zoo and Baselines
-Refer to [MODEL_ZOO.md](MODEL_ZOO.md)
+Refer to [MODEL_ZOO.md](docs/MODEL_ZOO.md)
 
 # Installation
-Refer to [INSTALL.md](INSTALL.md).
+Refer to [INSTALL.md](docs/INSTALL.md).
 
 TL;DR,
 
@@ -96,12 +103,6 @@ pip install -e .
 cd ../..
 pip install -e .
 ```
-
-
-# Preparing datasets
-
-This package supports many action recognition datasets such as HMDB-51, EPIC-Kitchens-55, Something-Something-V1, CATER, etc.  
-Refer to [DATASET.md](DATASET.md).
 
 
 # Experiment outputs
