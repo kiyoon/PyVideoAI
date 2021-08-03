@@ -35,6 +35,9 @@ input_channel_num=[3]   # RGB
 
 
 #### OPTIONAL
+## Gradient Clipping
+#clip_grad_max_norm = 5     # you can define a function that returns a scalar too.
+#
 #def criterion():
 #    return torch.nn.CrossEntropyLoss()
 #

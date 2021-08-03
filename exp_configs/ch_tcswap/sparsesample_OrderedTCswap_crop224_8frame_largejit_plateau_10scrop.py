@@ -28,7 +28,7 @@ val_num_spatial_crops = 1
 test_scale = 256
 test_num_spatial_crops = 10
 
-clip_grad_max_norm = 1
+#clip_grad_max_norm = 5
 
 #### OPTIONAL
 #def criterion():

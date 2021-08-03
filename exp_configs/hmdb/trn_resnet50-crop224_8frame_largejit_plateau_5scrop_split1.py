@@ -31,6 +31,9 @@ test_scale = 256
 test_num_spatial_crops = 5
 
 #### OPTIONAL
+## Gradient Clipping
+#clip_grad_max_norm = 5     # you can define a function that returns a scalar too.
+#
 #def criterion():
 #    return torch.nn.CrossEntropyLoss()
 #
