@@ -31,11 +31,13 @@ from experiment_utils.argparse_utils import add_exp_arguments
 from experiment_utils import ExperimentBuilder
 import dataset_configs
 import model_configs
+import exp_configs
 import time
 
 from torch.utils.tensorboard import SummaryWriter
 
 from pyvideoai.config import DEFAULT_EXPERIMENT_ROOT
+from pyvideoai.tasks import SingleLabelClassificationTask 
 
 
 def generate_remapped_labels(num_classes, labels_to_keep):
@@ -207,34 +209,48 @@ def main():
     parser = argparse.ArgumentParser(
         description='Load predictions, and generating per-class accuracy and confusion matrix')
 
-    add_exp_arguments(parser, dataset_configs.available_datasets, model_configs.available_models, root_default=DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_batch8_8x8_1scrop5tcrop_hmdbsplit1pretrained')
+    add_exp_arguments(parser, dataset_configs.available_datasets, model_configs.available_models, root_default=DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_8x8_1scrop5tcrop_hmdbsplit1pretrained',
+            dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)
     parser.add_argument(
         '--no_normalise', action='store_false', dest='normalise', help='Do not normalise the confusion matrix')
     parser.add_argument("-l", "--load_epoch", type=int, default=None, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
     parser.add_argument("-m", "--mode", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
     parser.add_argument(
         '--sort_method', type=str, default='all', choices=['train_class_frequency', 'val_class_frequency', 'val_per_class_accuracy', 'all'], help='Sorting method')
+    parser.add_argument("-v", "--version", type=str, default='auto', help="Experiment version (`auto` or integer). `auto` chooses the last version.")
 
     args = parser.parse_args()
 
-    dataset_cfg = dataset_configs.load_cfg(args.dataset)
+    cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
+    metrics = cfg.dataset_cfg.task.get_metrics(cfg)
 
-    if dataset_cfg.task != 'singlelabel_classification':
+    if not isinstance(cfg.dataset_cfg.task, SingleLabelClassificationTask):
         logger.error(f'Only supports single label classification but got {dataset_cfg.task} task. Exiting..')
         return
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name)
+    if args.version == 'auto':
+        _expversion = -2    # last version (do not create new)
+    else:
+        _expversion = int(args.version)
+
+    summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion)
 
     if args.load_epoch == -1:
         exp.load_summary()
         load_epoch = int(exp.summary['epoch'][-1])
     elif args.load_epoch == -2:
-        if args.mode == 'oneclip':
-            field = 'val_acc'
-        else:   # multicrop
-            field = 'multi_crop_val_vid_acc_top1'
         exp.load_summary()
-        load_epoch = int(exp.get_best_model_stat(field)['epoch'])
+        best_metric = metrics.get_best_metric()
+        best_metric_fieldname = best_metric.get_csv_fieldnames()
+        best_metric_is_better = best_metric.is_better
+        if isinstance(best_metric_fieldname, tuple):
+            if len(best_metric_fieldname) > 1:
+                logger.warn(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
+            best_metric_fieldname = best_metric_fieldname[0]
+
+        logger.info(f'Using the best metric from CSV field `{best_metric_fieldname}`')
+        load_epoch = int(exp.get_best_model_stat(best_metric_fieldname, best_metric_is_better)['epoch'])
     elif args.load_epoch is None:
         load_epoch = None
     elif args.load_epoch >= 0:
@@ -263,9 +279,9 @@ def main():
         if args.sort_method == 'all':
             for sort_method in ['train_class_frequency', 'val_class_frequency', 'val_per_class_accuracy']:
                 logger.info(sort_method)
-                generate_confusion_matrix(args, sort_method, dataset_cfg, output_dir, video_predictions, video_labels, tb_writer, shrink)
+                generate_confusion_matrix(args, sort_method, cfg.dataset_cfg, output_dir, video_predictions, video_labels, tb_writer, shrink)
         else:
-            generate_confusion_matrix(args, args.sort_method, dataset_cfg, output_dir, video_predictions, video_labels, tb_writer, shrink)
+            generate_confusion_matrix(args, args.sort_method, cfg.dataset_cfg, output_dir, video_predictions, video_labels, tb_writer, shrink)
 
 
 

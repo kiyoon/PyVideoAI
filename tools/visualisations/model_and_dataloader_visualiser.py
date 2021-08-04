@@ -83,7 +83,11 @@ def main():
         # Construct dataloader
         dataset = cfg.get_torch_dataset(args.split)
         data_unpack_func = cfg.get_data_unpack_func(args.split)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=cfg.batch_size if args.batch_size is None else args.batch_size, shuffle=True if args.split=='train' else False, sampler=None, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+        if args.batch_size is None:
+            batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
+        else:
+            batch_size = args.batch_size
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True if args.split=='train' else False, sampler=None, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
         class_keys = cfg.dataset_cfg.class_keys
 
         if args.telegram:

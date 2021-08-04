@@ -34,8 +34,13 @@ def evaluate_pred(args):
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
 
+    if args.version == 'auto':
+        _expversion = -2    # last version (do not create new)
+    else:
+        _expversion = int(args.version)
+
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion)
     
 
     if args.load_epoch == -1:
@@ -145,12 +150,13 @@ def main():
     parser = argparse.ArgumentParser(
         description='Load predictions, and evaluate accuracy/AP and mAP')
 
-    add_exp_arguments(parser, dataset_configs.available_datasets, model_configs.available_models, root_default=DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_batch8_8x8_1scrop5tcrop_hmdbsplit1pretrained',
+    add_exp_arguments(parser, dataset_configs.available_datasets, model_configs.available_models, root_default=DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_8x8_1scrop5tcrop_hmdbsplit1pretrained',
             dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)
     parser.add_argument(
         '--no_normalise', action='store_false', dest='normalise', help='Do not normalise the confusion matrix')
     parser.add_argument("-l", "--load_epoch", type=int, default=None, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
     parser.add_argument("-m", "--mode", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
+    parser.add_argument("-v", "--version", type=str, default='auto', help="Experiment version (`auto` or integer). `auto` chooses the last version.")
 
     args = parser.parse_args()
 

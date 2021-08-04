@@ -425,9 +425,10 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
     # Update ReduceLROnPlateau scheduling
     if one_clip:
         if rank == 0:
-            if best_metric.logging_msg_epoch() is None:
-                # Metric not calculated. Calculate now
-                best_metric.calculate_metrics()
+            if best_metric is not None:
+                if best_metric.logging_msg_epoch() is None:
+                    # Metric not calculated. Calculate now
+                    best_metric.calculate_metrics()
 
         if isinstance(scheduler, ReduceLROnPlateau):
             with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)

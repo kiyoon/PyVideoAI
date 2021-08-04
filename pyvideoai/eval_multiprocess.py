@@ -197,8 +197,11 @@ def evaluation(args):
                     if csv_fieldname is not None:   # PredictionsGatherers return None for the CSV fieldname.
                         curr_stat[csv_fieldname] = last_calculated_metric
 
-            logger.info(f'Updating exp--summary.csv line with {curr_stat}.')
-            exp.update_summary_line(curr_stat)
+            if load_epoch is not None and load_epoch >= 0:
+                logger.info(f'Updating exp--summary.csv line with {curr_stat}.')
+                exp.update_summary_line(curr_stat)
+            else:
+                logger.info(f'epoch {load_epoch} is not supported. Not updating the summary.csv line.')
 
             # save predictions
             if args.save_predictions:

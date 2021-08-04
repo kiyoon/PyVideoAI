@@ -2,9 +2,23 @@
 """
 The dataset_config needs:
 
-(required)  num_classes (int)
-            task (pyvideoai.tasks.task)
-(suggested) class_keys (list of str)
+For PyVideoAI core:
+(required)      num_classes (int)
+                task (pyvideoai.tasks.task)
+(suggested)     class_keys (list of str) - for visualisation
+(optional)      count_train_class_frequency (callable) - for confusion matrix plotting
+                plot_confusion_matrix (callable) - for confusion matrix plotting
+
+
+(Below are optional, but better to keep the format consistent
+so that the experiment_config doesn't need to change much between datasets.)
+
+It's likely that your exp_config uses:
+    dataset_root (str)
+    frame_dir (str)
+    frames_split_file_dir (str)
+    split_file_basename (dict)
+    split2mode (dict)
 """
 
 import os
@@ -23,7 +37,7 @@ class_keys = pd.DataFrame(get_class_keys(), columns=['class_keys'])['class_keys'
 
 
 """
-Optional, but better to keep the format consistent so that the experiment_config doesn't need to change much between datasets.
+Optional but suggested to keep the format consistent.
 """
 dataset_root = os.path.join(DATA_DIR, 'hmdb51')
 frames_dir = os.path.join(dataset_root, "frames_q5")

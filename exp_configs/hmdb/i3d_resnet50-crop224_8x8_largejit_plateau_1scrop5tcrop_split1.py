@@ -1,3 +1,14 @@
+"""
+You can use `dataset_cfg` and `model_cfg` modules in this experiment config module.
+It works just as below, but appropriate dataset and model configs are imported automatically so you don't have to do so on your own.
+
+Illustrative code:
+```
+from dataset_configs import hmdb as dataset_cfg
+from model_configs import i3d_resnet50 as model_cfg
+```
+"""
+
 import os
 
 from pyvideoai.dataloaders.frames_densesample_dataset import FramesDensesampleDataset
@@ -10,7 +21,9 @@ def batch_size():
     '''
     devices=list(range(torch.cuda.device_count()))
     vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
-    if vram > 10e+9:
+    if vram > 20e+9:
+        return 64
+    elif vram > 10e+9:
         return 16
     return 8
 
@@ -73,20 +86,20 @@ input_channel_num=[3]   # RGB
 #        },
 #    ]
 #
-#import logging
-#logger = logging.getLogger(__name__)
-#from pyvideoai.utils.early_stopping import min_value_within_lastN, best_value_within_lastN
-## optional
-#def early_stopping_condition(exp, metric_info):
-#    patience=20
-#    if not min_value_within_lastN(exp.summary['val_loss'], patience):
-#        best_metric_fieldname = metric_info['best_metric_fieldname']
-#        best_metric_is_better = metric_info['best_metric_is_better_func']
-#        if not best_value_within_lastN(exp.summary[best_metric_fieldname], patience, best_metric_is_better):
-#            logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {patience} epochs. Stopping training..")
-#            return True
-#
-#    return False
+import logging
+logger = logging.getLogger(__name__)
+from pyvideoai.utils.early_stopping import min_value_within_lastN, best_value_within_lastN
+# optional
+def early_stopping_condition(exp, metric_info):
+    patience=20
+    if not min_value_within_lastN(exp.summary['val_loss'], patience):
+        best_metric_fieldname = metric_info['best_metric_fieldname']
+        best_metric_is_better = metric_info['best_metric_is_better_func']
+        if not best_value_within_lastN(exp.summary[best_metric_fieldname], patience, best_metric_is_better):
+            logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {patience} epochs. Stopping training..")
+            return True
+
+    return False
 
 
 
@@ -97,7 +110,7 @@ def optimiser(params):
     When distributing, LR should be multiplied by the number of processes (# GPUs)
     Thus, LR = base_LR * batch_size_per_proc * (num_GPUs**2)
     """
-    base_learning_rate = 1e-6      # when batch_size == 1 and #GPUs == 1
+    base_learning_rate = float(os.getenv('BASE_LR', 1e-5))      # when batch_size == 1 and #GPUs == 1
 
     batchsize = batch_size() if callable(batch_size) else batch_size
     world_size = get_world_size()
