@@ -9,7 +9,11 @@ import pickle
 import torch
 import torch.distributed as dist
 import os
+import contextlib
+import sys
 
+import numpy as np
+import random
 
 def all_gather(tensors):
     """
@@ -268,3 +272,101 @@ def write_pids_to_file(path_to_file):
         with open(path_to_file, "w") as f:
             for proc_id in proc_ids:
                 f.write("%d\n" % proc_id)
+
+
+def check_random_seed_in_sync(num_values_per_process=3):
+    """
+    Check if random seed is in sync across processes.
+    This is REQUIRED especially for model initialisation, because different seed will make parameters different across processes (GPUs).
+    This will be desynced when: (AVOID below)
+        1. Each process has different random seed
+        2. Each process has different number of random calls.
+    """
+    if get_world_size() > 1:
+        cur_device = torch.cuda.current_device()
+        rand_values = torch.rand(1,num_values_per_process).to(cur_device)
+        (rand_values,) = all_gather([rand_values])          # shape: (num_processes, num_values_per_process)
+        if rand_values.unique(dim=0).size(0) != 1:          # shape has to be (1, num_values_per_process) if all values are equal over the processes.
+            raise RuntimeError('Random seed not in sync over the multiple processes. Make sure you are not calling more random calls on only some of the processes.')
+
+
+class MultiprocessPrinter:
+    '''In every print, show which process rank is printing the message
+
+    with MultiprocessPrinter(output_stream=sys.__stdout__):
+        print('debug message')
+
+    This will print:
+    rank 0: debug message
+    rank 1: debug message
+    ...
+
+    '''
+    def __init__(self, rank=None, output_stream=sys.stdout):
+        if rank is None:
+            self.rank = get_rank()
+        else:
+            self.rank = rank
+        self._redirector = contextlib.redirect_stdout(self)
+        self.output_stream = output_stream
+
+    def write(self, msg):
+        if msg and not msg.isspace():
+            self.output_stream.write(f'rank {self.rank}: {msg}\n')
+
+
+    def flush(self):
+        self.output_stream.flush()
+
+    def __enter__(self):
+        self._redirector.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # let contextlib do any exception handling here
+        self._redirector.__exit__(exc_type, exc_value, traceback)
+
+
+def suppress_print():
+    """
+    Suppresses printing from the current process.
+    """
+
+    sys.stdout = open(os.devnull,'w')
+    sys.stderr = open(os.devnull,'w')
+
+
+def distributed_init(global_seed, local_world_size):
+    rank = dist.get_rank() if dist.is_initialized() else 0
+    world_size = dist.get_world_size() if dist.is_initialized() else 1
+    local_rank = rank % local_world_size
+
+    """You have to set the seed equally across processes.
+    Reason: during model initialisation and training, the models across processes must be in sync.
+    On the other hand, dataloader will have multiple workers with different seed, so dataloading randomness will be different across processes.
+    """
+    #local_seed = global_seed + rank
+    local_seed = global_seed
+
+    # Set GPU
+    torch.cuda.set_device(local_rank)
+
+    # Set seed
+    torch.manual_seed(local_seed)
+    torch.cuda.manual_seed(local_seed)
+    np.random.seed(local_seed)
+    random.seed(local_seed)
+    # DALI seed
+
+    return rank, world_size, local_rank, local_world_size, local_seed
+
+
+def seed_worker(worker_id):
+    """By default, each worker will have its PyTorch seed set to base_seed + worker_id.
+    However, seeds for other libraries may be duplicated upon initializing workers, causing each worker to return identical random numbers.
+    This function seeds numpy and random's random seed.
+    """
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+

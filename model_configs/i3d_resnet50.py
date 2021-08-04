@@ -38,6 +38,7 @@ def NCTHW_to_model_input_shape(inputs):
 
 
 ddp_find_unused_parameters = False
+use_amp = True
 
 # input configs
 input_normalise = False

@@ -1,4 +1,9 @@
+# Kiyoon modifications:
+# The autograd Function was using deprecated PyTorch implementation, so modified to work with newer PyTorch.
+# Also, AMP (automatic mixed precision) is disabled for this autograd function and will use 32-bit.
+
 import torch
+from torch.cuda.amp import custom_fwd, custom_bwd       # disable AMP and force to 32-bit
 
 
 class Identity(torch.nn.Module):
@@ -42,6 +47,8 @@ class SegmentConsensusAvg(torch.autograd.Function):
     dim=1
 
     @staticmethod
+    #@custom_fwd(cast_inputs=torch.float32)
+    @custom_fwd
     def forward(ctx, input_tensor):
         ctx.shape = input_tensor.size()
         output = input_tensor.mean(dim=SegmentConsensusAvg.dim, keepdim=True)
@@ -49,6 +56,7 @@ class SegmentConsensusAvg(torch.autograd.Function):
         return output
 
     @staticmethod
+    @custom_bwd
     def backward(ctx, grad_output):
         grad_in = grad_output.expand(ctx.shape) / float(ctx.shape[SegmentConsensusAvg.dim])
 
@@ -59,12 +67,15 @@ class SegmentConsensusMax(torch.autograd.Function):
     dim=1
 
     @staticmethod
+    #@custom_fwd(cast_inputs=torch.float32)
+    @custom_fwd
     def forward(ctx, input_tensor):
         output = input_tensor.max(dim=SegmentConsensusMax.dim, keepdim=True)
 
         return output
 
     @staticmethod
+    @custom_bwd
     def backward(ctx, grad_output):
         return None
 
@@ -72,10 +83,13 @@ class SegmentConsensusMax(torch.autograd.Function):
 class SegmentConsensusIdentity(torch.autograd.Function):
 
     @staticmethod
+    #@custom_fwd(cast_inputs=torch.float32)
+    @custom_fwd
     def forward(ctx, input_tensor):
         return input_tensor 
 
     @staticmethod
+    @custom_bwd
     def backward(ctx, grad_output):
         return grad_output
 

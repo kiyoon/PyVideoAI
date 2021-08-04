@@ -6,11 +6,12 @@ from video_datasets_api.cater.definitions import NUM_CLASSES_TASK2 as num_classe
 from video_datasets_api.cater.class_keys import class_keys_task2
 from pyvideoai.config import DATA_DIR
 
-task = 'multilabel_classification'
+from pyvideoai.tasks import MultiLabelClassificationTask
+task = MultiLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, "cater/max2action_cameramotion")
-frames_dir = os.path.join(dataset_root, 'frames_q5')
+frames_dir = os.path.join(dataset_root, 'frames')
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames/actions_order_uniq")
 split_file_basename = {'train': 'train.txt', 'val': 'val.txt', 'multicropval': 'val.txt'}
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}

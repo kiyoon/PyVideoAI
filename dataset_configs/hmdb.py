@@ -1,3 +1,26 @@
+############
+"""
+The dataset_config needs:
+
+For PyVideoAI core:
+(required)      num_classes (int)
+                task (pyvideoai.tasks.task)
+(suggested)     class_keys (list of str) - for visualisation
+(optional)      count_train_class_frequency (callable) - for confusion matrix plotting
+                plot_confusion_matrix (callable) - for confusion matrix plotting
+
+
+(Below are optional, but better to keep the format consistent
+so that the experiment_config doesn't need to change much between datasets.)
+
+It's likely that your exp_config uses:
+    dataset_root (str)
+    frame_dir (str)
+    frames_split_file_dir (str)
+    split_file_basename (dict)
+    split2mode (dict)
+"""
+
 import os
 import numpy as np
 import pandas as pd
@@ -6,17 +29,23 @@ from video_datasets_api.hmdb.definitions import NUM_CLASSES as num_classes
 from video_datasets_api.hmdb.read_annotations import get_class_keys
 from pyvideoai.config import DATA_DIR
 
-task = 'singlelabel_classification'
+from pyvideoai.tasks import SingleLabelClassificationTask
+task = SingleLabelClassificationTask()
 
 # Paths
 class_keys = pd.DataFrame(get_class_keys(), columns=['class_keys'])['class_keys']
 
+
+"""
+Optional but suggested to keep the format consistent.
+"""
 dataset_root = os.path.join(DATA_DIR, 'hmdb51')
 frames_dir = os.path.join(dataset_root, "frames_q5")
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 split_file_basename1 = {'train': 'train1.csv', 'val': 'test1.csv', 'multicropval': 'test1.csv'}
 split_file_basename2 = {'train': 'train2.csv', 'val': 'test2.csv', 'multicropval': 'test2.csv'}
 split_file_basename3 = {'train': 'train3.csv', 'val': 'test3.csv', 'multicropval': 'test3.csv'}
+split_file_basename = split_file_basename1
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
 
 

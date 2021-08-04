@@ -6,7 +6,8 @@ from video_datasets_api.imagenet.definitions import NUM_CLASSES as num_classes
 from video_datasets_api.imagenet.read_annotations import parse_meta_mat 
 from pyvideoai.config import DATA_DIR
 
-task = 'singlelabel_classification'
+from pyvideoai.tasks import SingleLabelClassificationTask
+task = SingleLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'ILSVRC2012')

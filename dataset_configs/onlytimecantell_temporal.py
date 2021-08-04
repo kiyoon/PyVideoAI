@@ -1,12 +1,15 @@
+"""
+Temporal-50 set (from Kinetics-400 and Something-Something-V1) suggested by Only Time Can Tell (WACV 2021, Sevilla-Lara et al.)
+"""
 import os
 import numpy as np
 import pandas as pd
 
-from video_datasets_api.onlytimecantell.definitions import NUM_CLASSES as num_classes
+from video_datasets_api.onlytimecantell.definitions import NUM_CLASSES_TEMPORAL as num_classes
 from pyvideoai.config import DATA_DIR
 
-
-task = 'singlelabel_classification'
+from pyvideoai.tasks import SingleLabelClassificationTask
+task = SingleLabelClassificationTask()
 
 # Paths
 sth_annotations_root = os.path.join(DATA_DIR, 'something-something-v1/annotations')

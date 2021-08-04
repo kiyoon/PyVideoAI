@@ -9,7 +9,8 @@ from video_datasets_api.kinetics400 import CLASS_KEYS as kinetics400_class_keys
 from video_datasets_api.ucf101.class_keys import get_class_keys
 from pyvideoai.config import DATA_DIR
 
-task = 'singlelabel_classification'
+from pyvideoai.tasks import SingleLabelClassificationTask
+task = SingleLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'ucf101')

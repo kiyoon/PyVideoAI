@@ -3,21 +3,18 @@ import numpy as np
 import pandas as pd
 
 from video_datasets_api.something_something_v2.definitions import NUM_CLASSES as num_classes
-from video_datasets_api.something_something_v2.read_annotations import get_class_keys_shrinked, class_keys_to_int_labels, read_splits
+from video_datasets_api.something_something_v2.read_annotations import get_class_keys_shrinked
 from pyvideoai.config import DATA_DIR
 
-
-task = 'singlelabel_classification'
+from pyvideoai.tasks import SingleLabelClassificationTask
+task = SingleLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'something-something-v2')
-frames_dir = os.path.join(dataset_root, 'frames')
+frames_dir = os.path.join(dataset_root, 'frames_q5')
 annotations_root = os.path.join(dataset_root, 'annotations')
 label_json = os.path.join(annotations_root, 'something-something-v2-labels.json')
 class_keys = pd.DataFrame(get_class_keys_shrinked(label_json), columns=['class_keys'])['class_keys']
-split_file = {'train': 'something-something-v2-train.csv', 'val': 'something-something-v2-validation.csv'}
-for key in split_file.keys():
-    split_file[key] = os.path.join(annotations_root, split_file[key])
 
 video_split_file_dir = os.path.join(dataset_root, "splits_video")
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
@@ -27,7 +24,7 @@ split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': '
 
 # Misc
 
-from pyvideoai.dataloaders.frames_sparsesample_dataset_advanced import count_class_frequency as count_cf
+from pyvideoai.dataloaders.frames_sparsesample_dataset import count_class_frequency as count_cf
 def count_class_frequency(split='train'):
     """Count class frequency in training data.
     Used for generating confusion matrix. (generate_confusion_matrix.py)

@@ -54,23 +54,14 @@ def main():
     logging.getLogger('slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
-    perform_multicropval=True       # when loading, assume there was multicropval. Even if there was not, having more CSV field information doesn't hurt.
-    if cfg.dataset_cfg.task == 'singlelabel_classification':
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_singlelabel(multicropval = perform_multicropval)
-        best_metric_field = 'val_acc'
-    elif cfg.dataset_cfg.task == 'multilabel_classification':
-        summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_multilabel(multicropval = perform_multicropval)
-        best_metric_field = 'val_vid_mAP'
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+    metrics = cfg.dataset_cfg.task.get_metrics(cfg)
+    summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = -1, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
 
     exp.make_dirs_for_training()
 
 
     try:
-        repo = git.Repo(search_parent_directories=True)
-        sha = repo.head.object.hexsha
-        logger.info("git hash: %s", sha)
-
         if not args.telegram:
             writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'train_model_and_data'), comment='train_model_and_data')
 
@@ -85,25 +76,18 @@ def main():
                 policies = model.parameters()
             misc.log_model_info(model)
 
-            if hasattr(cfg, 'criterion'):
-                criterion = cfg.criterion()
-            else:
-                if cfg.dataset_cfg.task == 'singlelabel_classification':
-                    logger.info(f"cfg.criterion not defined. Using CrossEntropyLoss()")
-                    criterion = nn.CrossEntropyLoss()
-                elif cfg.dataset_cfg.task == 'multilabel_classification':
-                    logger.info(f"cfg.criterion not defined. Using BCEWithLogitsLoss()")
-                    criterion = nn.BCEWithLogitsLoss()
-                else:
-                    raise ValueError(f"cfg.dataset_cfg.task not known task: {cfg.dataset_cfg.task}")
-
-            optimiser = cfg.optimiser(policies)
+            #criterion = cfg.dataset_cfg.task.get_criterion(cfg)
+            #optimiser = cfg.optimiser(policies)
 
 
         # Construct dataloader
         dataset = cfg.get_torch_dataset(args.split)
         data_unpack_func = cfg.get_data_unpack_func(args.split)
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=cfg.batch_size if args.batch_size is None else args.batch_size, shuffle=True if args.split=='train' else False, sampler=None, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
+        if args.batch_size is None:
+            batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
+        else:
+            batch_size = args.batch_size
+        dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True if args.split=='train' else False, sampler=None, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False)
         class_keys = cfg.dataset_cfg.class_keys
 
         if args.telegram:

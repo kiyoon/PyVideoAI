@@ -24,3 +24,4 @@ class OutputLogger:
     def __exit__(self, exc_type, exc_value, traceback):
         # let contextlib do any exception handling here
         self._redirector.__exit__(exc_type, exc_value, traceback)
+
