@@ -12,6 +12,8 @@ def load_model(num_classes, input_frame_length):
     model = TSM(class_counts, segment_count, 'RGB',
             base_model = base_model,
             consensus_type='avg',
+            partial_bn = False,
+            dropout=0.5,
             pretrained=pretrained)
 
 
