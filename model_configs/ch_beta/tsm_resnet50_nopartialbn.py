@@ -36,7 +36,7 @@ def get_optim_policies(model):
     return model.get_optim_policies()
 
 
-ddp_find_unused_parameters = True
+ddp_find_unused_parameters = False
 use_amp = True
 
 
