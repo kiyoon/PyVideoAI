@@ -27,8 +27,6 @@ import time
 from pyvideoai import config
 from pyvideoai.utils import misc
 
-import git
-
 def main():
     parser = argparse.ArgumentParser(
         description='Randomly sample some training videos and send to Telegram/TensorBoard as GIF. Run with no GPUs (CUDA_VISIBLE_DEVICES=)')
