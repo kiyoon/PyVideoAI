@@ -91,12 +91,12 @@ def load_model():
 #def load_pretrained(model):
 #    return
 
-from pyvideoai.utils.tc_reordering import get_orderedTC_ordering
-ordering = get_orderedTC_ordering(input_frame_length)
+from pyvideoai.utils.tc_reordering import get_TC_sort_idx
+sort_idx = get_TC_sort_idx(input_frame_length)
 def _dataloader_shape_to_model_input_shape(inputs):
     N, C, T, H, W = inputs.shape
     # supposed to be N, C, T, H, W -> N, T, C, H, W -> N, TC, H, W
-    return inputs.reshape(N, T, C, H, W)[:,ordering,:,:,:].view(N, -1, H, W)
+    return inputs.reshape(N, T, C, H, W)[:,sort_idx,:,:,:].view(N, -1, H, W)
 
 def get_input_reshape_func(split):
     '''
