@@ -5,10 +5,10 @@
 
 from torch import nn
 
-from .ops.basic_ops import ConsensusModule
-from .ops.transforms import *
+from .basic_ops import ConsensusModule
+from .transforms import *
 from torch.nn.init import normal_, constant_
-from .ops.tdn_net import tdn_net
+from .tdn_net import tdn_net
 
 class TSN(nn.Module):
     def __init__(self, num_class, num_segments, modality,

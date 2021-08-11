@@ -1,7 +1,7 @@
 import torch
 from torch import optim
 
-from pyvideoai.models.TDN.ops.model import TSN
+from pyvideoai.models.TDN.ops.models import TSN
 
 def load_model(num_classes, input_frame_length):
     segment_count = input_frame_length
@@ -38,7 +38,7 @@ def get_optim_policies(model):
     return model.get_optim_policies()
 
 
-ddp_find_unused_parameters = False
+ddp_find_unused_parameters = True
 use_amp = True
 
 
