@@ -382,9 +382,9 @@ def train(args):
             train_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'train'), comment='train')
             val_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'val'), comment='val')
             if perform_multicropval:
-                multi_crop_val_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'multi_crop_val'), comment='multi_crop_val')
+                multicropval_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'multi_crop_val'), comment='multi_crop_val')
             else:
-                multi_crop_val_writer = None
+                multicropval_writer = None
 
 
             max_val_metric = None 
@@ -515,7 +515,7 @@ def train(args):
 
                         for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                             if tensorboard_tag is not None:
-                                train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                                val_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
                             if csv_fieldname is not None:
                                 curr_stat[csv_fieldname] = last_calculated_metric
                     #}}}
@@ -524,10 +524,10 @@ def train(args):
                     multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None, refresh_period=args.refresh_period)  # No scheduler needed for multicropval
                     if rank == 0:#{{{
                         curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
-                        multi_crop_val_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
-                        multi_crop_val_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
-                        multi_crop_val_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
-                        multi_crop_val_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
+                        multicropval_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
+                        multicropval_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
+                        multicropval_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
+                        multicropval_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
 
                         for metric in metrics['multicropval']:
                             tensorboard_tags = metric.tensorboard_tags()
@@ -542,7 +542,7 @@ def train(args):
 
                             for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                                 if tensorboard_tag is not None:
-                                    train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                                    multicropval_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
                                 if csv_fieldname is not None:
                                     curr_stat[csv_fieldname] = last_calculated_metric
                         #}}}
