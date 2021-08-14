@@ -27,6 +27,7 @@ val_scale = 256
 val_num_spatial_crops = 1
 test_scale = 256
 test_num_spatial_crops = 10
+sample_index_code = 'pyvideoai'
 
 #### OPTIONAL
 #def criterion():
@@ -143,7 +144,9 @@ def _get_torch_dataset(csv_path, split):
             crop_size=crop_size,
             mean = model_cfg.input_mean, std = model_cfg.input_std,
             normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
-            path_prefix=dataset_cfg.frames_dir)
+            path_prefix=dataset_cfg.frames_dir,
+            sample_index_code=sample_index_code,
+            )
 
 def get_torch_dataset(split):
 

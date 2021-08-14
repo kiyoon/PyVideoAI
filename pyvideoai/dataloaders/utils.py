@@ -320,7 +320,7 @@ def sparse_frame_indices(num_input_frames, num_output_frames, uniform=True):
 
 # num_input_frames = num_frames
 # num_output_frames = num_segments
-def TRN_sample_indices(num_input_frames, num_output_frames, mode="train", new_length = 1):
+def TSN_sample_indices(num_input_frames, num_output_frames, mode="train", new_length = 1):
     """
     :return: list (count from zero)
     """
@@ -343,4 +343,74 @@ def TRN_sample_indices(num_input_frames, num_output_frames, mode="train", new_le
             offsets = np.zeros((num_output_frames,), dtype=np.int32)
 
     return offsets
+
+
+# num_input_frames = num_frames
+# num_output_frames = num_segments
+# modified by Kiyoon: indexing from zero (not one)
+from numpy.random import randint
+def TDN_sample_indices(num_input_frames, num_output_frames, mode='train', new_length=5):
+    if mode == 'train' : # TSN uniformly sampling for TDN
+        if((num_input_frames - new_length + 1) < num_output_frames):
+            average_duration = (num_input_frames - 5 + 1) // (num_output_frames)
+        else:
+            average_duration = (num_input_frames - new_length + 1) // (num_output_frames)
+        offsets = []
+        if average_duration > 0:
+            offsets += list(np.multiply(list(range(num_output_frames)), average_duration) + randint(average_duration,size=num_output_frames))
+        elif num_input_frames > num_output_frames:
+            if((num_input_frames - new_length + 1) >= num_output_frames):
+                offsets += list(np.sort(randint(num_input_frames - new_length + 1, size=num_output_frames)))
+            else:
+                offsets += list(np.sort(randint(num_input_frames - 5 + 1, size=num_output_frames)))
+        else:
+            offsets += list(np.zeros((num_output_frames,)))
+    elif mode == 'test':
+        if num_input_frames > num_output_frames + new_length - 1:
+            tick = (num_input_frames - new_length + 1) / float(num_output_frames)
+            offsets = np.array([int(tick / 2.0 + tick * x) for x in range(num_output_frames)])
+        else:
+            offsets = np.zeros((num_output_frames,))
+    elif mode == 'dense_train': # i3d type sampling for training
+        sample_pos = max(1, 1 + num_input_frames - new_length - 64)
+        t_stride = 64 // num_output_frames
+        start_idx1 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        offsets = [(idx * t_stride + start_idx1) % num_input_frames for idx in range(num_output_frames)]
+    elif mode == 'dense_test':  # i3d dense sample for test
+        sample_pos = max(1, 1 + num_input_frames - new_length - 64)
+        t_stride = 64 // num_output_frames
+        start_idx1 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        start_idx2 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        start_idx3 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        start_idx4 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        start_idx5 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        start_idx6 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        start_idx7 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        start_idx8 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        start_idx9 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        start_idx10 = 0 if sample_pos == 1 else np.random.randint(0, sample_pos - 1)
+        offsets = [(idx * t_stride + start_idx1) % num_input_frames for idx in range(num_output_frames)]+[(idx * t_stride + start_idx2) % num_input_frames for idx in range(num_output_frames)]+[(idx * t_stride + start_idx3) % num_input_frames for idx in range(num_output_frames)]+[(idx * t_stride + start_idx4) % num_input_frames for idx in range(num_output_frames)]+[(idx * t_stride + start_idx5) % num_input_frames for idx in range(num_output_frames)]+[(idx * t_stride + start_idx6) % num_input_frames for idx in range(num_output_frames)]+[(idx * t_stride + start_idx7) % num_input_frames for idx in range(num_output_frames)]+[(idx * t_stride + start_idx8) % num_input_frames for idx in range(num_output_frames)]+[(idx * t_stride + start_idx9) % num_input_frames for idx in range(num_output_frames)]+[(idx * t_stride + start_idx10) % num_input_frames for idx in range(num_output_frames)]
+    else:
+        raise ValueError(f'Not supported mode {mode}. Use train, test, dense_train, dense_test.')
+
+    '''from function TDN.ops.dataset.get
+    For each segment starting indices, sample 5 more frames, but duplicate last frame if no more can be found.
+    '''
+    frames_idx = []
+    for seg_ind in offsets:
+        p = int(seg_ind)
+        for i in range(0,new_length,1):
+            frames_idx.append(p)
+            if p < num_input_frames:
+                p += 1
+
+    '''Below seems unnecessary.. Removed the if statement'''
+#            if((len(video_list)-self.new_length*1+1)>=8):
+#                if p < (len(video_list)):
+#                    p += 1
+#            else:
+#                if p < (len(video_list)):
+#                    p += 1
+
+    return frames_idx
 

@@ -53,7 +53,9 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             bgr = False,
             greyscale = False,
             path_prefix = "",
-            num_retries = 10):
+            num_retries = 10,
+            sample_index_code = 'pyvideoai',
+            ):
         """
         Construct the video loader with a given csv file. The format of
         the csv file is:
@@ -65,11 +67,14 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         path_to_frames_dir_N/{:05d}.jpg video_id_N label_N start_frame_N end_frame_N
         ```
         Args:
-            mode (string): Options includes `train`, or `test` mode.
+            mode (str): Options includes `train`, or `test` mode.
                 For the train, the data loader will take data
                 from the train set, and sample one clip per video.
                 For the test mode, the data loader will take data from test set,
                 and sample multiple clips per video.
+            sample_index_code (str): Options include `pyvideoai`, `TSN` and `TDN`.
+                Slightly different implementation of how video is sampled (pyvideoai and TSN),
+                and for the TDN, it is completely different as it samples num_frames*5 frames.
         """
         # Only support train, and test mode.
         assert mode in [
@@ -80,6 +85,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         self._path_prefix = path_prefix
         self._num_retries = num_retries
         self.mode = mode
+        self.sample_index_code = sample_index_code
 
         self.train_jitter_min = train_jitter_min
         self.train_jitter_max = train_jitter_max
@@ -208,7 +214,14 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         # Decode video. Meta info is used to perform selective decoding.
 #        frame_indices = utils.TRN_sample_indices(self._num_sample_frames[index], self.num_frames, mode = self.mode)
         num_video_frames = self._end_frames[index] - self._start_frames[index] + 1
-        frame_indices = utils.sparse_frame_indices(num_video_frames, self.num_frames, uniform=sample_uniform)
+        if self.sample_index_code == 'pyvideoai':
+            frame_indices = utils.sparse_frame_indices(num_video_frames, self.num_frames, uniform=sample_uniform)
+        elif self.sample_index_code == 'TSN':
+            frame_indices = utils.TSN_sample_indices(num_video_frames, self.num_frames, mode = self.mode)
+        elif self.sample_index_code == 'TDN':
+            frame_indices = utils.TDN_sample_indices(num_video_frames, self.num_frames, mode = self.mode)
+        else:
+            raise ValueError(f'Wrong self.sample_index_code: {self.sample_index_code}. Should be pyvideoai, TSN, TDN')
         frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
 
         frame_paths = [self._path_to_frames[index].format(frame_idx) for frame_idx in frame_indices]
