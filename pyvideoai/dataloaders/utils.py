@@ -401,7 +401,7 @@ def TDN_sample_indices(num_input_frames, num_output_frames, mode='train', new_le
         p = int(seg_ind)
         for i in range(0,new_length,1):
             frames_idx.append(p)
-            if p < num_input_frames:
+            if p < num_input_frames-1:  # if p is the last frame already, do not increase
                 p += 1
 
     '''Below seems unnecessary.. Removed the if statement'''

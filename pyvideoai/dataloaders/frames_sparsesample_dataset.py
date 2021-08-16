@@ -85,7 +85,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         self._path_prefix = path_prefix
         self._num_retries = num_retries
         self.mode = mode
-        self.sample_index_code = sample_index_code
+        self.sample_index_code = sample_index_code.lower()
 
         self.train_jitter_min = train_jitter_min
         self.train_jitter_max = train_jitter_max
@@ -216,10 +216,12 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         num_video_frames = self._end_frames[index] - self._start_frames[index] + 1
         if self.sample_index_code == 'pyvideoai':
             frame_indices = utils.sparse_frame_indices(num_video_frames, self.num_frames, uniform=sample_uniform)
-        elif self.sample_index_code == 'TSN':
+        elif self.sample_index_code == 'tsn':
             frame_indices = utils.TSN_sample_indices(num_video_frames, self.num_frames, mode = self.mode)
-        elif self.sample_index_code == 'TDN':
+        elif self.sample_index_code == 'tdn':
             frame_indices = utils.TDN_sample_indices(num_video_frames, self.num_frames, mode = self.mode)
+        elif self.sample_index_code == 'tdn_greyst':
+            frame_indices = utils.TDN_sample_indices(num_video_frames, self.num_frames, mode = self.mode, new_length=15)
         else:
             raise ValueError(f'Wrong self.sample_index_code: {self.sample_index_code}. Should be pyvideoai, TSN, TDN')
         frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
