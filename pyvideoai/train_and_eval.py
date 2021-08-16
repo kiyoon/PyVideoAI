@@ -46,9 +46,12 @@ def train_iter(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_a
 
     amp_scaler.scale(batch_loss).backward()
     if clip_grad_max_norm is not None:
+        # Unscales the gradients of optimiser's assigned params in-place
+        amp_scaler.unscale_(optimiser)
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_max_norm)
         #torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_max_norm, error_if_nonfinite=False)   # For PyTorch 1.9.0 and above
 
+    # If gradient clipping happened, the optimiser's gradients are already unscaled, so amp_scaler.step does not unscale them
     amp_scaler.step(optimiser)
     amp_scaler.update()
     if scheduler is not None and not isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple)):      # Plateau scheduler will update at the end of epoch after validation.
