@@ -14,7 +14,7 @@ def optimiser(params):
     batchsize = batch_size() if callable(batch_size) else batch_size
     world_size = get_world_size()
 
-    base_learning_rate = 0.04 / batchsize / (world_size**2)      # when batch_size == 1 and #GPUs == 1
+    base_learning_rate = 0.01 / 64     # when batch_size == 1 and #GPUs == 1
     learning_rate = base_learning_rate * batchsize * (world_size**2)
 
     return torch.optim.SGD(params, lr = learning_rate, momentum = 0.9, weight_decay = 5e-4)
