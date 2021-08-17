@@ -1,11 +1,11 @@
 #!/bin/bash
 
 function help_print {
-	echo "Usage: $0 [train/eval] [NUM_GPUS_PER_NODE] [NUM_NODES] [JOB_UUID] [MASTER_ADDR[:<PORT>]] [train/eval_dist.py args...]"
+	echo "Usage: $0 [train/eval] [NUM_GPUS_PER_NODE] [NUM_NODES] [NODE_RANK] [MASTER_ADDR] [MASTER_PORT] [train/eval_dist.py args...]"
 	exit 1
 }
 
-if [ $# -lt 5 ]
+if [ $# -lt 6 ]
 then
 	help_print
 fi
@@ -20,26 +20,29 @@ fi
 
 NUM_GPUS="$2"
 NUM_NODES="$3"
-JOB_UUID="$4"
+NODE_RANK="$4"
 MASTER_ADDR="$5"
+MASTER_PORT="$6"
 
-# Any arguments from the 6th one are captured by ${@:6}
+# Any arguments from the 7th one are captured by ${@:7}
 
 if [ $MODE == 'train' ]
 then
-	python -m torch.distributed.run 	\
-		--nnodes="$NUM_NODES"			\
+	python -m torch.distributed.launch 	\
+		--use_env						\
+		--nnode="$NUM_NODES"			\
 		--nproc_per_node="$NUM_GPUS"	\
-		--rdzv_id="$JOB_UUID"			\
-		--rdzv_backend=c10d				\
-		--rdzv_endpoint="$MASTER_ADDR"	\
-		$(dirname "$0")/train_dist.py ${@:6}
+		--node_rank="$NODE_RANK"		\
+		--master_addr="$MASTER_ADDR"	\
+		--master_port="$MASTER_PORT"	\
+		$(dirname "$0")/train_dist.py ${@:7}
 else
-	python -m torch.distributed.run 	\
-		--nnodes="$NUM_NODES"			\
+	python -m torch.distributed.launch 	\
+		--use_env						\
+		--nnode="$NUM_NODES"			\
 		--nproc_per_node="$NUM_GPUS"	\
-		--rdzv_id="$JOB_UUID"			\
-		--rdzv_backend=c10d				\
-		--rdzv_endpoint="$MASTER_ADDR"	\
-		$(dirname "$0")/eval_dist.py ${@:6}
+		--node_rank="$NODE_RANK"		\
+		--master_addr="$MASTER_ADDR"	\
+		--master_port="$MASTER_PORT"	\
+		$(dirname "$0")/eval_dist.py ${@:7}
 fi
