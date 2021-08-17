@@ -3,16 +3,8 @@
 
 ## Python dependencies
 
-Previously,  
-Python == 3.7  
-PyTorch == 1.4.0  
-torchvision == 0.5.0
-
-Currently, re-testing with  
-Python == 3.8  
-PyTorch == 1.8.1  
-torchvision == 0.9.1
-cudatoolkit == 10.2
+Python >= 3.8  
+PyTorch >= 1.6.0 (Recommend >= 1.9.0)
 
 ## Installation
 

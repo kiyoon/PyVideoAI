@@ -14,6 +14,9 @@ import sys
 
 import numpy as np
 import random
+import json
+
+logger = logging.getLogger(__name__)
 
 def all_gather(tensors):
     """
@@ -138,7 +141,7 @@ def synchronize():
     world_size = dist.get_world_size()
     if world_size == 1:
         return
-    dist.barrier()
+    dist.barrier(device_ids=[torch.cuda.current_device()])
 
 
 @functools.lru_cache()
@@ -336,10 +339,17 @@ def suppress_print():
     sys.stderr = open(os.devnull,'w')
 
 
-def distributed_init(global_seed, local_world_size):
+def distributed_init(global_seed, local_world_size = None):
     rank = dist.get_rank() if dist.is_initialized() else 0
     world_size = dist.get_world_size() if dist.is_initialized() else 1
-    local_rank = rank % local_world_size
+    if local_world_size:
+        # DDP spawn
+        local_rank = rank % local_world_size
+    else:
+        # torch.distributed.run
+        local_world_size = int(os.getenv('LOCAL_WORLD_SIZE', 1)) if dist.is_initialized() else 1
+        local_rank = int(os.getenv('LOCAL_RANK', 0)) if dist.is_initialized() else 0
+
 
     """You have to set the seed equally across processes.
     Reason: during model initialisation and training, the models across processes must be in sync.
@@ -359,6 +369,13 @@ def distributed_init(global_seed, local_world_size):
     # DALI seed
 
     return rank, world_size, local_rank, local_world_size, local_seed
+
+
+def log_distributed_info(world_size, local_world_size):
+    distributed_configs = {'world_size': world_size,
+            'local_world_size': local_world_size,
+            'num_nodes (estimated)': world_size // local_world_size}
+    logger.info("distributed configs: " + json.dumps(distributed_configs, sort_keys=False, indent=4))
 
 
 def seed_worker(worker_id):

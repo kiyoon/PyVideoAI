@@ -59,7 +59,11 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
 
 def train(args):
-    rank, world_size, local_rank, local_world_size, local_seed = du.distributed_init(args.seed, args.local_world_size)
+    if hasattr(args, 'local_world_size'):
+        local_world_size = args.local_world_size
+    else:
+        local_world_size = None
+    rank, world_size, local_rank, local_world_size, local_seed = du.distributed_init(args.seed, local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
         #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
@@ -140,6 +144,7 @@ def train(args):
             # save configs
             exp.dump_args(args)
             logger.info("args: " + json.dumps(args.__dict__, sort_keys=False, indent=4))
+            du.log_distributed_info(world_size, local_world_size)
             dataset_config_dir = os.path.join(exp.configs_dir, 'dataset_config')
             os.makedirs(dataset_config_dir, exist_ok=True)
             #copy2(os.path.join(dataset_configs._SCRIPT_DIR, '__init__.py'), os.path.join(dataset_config_dir, '__init__.py'))

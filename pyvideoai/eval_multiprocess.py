@@ -89,6 +89,7 @@ def evaluation(args):
             # save configs
 #            exp.dump_args(args)
             logger.info("args: " + json.dumps(args.__dict__, sort_keys=False, indent=4))
+            du.log_distributed_info(world_size, local_world_size)
             dataset_config_dir = os.path.join(exp.configs_dir, 'dataset_config_val')
             os.makedirs(dataset_config_dir, exist_ok=True)
             #copy2(os.path.join(dataset_configs._SCRIPT_DIR, '__init__.py'), os.path.join(dataset_config_dir, '__init__.py'))
