@@ -30,15 +30,16 @@ def demo_basic(local_world_size, local_rank):
         + f"world_size = {dist.get_world_size()}, n = {n}, device_ids = {device_ids}"
     )
 
-    model = ToyModel().cuda(device_ids[0])
-    ddp_model = DDP(model, device_ids)
+    cur_device = torch.cuda.current_device()
+    model = ToyModel().cuda(cur_device)
+    ddp_model = DDP(model, device_ids=[local_rank], output_device=local_rank)
 
     loss_fn = nn.MSELoss()
     optimizer = optim.SGD(ddp_model.parameters(), lr=0.001)
 
     optimizer.zero_grad()
     outputs = ddp_model(torch.randn(20, 10))
-    labels = torch.randn(20, 5).to(device_ids[0])
+    labels = torch.randn(20, 5).to(cur_device)
     loss_fn(outputs, labels).backward()
     optimizer.step()
 def spmd_main(local_world_size, local_rank):
@@ -63,6 +64,7 @@ if __name__ == "__main__":
     parser.add_argument("--local_rank", type=int, default=0)
     parser.add_argument("--local_world_size", type=int, default=1)
     args = parser.parse_args()
+    torch.cuda.set_device(args.local_rank)
     spmd_main(args.local_world_size, args.local_rank)
 
 
