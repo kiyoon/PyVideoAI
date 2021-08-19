@@ -40,6 +40,8 @@ val_num_spatial_crops = 1
 test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 5
 
+base_learning_rate = float(os.getenv('BASE_LR', 1e-5))      # when batch_size == 1 and #GPUs == 1
+
 #### OPTIONAL
 ## Gradient Clipping
 #clip_grad_max_norm = 5     # you can define a function that returns a scalar too.
@@ -81,7 +83,6 @@ def optimiser(params):
     When distributing, LR should be multiplied by the number of processes (# GPUs)
     Thus, LR = base_LR * batch_size_per_proc * (num_GPUs**2)
     """
-    base_learning_rate = float(os.getenv('BASE_LR', 1e-5))      # when batch_size == 1 and #GPUs == 1
 
     batchsize = batch_size() if callable(batch_size) else batch_size
     world_size = get_world_size()

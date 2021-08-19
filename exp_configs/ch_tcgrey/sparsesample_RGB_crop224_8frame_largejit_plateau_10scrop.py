@@ -31,6 +31,8 @@ greyscale=False
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
+base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
+
 #### OPTIONAL
 #def criterion():
 #    return torch.nn.CrossEntropyLoss()
@@ -69,7 +71,6 @@ def optimiser(params):
     When distributing, LR should be multiplied by the number of processes (# GPUs)
     Thus, LR = base_LR * batch_size_per_proc * (num_GPUs**2)
     """
-    base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
 
     batchsize = batch_size() if callable(batch_size) else batch_size
     world_size = get_world_size()
