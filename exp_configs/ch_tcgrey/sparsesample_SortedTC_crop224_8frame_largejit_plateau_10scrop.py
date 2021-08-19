@@ -26,7 +26,8 @@ train_jitter_max = 336
 val_scale = 256
 val_num_spatial_crops = 1
 test_scale = 256
-test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 5
+def test_num_spatial_crops():
+    return 10 if dataset_cfg.horizontal_flip else 5         # dataset_cfg environment is only accessible within function.
 
 greyscale=False
 sample_index_code = 'pyvideoai'
@@ -144,7 +145,7 @@ def _get_torch_dataset(csv_path, split):
         _test_num_spatial_crops = val_num_spatial_crops
     else:
         _test_scale = test_scale
-        _test_num_spatial_crops = test_num_spatial_crops
+        _test_num_spatial_crops = test_num_spatial_crops()
     return FramesSparsesampleDataset(csv_path, mode,
             input_frame_length, 
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
