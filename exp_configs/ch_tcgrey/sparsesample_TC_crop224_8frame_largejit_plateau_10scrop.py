@@ -95,9 +95,9 @@ def load_model():
 #def load_pretrained(model):
 #    return
 
-from pyvideoai.utils.tc_reordering import NCTHW_to_TC_NTCHW
+from pyvideoai.utils.tc_reordering import NCTHW_to_TC_NCTHW
 def _dataloader_shape_to_model_input_shape(inputs):
-    return NCTHW_to_TC_NTCHW(inputs)
+    return model_cfg.NCTHW_to_model_input_shape(NCTHW_to_TC_NCTHW(inputs))
 
 def get_input_reshape_func(split):
     '''

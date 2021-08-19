@@ -119,17 +119,9 @@ def load_model():
 def load_pretrained(model):
     model_cfg.load_pretrained_kinetics400(model, model_cfg.kinetics400_pretrained_path_8x8)
 
-T = input_frame_length
-if T % 3 == 0:
-    ordering = [(x*(T//3) + x//3) % T for x in range(T)]
-elif T % 3 == 1:
-    ordering = [(x*((2*T+1)//3)) % T for x in range(T)]
-else:
-    ordering = [(x*((T+1)//3)) % T for x in range(T)]
+from pyvideoai.utils.tc_reordering import NCTHW_to_TC_NCTHW
 def _dataloader_shape_to_model_input_shape(inputs):
-    N, C, T, H, W = inputs.shape
-    inputs = inputs.reshape(N, T, C, H, W)[:,ordering,:,:,:].permute(0,2,1,3,4)
-    return model_cfg.NCTHW_to_model_input_shape(inputs)
+    return model_cfg.NCTHW_to_model_input_shape(NCTHW_to_TC_NCTHW(inputs))
 
 def get_input_reshape_func(split):
     '''
