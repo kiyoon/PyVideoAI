@@ -25,6 +25,8 @@ frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 split_file_basename = {'train': 'train_partial.csv', 'val': 'val.csv', 'multicropval': 'val.csv'}
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
 
+# Training settings
+horizontal_flip = False
 
 # Misc
 

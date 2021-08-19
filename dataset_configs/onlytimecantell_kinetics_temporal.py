@@ -17,3 +17,6 @@ frames_dir = os.path.join(dataset_root, "frames_q85")
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 split_file_basename = {'train': 'train_kinetics_temporal.csv', 'val': 'val_kinetics_temporal.csv', 'multicropval': 'val_kinetics_temporal.csv'}
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
+
+# Training settings
+horizontal_flip = False     # because of sthsth

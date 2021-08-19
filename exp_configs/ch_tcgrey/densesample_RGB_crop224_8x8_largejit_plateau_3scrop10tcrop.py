@@ -170,6 +170,7 @@ def _get_torch_dataset(csv_path, split):
     return FramesDensesampleDataset(csv_path, mode,
             input_frame_length, input_sample_rate,
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+            train_horizontal_flip=dataset_cfg.horizontal_flip,
             test_scale=_test_scale, test_num_ensemble_views=_test_num_ensemble_views, test_num_spatial_crops=_test_num_spatial_crops,
             crop_size=crop_size,
             mean = model_cfg.input_mean, std = model_cfg.input_std,

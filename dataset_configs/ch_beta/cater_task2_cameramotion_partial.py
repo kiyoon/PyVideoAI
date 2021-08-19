@@ -18,6 +18,8 @@ split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': '
 
 class_keys = class_keys_task2()
 
+# Training settings
+horizontal_flip = True 
 '''
 # Misc
 

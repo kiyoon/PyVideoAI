@@ -30,6 +30,9 @@ frames_split_file_dir = os.path.join(dataset_root, "epic_list_frames")
 split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv'}
 split2mode = {'train': 'train', 'val': 'val', 'multicropval': 'test', 'test': 'test'}
 
+# Training settings
+horizontal_flip = True 
+
 #def _unpack_data_videoclip(data):
 #    inputs, uids, labels, spatial_temporal_idx, _, _ = data
 #    return _data_to_gpu(inputs, uids, labels) + (spatial_temporal_idx,)

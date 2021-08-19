@@ -23,3 +23,5 @@ split_file_basename = split_file_basename1
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
 
 
+# Training settings
+horizontal_flip = True 

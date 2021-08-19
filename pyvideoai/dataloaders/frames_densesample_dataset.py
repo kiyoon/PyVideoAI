@@ -28,7 +28,9 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
     """
 
     def __init__(self, csv_file, mode, num_frames, sampling_rate,
-            train_jitter_min=256, train_jitter_max=320, test_scale=256,
+            train_jitter_min=256, train_jitter_max=320,
+            train_horizontal_flip=True,
+            test_scale=256,
             test_num_ensemble_views=10, test_num_spatial_crops=3, 
             crop_size = 224, mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225],
             normalise = True,           # divide pixels by 255
@@ -70,6 +72,8 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
         self.num_frames = num_frames
         self.sampling_rate = sampling_rate
         self.test_num_emsemble_views = test_num_ensemble_views
+
+        self.train_horizontal_flip = train_horizontal_flip
 
         self.crop_size = crop_size
 
@@ -222,7 +226,7 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
             min_scale=min_scale,
             max_scale=max_scale,
             crop_size=crop_size,
-            random_horizontal_flip=True,    # only applied when "train" mode (spatial_sample_index == -1)
+            random_horizontal_flip=self.train_horizontal_flip,    # only applied when "train" mode (spatial_sample_index == -1)
         )
 
 

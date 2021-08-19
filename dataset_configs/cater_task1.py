@@ -15,6 +15,8 @@ frames_splits_partial_dir = os.path.join(dataset_root, "splits_frames_partial/ac
 split_file_basename = {'train': 'train.txt', 'val': 'val.txt', 'multicropval': 'val.txt'}
 split2mode = {'train': 'train', 'val': 'val', 'multicropval': 'test', 'test': 'test'}
 
+# Training settings
+horizontal_flip = True 
 '''
 # Misc
 

@@ -21,6 +21,9 @@ meta_mat_path = os.path.join(dataset_root, 'ILSVRC2012_devkit_t12/data/meta.mat'
 _, wnid_to_label, class_keys = parse_meta_mat(meta_mat_path)
 class_keys = pd.DataFrame(class_keys, columns=['class_keys'])['class_keys']
 
+# Training settings
+horizontal_flip = True 
+
 # Misc
 
 from pyvideoai.dataloaders.image_classification_dataset import count_class_frequency

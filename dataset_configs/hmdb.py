@@ -48,6 +48,8 @@ split_file_basename3 = {'train': 'train3.csv', 'val': 'test3.csv', 'multicropval
 split_file_basename = split_file_basename1
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
 
+# Training settings
+horizontal_flip = True 
 
 # Misc
 

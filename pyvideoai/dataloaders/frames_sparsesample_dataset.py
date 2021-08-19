@@ -47,6 +47,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
 
     def __init__(self, csv_file, mode, num_frames, 
             train_jitter_min=256, train_jitter_max=320,
+            train_horizontal_flip = True,
             test_scale=256, test_num_spatial_crops=10, 
             crop_size = 224, mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225],
             normalise = True,           # divide pixels by 255
@@ -90,6 +91,8 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         self.train_jitter_min = train_jitter_min
         self.train_jitter_max = train_jitter_max
         self.test_scale = test_scale
+
+        self.train_horizontal_flip = train_horizontal_flip
 
         self.num_frames = num_frames
 
@@ -252,7 +255,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             min_scale=min_scale,
             max_scale=max_scale,
             crop_size=crop_size,
-            random_horizontal_flip=True,
+            random_horizontal_flip=self.train_horizontal_flip,
         )
 
 
