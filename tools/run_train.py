@@ -96,7 +96,7 @@ def main():
 
     # Perform training.
     if args.local_world_size * args.num_shards > 1:
-        warnings.warn('Running distributed training with `torch.multiprocessing.spawn` is slow and thus deprecated. Use train_singlenode.sh or train_multinode.sh instead. Use this code for single GPU training only.')
+        warnings.warn('Running distributed training with `torch.multiprocessing.spawn` is slow and thus deprecated. Use run_singlenode.sh or run_multinode.sh instead. Use this code for single GPU training only.')
         torch.multiprocessing.spawn(
             mpu.run,
             nprocs=args.local_world_size,
