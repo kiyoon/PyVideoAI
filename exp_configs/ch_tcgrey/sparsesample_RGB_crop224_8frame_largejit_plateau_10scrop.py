@@ -27,7 +27,7 @@ val_scale = 256
 val_num_spatial_crops = 1
 test_scale = 256
 def test_num_spatial_crops():
-    return 10 if dataset_cfg.horizontal_flip else 5         # dataset_cfg environment is only accessible within function.
+    return 10 if dataset_cfg.horizontal_flip else 1         # dataset_cfg environment is only accessible within function.
 greyscale=False
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5

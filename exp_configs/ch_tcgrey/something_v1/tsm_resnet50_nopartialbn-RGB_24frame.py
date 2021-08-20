@@ -33,3 +33,4 @@ def optimiser(params):
 
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     return torch.optim.lr_scheduler.MultiStepLR(optimiser, [it*iters_per_epoch for it in [20, 40]], 0.1, last_epoch)
+
