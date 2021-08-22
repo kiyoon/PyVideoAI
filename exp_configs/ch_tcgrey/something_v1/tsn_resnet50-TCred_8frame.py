@@ -1,0 +1,1 @@
+trn_resnet50-TCred_8frame.py
