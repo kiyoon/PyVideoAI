@@ -30,7 +30,7 @@ def retry_load_images(image_paths, retry=10, backend="pytorch", bgr=False, greys
     assert not (bgr == greyscale == True), "Cannot be BGR and Greyscale at the same time"
     for i in range(retry):
         if greyscale:
-            imgs = [np.expand_dims(cv2.cvtColor(cv2.imread(image_path), cv2.COLOR_BGR2GRAY), axis=-1) for image_path in image_paths]
+            imgs = [np.expand_dims(cv2.imread(image_path, flags=cv2.IMREAD_GRAYSCALE), axis=-1) for image_path in image_paths]
         else:
             imgs = [cv2.imread(image_path) for image_path in image_paths]
 
