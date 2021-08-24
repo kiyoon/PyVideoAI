@@ -1,0 +1,1 @@
+trn_resnet50-TCShortLong_8frame.py
