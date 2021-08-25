@@ -1,0 +1,1 @@
+trn_resnet50-TC_32frame.py
