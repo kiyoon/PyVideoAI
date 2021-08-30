@@ -101,6 +101,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         if greyscale:
             assert len(mean) == 1
             assert len(std) == 1
+            assert not bgr, "Greyscale and BGR can't be set at the same time."
         else:
             assert len(mean) in [1, 3]
             assert len(std) in [1, 3]
@@ -261,7 +262,6 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
 
         video_id = self._video_ids[index]
         label = self._labels[index]
-        #frames = utils.pack_pathway_output(self.cfg, frames)
         return frames, video_id, label, spatial_sample_index, index, np.array(frame_indices)
 
     def __len__(self):

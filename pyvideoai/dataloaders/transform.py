@@ -5,6 +5,32 @@ import math
 import numpy as np
 import torch
 
+def get_size_random_short_side_scale_jitter(image_width, image_height, min_size, max_size, inverse_uniform_sampling=False):
+    """
+    Return:
+        new_width, new_height
+    """
+    if inverse_uniform_sampling:
+        size = int(
+            round(1.0 / np.random.uniform(1.0 / max_size, 1.0 / min_size))
+        )
+    else:
+        size = int(round(np.random.uniform(min_size, max_size)))
+
+    height = image_height
+    width = image_width
+    if (width <= height and width == size) or (
+        height <= width and height == size
+    ):
+        return width, height
+    new_width = size
+    new_height = size
+    if width < height:
+        new_height = int(math.floor((float(height) / width) * size))
+    else:
+        new_width = int(math.floor((float(width) / height) * size))
+
+    return new_width, new_height
 
 def random_short_side_scale_jitter(
     images, min_size, max_size, boxes=None, inverse_uniform_sampling=False

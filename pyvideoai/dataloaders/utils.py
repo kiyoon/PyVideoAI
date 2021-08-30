@@ -170,12 +170,15 @@ def spatial_sampling_5(
     """
     assert spatial_idx in [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     if spatial_idx == -1:
-        frames, _, scale_factor_width, scale_factor_height = transform.random_short_side_scale_jitter(
-            images=frames,
-            min_size=min_scale,
-            max_size=max_scale,
-            inverse_uniform_sampling=inverse_uniform_sampling,
-        )
+        if min_size is not None and max_size is not None:
+            frames, _, scale_factor_width, scale_factor_height = transform.random_short_side_scale_jitter(
+                images=frames,
+                min_size=min_scale,
+                max_size=max_scale,
+                inverse_uniform_sampling=inverse_uniform_sampling,
+            )
+        else:
+            scale_factor_width = scale_factor_height = None
         frames, _, x_offset, y_offset = transform.random_crop(frames, crop_size)
         if random_horizontal_flip:
             frames, _, is_flipped = transform.random_horizontal_flip(0.5, frames)
@@ -184,10 +187,14 @@ def spatial_sampling_5(
     else:
         # The testing is deterministic and no jitter should be performed.
         # min_scale and max_scale are expect to be the same.
-        assert len({min_scale, max_scale}) == 1
-        frames, _, scale_factor_width, scale_factor_height = transform.random_short_side_scale_jitter(
-            frames, min_scale, max_scale
-        )
+        if min_size is not None and max_size is not None:
+            assert len({min_scale, max_scale}) == 1
+            frames, _, scale_factor_width, scale_factor_height = transform.random_short_side_scale_jitter(
+                frames, min_scale, max_scale
+            )
+        else:
+            scale_factor_width = scale_factor_height = None
+            
         frames, _, x_offset, y_offset = transform.uniform_crop_5(frames, crop_size, spatial_idx % 5)
         if spatial_idx >= 5:
             frames, _ = transform.horizontal_flip(frames)

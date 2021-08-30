@@ -10,101 +10,129 @@ import torch.utils.data
 #import slowfast.utils.logging as logging
 import logging
 
-from . import decoder as decoder
 from . import transform as transform
 from . import utils as utils
-from . import video_container as container
-#from .build import DATASET_REGISTRY
+
+from decord import VideoReader
+import decord
 
 logger = logging.getLogger(__name__)
 
+def count_class_frequency(csv_file):
+    assert os.path.exists(csv_file), "{} not found".format(
+        csv_file
+    )
 
-#@DATASET_REGISTRY.register()
+    labels = []
+    with open(csv_file, "r") as f:
+        self.num_classes = int(f.readline())
+        for clip_idx, path_label in enumerate(f.read().splitlines()):
+            assert len(path_label.split()) == 7
+            path, video_id, label, start_frame, end_frame = path_label.split()
+            label = int(label)
+            labels.append(label)
+
+    labels = np.array(labels)
+    assert labels.min() == 0, 'class label has to start with 0'
+
+    class_frequency = np.bincount(labels, minlength=labels.max())
+    return class_frequency
+
 class VideoSparsesampleDataset(torch.utils.data.Dataset):
     """
     Video loader. Construct the video loader, then sample
-    clips from the videos. For training and validation, a single clip is
+    clips from the videos. For training, a single clip is
     randomly sampled from every video with random cropping, scaling, and
     flipping. For testing, multiple clips are uniformaly sampled from every
-    video with uniform cropping. For uniform cropping, we take the left, center,
-    and right crop if the width is larger than height, or take top, center, and
-    bottom crop if the height is larger than the width.
+    video with uniform cropping. For uniform cropping, we take the center
+    and four corners.
     """
 
     def __init__(self, csv_file, mode, num_frames, 
-            target_fps = 30000 / 1001,
-            train_jitter_min=256, train_jitter_max=320, val_scale=256, test_scale=256,
-            val_num_spatial_crops=1, test_num_spatial_crops=10, 
+            train_jitter_min=256, train_jitter_max=320,
+            train_horizontal_flip = True,
+            test_scale=256, test_num_spatial_crops=10, 
             crop_size = 224, mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225],
             normalise = True,           # divide pixels by 255
-            enable_multi_thread_decode = False,
-            decoding_backend = 'pyav',
-            path_prefix = "", num_retries=10):
+            bgr = False,
+            greyscale = False,
+            path_prefix = "",
+            num_retries = 10,
+            sample_index_code = 'pyvideoai',
+            num_decord_threads=1,
+            ):
         """
         Construct the video loader with a given csv file. The format of
         the csv file is:
         ```
-        path_to_video_1 video_id_1 label_1
-        path_to_video_2 video_id_2 label_2
+        num_classes     # set it to zero for single label. Only needed for multilabel.
+        path_to_video_1.mp4 video_id_1 label_1 start_frame_1 end_frame_1 width_1 height_2
+        path_to_video_2.mp4 video_id_2 label_2 start_frame_2 end_frame_2 width_2 height_2
         ...
-        path_to_video_N video_id_N label_N
+        path_to_video_3.mp4 video_id_N label_N start_frame_N end_frame_N width_N height_N
         ```
         Args:
-            mode (string): Options includes `train`, `val`, or `test` mode.
-                For the train and val mode, the data loader will take data
-                from the train or val set, and sample one clip per video.
+            mode (str): Options includes `train`, or `test` mode.
+                For the train, the data loader will take data
+                from the train set, and sample one clip per video.
                 For the test mode, the data loader will take data from test set,
                 and sample multiple clips per video.
-            num_retries (int): number of retries.
+            sample_index_code (str): Options include `pyvideoai`, `TSN` and `TDN`.
+                Slightly different implementation of how video is sampled (pyvideoai and TSN),
+                and for the TDN, it is completely different as it samples num_frames*5 frames.
         """
-        # Only support train, val, and test mode.
+        # Only support train, and test mode.
         assert mode in [
             "train",
-            "val",
             "test",
         ], "Split '{}' not supported".format(mode)
         self._csv_file = csv_file
         self._path_prefix = path_prefix
+        self._num_retries = num_retries
+        self._num_decord_threads = num_decord_threads
         self.mode = mode
+        self.sample_index_code = sample_index_code.lower()
 
         self.train_jitter_min = train_jitter_min
         self.train_jitter_max = train_jitter_max
-        self.val_scale = val_scale
         self.test_scale = test_scale
 
+        self.train_horizontal_flip = train_horizontal_flip
+
         self.num_frames = num_frames
-        self.target_fps = target_fps
 
         self.crop_size = crop_size
-        self.enable_multi_thread_decode = enable_multi_thread_decode
-        assert decoding_backend == 'pyav'
-        self.decoding_backend = decoding_backend
 
-        self.mean = mean
-        self.std = std
+        if greyscale:
+            assert len(mean) == 1
+            assert len(std) == 1
+            assert not bgr, "Greyscale and BGR can't be set at the same time."
+        else:
+            assert len(mean) in [1, 3]
+            assert len(std) in [1, 3]
+        self.mean = torch.FloatTensor(mean)
+        self.std = torch.FloatTensor(std)
 
         self.normalise = normalise
+        self.bgr = bgr
+        self.greyscale = greyscale 
 
-        self._video_meta = {}
-        self._num_retries = num_retries
-        # For training or validation mode, one single clip is sampled from every
+        # For training mode, one single clip is sampled from every
         # video. For testing, NUM_ENSEMBLE_VIEWS clips are sampled from every
         # video. For every clip, NUM_SPATIAL_CROPS is cropped spatially from
         # the frames.
         if self.mode in ["train"]:
             self._num_clips = 1
-        if self.mode in ["val"]:
-            self._num_clips = val_num_spatial_crops
         elif self.mode in ["test"]:
             self._num_clips = test_num_spatial_crops
 
-        assert val_num_spatial_crops in [1, 5, 10], "1 for centre, 5 for centre and four corners, 10 for their horizontal flips"
         assert test_num_spatial_crops in [1, 5, 10], "1 for centre, 5 for centre and four corners, 10 for their horizontal flips"
-        self.val_num_spatial_crops = val_num_spatial_crops
         self.test_num_spatial_crops = test_num_spatial_crops
 
         logger.info("Constructing video dataset {}...".format(mode))
         self._construct_loader()
+
+        decord.bridge.set_bridge('torch')
 
     def _construct_loader(self):#{{{
         """
@@ -117,19 +145,36 @@ class VideoSparsesampleDataset(torch.utils.data.Dataset):
         self._path_to_videos = []
         self._video_ids = []
         self._labels = []
+        self._start_frames = []    # number of sample video frames
+        self._end_frames = []    # number of sample video frames
+        self._widths = []
+        self._heights = []
         self._spatial_temporal_idx = []
         with open(self._csv_file, "r") as f:
+            self.num_classes = int(f.readline())
             for clip_idx, path_label in enumerate(f.read().splitlines()):
-                assert len(path_label.split()) == 3
-                path, video_id, label = path_label.split()
+                assert len(path_label.split()) == 7
+                path, video_id, label, start_frame, end_frame, width, height = path_label.split()
+
+                if self.num_classes > 0:
+                    label_list = label.split(",")
+                    label = np.zeros(self.num_classes, dtype=np.float32)
+                    for label_idx in label_list:
+                        label[int(label_idx)] = 1.0       # one hot encoding
+                else:
+                    label = int(label)
+
                 for idx in range(self._num_clips):
                     self._path_to_videos.append(
                         os.path.join(self._path_prefix, path)
                     )
                     self._video_ids.append(int(video_id))
-                    self._labels.append(int(label))
+                    self._labels.append(label)
+                    self._start_frames.append(int(start_frame))
+                    self._end_frames.append(int(end_frame))
+                    self._widths.append(int(width))
+                    self._heights.append(int(height))
                     self._spatial_temporal_idx.append(idx)
-                    self._video_meta[clip_idx * self._num_clips + idx] = {}
         assert (
             len(self._path_to_videos) > 0
         ), "Failed to load video loader split {} from {}".format(
@@ -164,16 +209,6 @@ class VideoSparsesampleDataset(torch.utils.data.Dataset):
             min_scale = self.train_jitter_min
             max_scale = self.train_jitter_max
             sample_uniform = False
-        elif self.mode in ["val"]:
-            spatial_sample_index = (
-                self._spatial_temporal_idx[index]
-                % self.val_num_spatial_crops
-            )
-            min_scale, max_scale = [self.val_scale] * 2
-            # The testing is deterministic and no jitter should be performed.
-            # min_scale, max_scale are expect to be the same.
-            assert len({min_scale, max_scale}) == 1
-            sample_uniform = True
         elif self.mode in ["test"]:
             # spatial_sample_index is in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].
             spatial_sample_index = (
@@ -190,64 +225,53 @@ class VideoSparsesampleDataset(torch.utils.data.Dataset):
                 "Does not support {} mode".format(self.mode)
             )
 
-        # Try to decode and sample a clip from a video. If the video can not be
-        # decoded, repeatly find a random video replacement that can be decoded.
-        for _ in range(self._num_retries):
-            video_container = None
-            try:
-                video_container = container.get_video_container(
-                    self._path_to_videos[index],
-                    self.enable_multi_thread_decode,
-                    self.decoding_backend,
-                )
-            except Exception as e:
-                logger.error(
-                    "Failed to load video from {} with error {}".format(
-                        self._path_to_videos[index], e
-                    )
-                )
-            # Select a random video if the current video was not able to access.
-            if video_container is None:
-                index = random.randint(0, len(self._path_to_videos) - 1)
-                continue
 
-            # Decode video. Meta info is used to perform selective decoding.
-            frames, _, frame_indices = decoder.pyav_decode_sparse(video_container, self.num_frames, uniform=sample_uniform)
-
-            # If decoding failed (wrong format, video is too short, and etc),
-            # select another video.
-            if frames is None:
-                logger.warning('Failed to decode the video index {}'.format(index))
-                index = random.randint(0, len(self._path_to_videos) - 1)
-                logger.warning('Choosing random video of index {} instead'.format(index))
-                continue
-
-            # Perform color normalization.
-            frames = utils.tensor_normalize(
-                frames, self.mean, self.std, normalise = self.normalise
-            )
-            # T H W C -> C T H W.
-            frames = frames.permute(3, 0, 1, 2)
-            # Perform data augmentation.
-            frames, scale_factor_width, scale_factor_height, x_offset, y_offset, is_flipped = utils.spatial_sampling_5(
-                frames,
-                spatial_idx=spatial_sample_index,
-                min_scale=min_scale,
-                max_scale=max_scale,
-                crop_size=crop_size,
-                random_horizontal_flip=True,
-            )
-
-            video_id = self._video_ids[index]
-            label = self._labels[index]
-            #frames = utils.pack_pathway_output(self.cfg, frames)
-            return frames, video_id, label, spatial_sample_index, index, np.array(frame_indices), {}
+        # Decode video. Meta info is used to perform selective decoding.
+#        frame_indices = utils.TRN_sample_indices(self._num_sample_frames[index], self.num_frames, mode = self.mode)
+        num_video_frames = self._end_frames[index] - self._start_frames[index] + 1
+        if self.sample_index_code == 'pyvideoai':
+            frame_indices = utils.sparse_frame_indices(num_video_frames, self.num_frames, uniform=sample_uniform)
+        elif self.sample_index_code == 'tsn':
+            frame_indices = utils.TSN_sample_indices(num_video_frames, self.num_frames, mode = self.mode)
+        elif self.sample_index_code == 'tdn':
+            frame_indices = utils.TDN_sample_indices(num_video_frames, self.num_frames, mode = self.mode)
+        elif self.sample_index_code == 'tdn_greyst':
+            frame_indices = utils.TDN_sample_indices(num_video_frames, self.num_frames, mode = self.mode, new_length=15)
         else:
-            raise RuntimeError(
-                "Failed to fetch video after {} retries.".format(
-                    self._num_retries
-                )
-            )
+            raise ValueError(f'Wrong self.sample_index_code: {self.sample_index_code}. Should be pyvideoai, TSN, TDN')
+        frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
+
+        new_width, new_height = transform.get_size_random_short_side_scale_jitter(self._widths[index], self._heights[index], min_scale, max_scale)
+        vr = VideoReader(self._path_to_videos[index], width=new_width, height=new_height, num_threads=self._num_decord_threads)
+        frames = vr.get_batch(frame_indices)
+        if self.greyscale:
+            frames = frames[...,0]*0.2989 + frames[...,1]*0.5870 + frames[...,2]*0.1440
+            frames = frames.unsqueeze(-1)   # Add colour channel (shape T, H, W, 1)
+        elif self.bgr:
+            frames = frames[...,::-1]
+
+        # Perform color normalization.
+        frames = utils.tensor_normalize(
+            frames, self.mean, self.std, normalise = self.normalise
+        )
+
+        # T, H, W, C -> C, T, H, W
+        frames = frames.permute(3, 0, 1, 2)
+
+        # Perform data augmentation.
+        frames, _, _, x_offset, y_offset, is_flipped = utils.spatial_sampling_5(
+            frames,
+            spatial_idx=spatial_sample_index,
+            min_scale=None,     # Already rescaled using decord
+            max_scale=None,
+            crop_size=crop_size,
+            random_horizontal_flip=self.train_horizontal_flip,
+        )
+
+
+        video_id = self._video_ids[index]
+        label = self._labels[index]
+        return frames, video_id, label, spatial_sample_index, index, np.array(frame_indices)
 
     def __len__(self):
         """
