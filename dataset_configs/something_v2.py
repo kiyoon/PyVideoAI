@@ -11,6 +11,7 @@ task = SingleLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'something-something-v2')
+video_dir = os.path.join(dataset_root, 'videos')
 frames_dir = os.path.join(dataset_root, 'frames_q5')
 annotations_root = os.path.join(dataset_root, 'annotations')
 label_json = os.path.join(annotations_root, 'something-something-v2-labels.json')

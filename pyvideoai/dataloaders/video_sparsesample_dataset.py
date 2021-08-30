@@ -57,7 +57,6 @@ class VideoSparsesampleDataset(torch.utils.data.Dataset):
             bgr = False,
             greyscale = False,
             path_prefix = "",
-            num_retries = 10,
             sample_index_code = 'pyvideoai',
             num_decord_threads=1,
             ):
@@ -88,7 +87,6 @@ class VideoSparsesampleDataset(torch.utils.data.Dataset):
         ], "Split '{}' not supported".format(mode)
         self._csv_file = csv_file
         self._path_prefix = path_prefix
-        self._num_retries = num_retries
         self._num_decord_threads = num_decord_threads
         self.mode = mode
         self.sample_index_code = sample_index_code.lower()

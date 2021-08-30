@@ -9,13 +9,15 @@ import numpy as np
 import video_datasets_api.something_something_v2 as sthv2
 from video_datasets_api.something_something_v2.definitions import NUM_CLASSES
 
+from decord import VideoReader
+
 import argparse
 def get_parser():
     parser = argparse.ArgumentParser(description="Generate Something-Something-V2 splits for PyVideoAI framework",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("output_dir", help="Directory to save train.csv and val.csv")
     parser.add_argument("annotations_root", type=str, help="Path to the annotation directory.")
-    parser.add_argument("--root", help="Path to the directory with video files.")
+    parser.add_argument("root", help="Path to the directory with video files.")
     parser.add_argument("--mode", type=str, default='frames', choices=['video', 'frames'], help="Dataset stored as videos or extracted frames?")
     parser.add_argument("--partial", action='store_true', help="Save only partial data.")
     parser.add_argument("--prob", type=float, default=0.25, help="Probability to include an example. Applied when --partial is specified.")
@@ -28,11 +30,6 @@ def get_parser():
 
 parser = get_parser()
 args = parser.parse_args()
-
-if args.mode == 'frames':
-    assert args.root is not None, '--root parameter missing'
-else:
-    assert args.num_frames_atleast == 0, '--num_frames_atleast cannot come with video input'
 
 
 if __name__ == '__main__':
@@ -68,7 +65,12 @@ if __name__ == '__main__':
                     if args.head_and_tail:
                         label = old_labels_to_new[label]    # change label
                     if args.mode == 'video':
-                        write_str = f'\n{uid}.mp4 {uid} {label}'
+                        vr = VideoReader(os.path.join(args.root, f'{uid}.webm'), num_threads=1)
+                        num_frames = len(vr)
+                        if num_frames < args.num_frames_atleast:
+                            continue
+                        height, width, _ = vr[0].shape
+                        write_str = f'\n{uid}.webm {uid} {label} 0 {num_frames-1} {width} {height}'
                     elif args.mode == 'frames':
                         dir_path = os.path.join(args.root, f'{uid}')
                         num_frames = len([name for name in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, name))])

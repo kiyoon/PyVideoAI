@@ -24,5 +24,6 @@ setup(
        'av',  # Video decoding
        'pretrainedmodels',      # epic models TSN TRN
        'moviepy',               # Tensorboard `add_video()`
+       'decord',                # Video decoding
        ],
 )

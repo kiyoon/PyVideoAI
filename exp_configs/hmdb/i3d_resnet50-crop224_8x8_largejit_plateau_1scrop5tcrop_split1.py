@@ -2,10 +2,12 @@
 You can use `dataset_cfg` and `model_cfg` modules in this experiment config module.
 It works just as below, but appropriate dataset and model configs are imported automatically so you don't have to do so on your own.
 
-Illustrative code:
+Illustrative code header:
 ```
 from dataset_configs import hmdb as dataset_cfg
 from model_configs import i3d_resnet50 as model_cfg
+def _exec_relative_(relative_python_code_path):     # Use this to import base config structure from another config file.
+    exec(relative_python_code_path)
 ```
 """
 

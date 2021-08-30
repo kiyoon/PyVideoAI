@@ -26,9 +26,10 @@ train_jitter_max = 336
 val_scale = 256
 val_num_spatial_crops = 1
 test_scale = 256
-def test_num_spatial_crops():
-    return 10 if dataset_cfg.horizontal_flip else 1         # dataset_cfg environment is only accessible within function.
+test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
+
 greyscale=False
+sampling_mode = 'RGB'   # RGB, TC, GreyST
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
@@ -85,10 +86,10 @@ from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
     #return torch.optim.lr_scheduler.StepLR(optimiser, step_size = 50 * iters_per_epoch, gamma = 0.1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
-    if 'something' in dataset_cfg.__name__:
-        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
-    else:
+    if 'cater' in dataset_cfg.__name__:
         return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+    else:
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
     #return None
 
 def load_model():
@@ -144,9 +145,9 @@ def _get_torch_dataset(csv_path, split):
         _test_num_spatial_crops = val_num_spatial_crops
     else:
         _test_scale = test_scale
-        _test_num_spatial_crops = test_num_spatial_crops()
+        _test_num_spatial_crops = test_num_spatial_crops
     return FramesSparsesampleDataset(csv_path, mode,
-            input_frame_length, 
+            input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
             train_horizontal_flip=dataset_cfg.horizontal_flip,
             test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
