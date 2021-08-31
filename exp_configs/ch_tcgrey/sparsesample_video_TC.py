@@ -1,4 +1,4 @@
-_exec_relative_('sparsesample_video_RGB')
+_exec_relative_('sparsesample_video_RGB.py')
 
 sampling_mode = 'TC'
 
