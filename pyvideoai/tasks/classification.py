@@ -17,7 +17,7 @@ class SingleLabelClassificationTask(Task):
         return 'softmax'
 
     def _default_metrics(self, activation):
-        best_metric = ClipAccuracyMetric()
+        best_metric = ClipAccuracyMetric(topk=(1,5))
         metrics_dict = {'train': [ClipAccuracyMetric()],
                 'val': [best_metric],
                 'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=activation)],
