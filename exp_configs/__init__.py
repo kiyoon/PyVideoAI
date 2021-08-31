@@ -6,6 +6,8 @@ import glob
 import dataset_configs
 import model_configs
 
+from shutil import copy2
+
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
 
@@ -39,7 +41,9 @@ def _exec_relative_(python_path):
     Dynamically import (exec) base config code.
     Only relative path should be used, and it will find correct config base recursively.
     """
-    with open(os.path.join(*_current_dir_stack_, python_path), 'r') as f:
+    base_config_path = os.path.realpath(os.path.join(*_current_dir_stack_, python_path))
+    _exec_paths_.append(base_config_path)
+    with open(base_config_path, 'r') as f:
         config_code = f.read()
         
     _current_dir_stack_.append(os.path.dirname(python_path))
@@ -70,13 +74,29 @@ def load_cfg(dataset_name, model_name, experiment_name, dataset_channel='', mode
     # Add _exec_relative_() to the module
     # for dynamically adding base config files.
     cfg._current_dir_stack_ = [os.path.dirname(os.path.realpath(cfg.__file__))]
+    cfg._exec_paths_ = []
     exec(exec_relative_code, cfg.__dict__)
 
     # Finally, exec the config module
     spec.loader.exec_module(cfg)
 
-
     return cfg
+
+def copy_cfg_files(cfg, dest_dir):
+    """
+    Backup the config file and its base config files exec'ed using _exec_relative_().
+    """
+    src_dir = _SCRIPT_DIR
+
+    for cfg_path in [os.path.realpath(cfg.__file__)] + cfg._exec_paths_:
+        rel_path = os.path.relpath(cfg_path, src_dir)
+        dest_path = os.path.join(dest_dir, rel_path)
+        dest_dir = os.path.dirname(dest_path)
+
+        os.makedirs(dest_dir, exist_ok=True)
+        copy2(cfg_path, dest_path, follow_symlinks=True)
+
+
 
 def config_path(dataset_name, model_name, experiment_name, channel=''):
     return os.path.join(_SCRIPT_DIR, _get_file_name(dataset_name, model_name, experiment_name, channel))

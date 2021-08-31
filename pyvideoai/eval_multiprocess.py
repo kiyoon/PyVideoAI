@@ -94,22 +94,14 @@ def evaluation(args):
 #            exp.dump_args(args)
             logger.info("args: " + json.dumps(args.__dict__, sort_keys=False, indent=4))
             du.log_distributed_info(world_size, local_world_size)
-            dataset_config_dir = os.path.join(exp.configs_dir, 'dataset_config_val')
-            os.makedirs(dataset_config_dir, exist_ok=True)
-            #copy2(os.path.join(dataset_configs._SCRIPT_DIR, '__init__.py'), os.path.join(dataset_config_dir, '__init__.py'))
-            copy2(dataset_configs.config_path(args.dataset, args.dataset_channel), os.path.join(dataset_config_dir, args.dataset + '.py'))
+            dataset_config_dir = os.path.join(exp.configs_dir, 'dataset_configs_eval')
+            dataset_configs.copy_cfg_files(cfg.dataset_cfg, dataset_config_dir)
 
-            model_config_dir = os.path.join(exp.configs_dir, 'model_config_val')
-            os.makedirs(model_config_dir, exist_ok=True)
-            #copy2(os.path.join(model_configs._SCRIPT_DIR, 'model_configs', '__init__.py'), os.path.join(model_config_dir, '__init__.py'))
-            copy2(model_configs.config_path(args.model, args.model_channel), os.path.join(model_config_dir, args.model + '.py'))
+            model_config_dir = os.path.join(exp.configs_dir, 'model_configs_eval')
+            model_configs.copy_cfg_files(cfg.model_cfg, model_config_dir)
 
-            exp_config_dir = os.path.join(exp.configs_dir, 'exp_config_val')
-            os.makedirs(exp_config_dir, exist_ok=True)
-            config_file_name = exp_configs._get_file_name(args.dataset, args.model, args.experiment_name)
-            #copy2(os.path.join(exp_configs._SCRIPT_DIR, '__init__.py'), os.path.join(config_dir, '__init__.py'))
-            copy2(exp_configs.config_path(args.dataset, args.model, args.experiment_name, args.experiment_channel), os.path.join(exp_config_dir, os.path.basename(config_file_name)))
-
+            exp_config_dir = os.path.join(exp.configs_dir, 'exp_configs_eval')
+            exp_configs.copy_cfg_files(cfg, exp_config_dir)
 
         # Dataset
         if args.split is not None:
