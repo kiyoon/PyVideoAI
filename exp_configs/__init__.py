@@ -91,9 +91,8 @@ def copy_cfg_files(cfg, dest_dir):
     for cfg_path in [os.path.realpath(cfg.__file__)] + cfg._exec_paths_:
         rel_path = os.path.relpath(cfg_path, src_dir)
         dest_path = os.path.join(dest_dir, rel_path)
-        dest_dir = os.path.dirname(dest_path)
 
-        os.makedirs(dest_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
         copy2(cfg_path, dest_path, follow_symlinks=True)
 
 
