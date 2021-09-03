@@ -51,6 +51,24 @@ def TC_idx(T):
     idx = list(map(frame_limit, idx))
     return idx
 
+def TCrgb_idx(T):
+    """
+    Returns TC Reordering indices, but alternating R G B.
+    When channels are ordered like (1R 1G 1B 2R 2G 2B 3R 3G 3B 4R ...),
+    Returns indices to make it (1R 2G 3B 2R 3G 4B 3R 4G 5B 4R 5G 6B ...).
+    """
+    assert T >= 3
+    idx_1frame = get_frame_indices_1D(['1R', '2G', '3B'])
+    repeat = T
+    idx = []
+    for i in range(repeat):
+        idx.extend(map(lambda x: x+3*i, idx_1frame)) 
+    def frame_limit(x):
+        while x >= T*3:
+            x -= 3
+        return x
+    idx = list(map(frame_limit, idx))
+    return idx
 
 def TCred_idx(T):
     """
@@ -59,7 +77,7 @@ def TCred_idx(T):
     Returns indices to make it (1R 2R 3R 2R 3R 4R 3R 4R 5R 4R 5R 6R ...).
     """
     assert T >= 3
-    idx_3frame = get_frame_indices_1D(['1R', '2R', '3R'])
+    idx_1frame = get_frame_indices_1D(['1R', '2R', '3R'])
     repeat = T
     idx = []
     for i in range(repeat):
