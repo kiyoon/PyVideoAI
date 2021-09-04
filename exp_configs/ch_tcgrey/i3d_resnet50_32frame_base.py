@@ -1,5 +1,6 @@
 
 input_frame_length = 32
+base_learning_rate = 1e-4
 def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
