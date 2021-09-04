@@ -22,7 +22,9 @@ def batch_size():
 #    return batch_size() if callable(batch_size) else batch_size
 
 input_frame_length = 8
-input_sample_rate = 8
+def input_sample_rate():
+    return 8 if sampling_mode != 'GreyST' else 3
+
 crop_size = 224
 train_jitter_min = 224
 train_jitter_max = 336
@@ -35,6 +37,8 @@ test_num_spatial_crops = 3
 
 input_channel_num=[3]   # RGB
 
+greyscale=False
+sampling_mode = 'RGB'   # RGB, TC, GreyST
 base_learning_rate = 1e-5      # when batch_size == 1 and #GPUs == 1
 
 #### OPTIONAL
@@ -108,8 +112,10 @@ from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
     #return torch.optim.lr_scheduler.StepLR(optimiser, step_size = 50 * iters_per_epoch, gamma = 0.1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
-    #return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
-    return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+    if 'cater' in dataset_cfg.__name__:
+        return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+    else:
+        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
     #return None
 
 def load_model():
@@ -168,14 +174,16 @@ def _get_torch_dataset(csv_path, split):
         _test_num_ensemble_views = test_num_ensemble_views
         _test_num_spatial_crops = test_num_spatial_crops
     return FramesDensesampleDataset(csv_path, mode,
-            input_frame_length, input_sample_rate,
+            input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
+            input_sample_rate(),
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
             train_horizontal_flip=dataset_cfg.horizontal_flip,
             test_scale=_test_scale, test_num_ensemble_views=_test_num_ensemble_views, test_num_spatial_crops=_test_num_spatial_crops,
             crop_size=crop_size,
-            mean = model_cfg.input_mean, std = model_cfg.input_std,
+            mean = [model_cfg.input_mean[0]] if greyscale else model_cfg.input_mean,
+            std = [model_cfg.input_std[0]] if greyscale else model_cfg.input_std,
             normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
-            greyscale=False,
+            greyscale=greyscale,
             path_prefix=dataset_cfg.frames_dir)
 
 def get_torch_dataset(split):
