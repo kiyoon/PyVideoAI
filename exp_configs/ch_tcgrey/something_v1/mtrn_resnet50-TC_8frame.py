@@ -1,1 +1,1 @@
-trn_resnet50-TC_8frame.py
+../sparsesample_TC_crop224_8frame_largejit_plateau_10scrop.py
