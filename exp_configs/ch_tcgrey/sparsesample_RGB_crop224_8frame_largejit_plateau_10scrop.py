@@ -86,7 +86,8 @@ from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
     #return torch.optim.lr_scheduler.StepLR(optimiser, step_size = 50 * iters_per_epoch, gamma = 0.1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
-    if 'cater' in dataset_cfg.__name__:
+    matches = ['cater', 'diving48']
+    if any(x in dataset_cfg.__name__ for x in matches):
         return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
     else:
         return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
