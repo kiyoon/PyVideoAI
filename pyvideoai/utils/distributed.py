@@ -287,11 +287,28 @@ def check_random_seed_in_sync(num_values_per_process=3):
     """
     if get_world_size() > 1:
         cur_device = torch.cuda.current_device()
+
+        # PyTorch
         rand_values = torch.rand(1,num_values_per_process).to(cur_device)
         (rand_values,) = all_gather([rand_values])          # shape: (num_processes, num_values_per_process)
         if rand_values.unique(dim=0).size(0) != 1:          # shape has to be (1, num_values_per_process) if all values are equal over the processes.
-            raise RuntimeError('Random seed not in sync over the multiple processes. Make sure you are not calling more random calls on only some of the processes.')
+            raise RuntimeError('PyTorch random seed not in sync over the multiple processes. Make sure you are not calling more random calls on only some of the processes.')
 
+        # numpy
+        rand_values = torch.from_numpy(np.random.rand(1,num_values_per_process)).to(cur_device)
+        (rand_values,) = all_gather([rand_values])          # shape: (num_processes, num_values_per_process)
+        if rand_values.unique(dim=0).size(0) != 1:          # shape has to be (1, num_values_per_process) if all values are equal over the processes.
+            raise RuntimeError('Numpy random seed not in sync over the multiple processes. Make sure you are not calling more random calls on only some of the processes.')
+
+        # random 
+        rand_array = np.zeros((1, num_values_per_process))
+        for i in range(num_values_per_process):
+            rand_array[0, i] = random.random()
+
+        rand_values = torch.from_numpy(np.random.rand(1,num_values_per_process)).to(cur_device)
+        (rand_values,) = all_gather([rand_values])          # shape: (num_processes, num_values_per_process)
+        if rand_values.unique(dim=0).size(0) != 1:          # shape has to be (1, num_values_per_process) if all values are equal over the processes.
+            raise RuntimeError('Python-random random seed not in sync over the multiple processes. Make sure you are not calling more random calls on only some of the processes.')
 
 class MultiprocessPrinter:
     '''In every print, show which process rank is printing the message
