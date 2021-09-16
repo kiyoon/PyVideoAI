@@ -55,6 +55,8 @@ def get_parser():
     parser.add_argument("-m", "--mode", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Evaluate using 1 clip or 30 clips.")
     parser.add_argument("-i", "--input_size", type=int, default=None, help="Input size to the model.")
     parser.add_argument('-v', '--version', default='last', help='ExperimentBuilder version')
+    parser.add_argument("-n", "--num_samples", type=int, default=20, help="How many best and worst each to sample.")
+    parser.add_argument("--skip_novisual", action='store_true', help="For multicrop, it will generate visualisations with overall prediction scores with no visuals in it. Skip them all.")
     return parser
 
 
@@ -226,8 +228,8 @@ if __name__ == '__main__':
     #predicted_scores_for_ground_truth_class, topk_labels, topk_preds = get_pred_info(video_predictions[worst_idx], video_labels[worst_idx], video_ids[worst_idx])
     predicted_scores_for_ground_truth_class, topk_labels, topk_preds = get_pred_info(video_predictions, video_labels, video_ids)
 
-    best_idxs = predicted_scores_for_ground_truth_class.argsort()[-20:][::-1]
-    worst_idxs = predicted_scores_for_ground_truth_class.argsort()[:20]
+    best_idxs = predicted_scores_for_ground_truth_class.argsort()[-args.num_samples:][::-1]
+    worst_idxs = predicted_scores_for_ground_truth_class.argsort()[:args.num_samples]
 
     output_dir = os.path.join(exp.plots_dir, 'success_failures_epoch_{:04d}'.format(load_epoch))
     output_dir_jpg = os.path.join(output_dir, 'jpg')
@@ -241,22 +243,23 @@ if __name__ == '__main__':
     os.makedirs(output_dir_jpg_worst, exist_ok=True)
     os.makedirs(output_dir_gif_worst, exist_ok=True)
 
-    for best_idx, (video_label, video_id, predicted_score_for_ground_truth_class, topk_label, topk_pred) in enumerate(zip(video_labels[best_idxs], video_ids[best_idxs], predicted_scores_for_ground_truth_class[best_idxs], topk_labels[best_idxs], topk_preds[best_idxs])):
-        video_based_info = np.zeros((vis_height, vis_width, 3), dtype=np.uint8)
+    if not args.skip_novisual:
+        for best_idx, (video_label, video_id, predicted_score_for_ground_truth_class, topk_label, topk_pred) in enumerate(zip(video_labels[best_idxs], video_ids[best_idxs], predicted_scores_for_ground_truth_class[best_idxs], topk_labels[best_idxs], topk_preds[best_idxs])):
+            video_based_info = np.zeros((vis_height, vis_width, 3), dtype=np.uint8)
 
-        video_based_info = visualise_pred_info(video_based_info, video_label, video_id, predicted_score_for_ground_truth_class, topk_label, topk_pred, dataset_cfg.class_keys)
-        video_based_info_gif = cv2.resize(video_based_info[:,:vis_width//2,:], (vis_width_gif, vis_height_gif), interpolation=cv2.INTER_CUBIC)
-        cv2.imwrite(os.path.join(output_dir_jpg_best, 'best_{:02d}-uid_{:05d}-multicrop.jpg'.format(best_idx, video_id)), video_based_info)
-        cv2.imwrite(os.path.join(output_dir_gif_best, 'best_{:02d}-uid_{:05d}-multicrop.jpg'.format(best_idx, video_id)), video_based_info_gif)
+            video_based_info = visualise_pred_info(video_based_info, video_label, video_id, predicted_score_for_ground_truth_class, topk_label, topk_pred, dataset_cfg.class_keys)
+            video_based_info_gif = cv2.resize(video_based_info[:,:vis_width//2,:], (vis_width_gif, vis_height_gif), interpolation=cv2.INTER_CUBIC)
+            cv2.imwrite(os.path.join(output_dir_jpg_best, 'best_{:02d}-uid_{:05d}-multicrop.jpg'.format(best_idx, video_id)), video_based_info)
+            cv2.imwrite(os.path.join(output_dir_gif_best, 'best_{:02d}-uid_{:05d}-multicrop.jpg'.format(best_idx, video_id)), video_based_info_gif)
 
 
-    for worst_idx, (video_label, video_id, predicted_score_for_ground_truth_class, topk_label, topk_pred) in enumerate(zip(video_labels[worst_idxs], video_ids[worst_idxs], predicted_scores_for_ground_truth_class[worst_idxs], topk_labels[worst_idxs], topk_preds[worst_idxs])):
-        video_based_info = np.zeros((vis_height, vis_width, 3), dtype=np.uint8)
+        for worst_idx, (video_label, video_id, predicted_score_for_ground_truth_class, topk_label, topk_pred) in enumerate(zip(video_labels[worst_idxs], video_ids[worst_idxs], predicted_scores_for_ground_truth_class[worst_idxs], topk_labels[worst_idxs], topk_preds[worst_idxs])):
+            video_based_info = np.zeros((vis_height, vis_width, 3), dtype=np.uint8)
 
-        video_based_info = visualise_pred_info(video_based_info, video_label, video_id, predicted_score_for_ground_truth_class, topk_label, topk_pred, dataset_cfg.class_keys)
-        video_based_info_gif = cv2.resize(video_based_info[:,:vis_width//2,:], (vis_width_gif, vis_height_gif), interpolation=cv2.INTER_CUBIC)
-        cv2.imwrite(os.path.join(output_dir_jpg_worst, 'worst_{:02d}-uid_{:05d}-multicrop.jpg'.format(worst_idx, video_id)), video_based_info)
-        cv2.imwrite(os.path.join(output_dir_gif_worst, 'worst_{:02d}-uid_{:05d}-multicrop.jpg'.format(worst_idx, video_id)), video_based_info_gif)
+            video_based_info = visualise_pred_info(video_based_info, video_label, video_id, predicted_score_for_ground_truth_class, topk_label, topk_pred, dataset_cfg.class_keys)
+            video_based_info_gif = cv2.resize(video_based_info[:,:vis_width//2,:], (vis_width_gif, vis_height_gif), interpolation=cv2.INTER_CUBIC)
+            cv2.imwrite(os.path.join(output_dir_jpg_worst, 'worst_{:02d}-uid_{:05d}-multicrop.jpg'.format(worst_idx, video_id)), video_based_info)
+            cv2.imwrite(os.path.join(output_dir_gif_worst, 'worst_{:02d}-uid_{:05d}-multicrop.jpg'.format(worst_idx, video_id)), video_based_info_gif)
     
     ################################################################
     # evaluate each clip again to get the clip-based predictions
