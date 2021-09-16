@@ -19,7 +19,12 @@ import numpy as np
 
 import torch
 from pyvideoai import config
-import model_configs, dataset_configs
+import model_configs, dataset_configs, exp_configs
+
+from pyvideoai.utils import misc
+
+import logging
+logger = logging.getLogger(__name__)
 
 # org
 x0 = 20
@@ -42,27 +47,29 @@ gif_duration = 200
 def get_parser():
     parser = argparse.ArgumentParser(description="Visualise success and failures. For now, only support EPIC",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    add_exp_arguments(parser, dataset_configs.available_datasets, model_configs.available_models, root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='epic_verb', model_default='i3d', name_default='test')
+    add_exp_arguments(parser, 
+            root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_8x8_largejit_plateau_1scrop5tcrop_split1',
+            dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)
     parser.add_argument("-l", "--load_epoch", type=int, default=None, help="Load from checkpoint. Set to -1 to load from the last checkpoint.")
     parser.add_argument("-b", "--batch_size", type=int, default=4, help="batch size")
     parser.add_argument("-m", "--mode", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Evaluate using 1 clip or 30 clips.")
-    parser.add_argument("-p", "--path_prefix", type=str, default="/home/kiyoon/datasets/EPIC_KITCHENS_2018/segments324_15fps", help="Directory that contains the sample videos.")
-    parser.add_argument("-i", "--input_size", type=int, default=256, help="Input size to the model.")
+    parser.add_argument("-i", "--input_size", type=int, default=None, help="Input size to the model.")
+    parser.add_argument('-v', '--version', default='last', help='ExperimentBuilder version')
     return parser
 
 
-def save_dataloader_csv(csv_path, sample_path_prefix, video_ids, video_labels, dataloader_type='video_clip'):
-    with open(csv_path, 'w') as f:
-        writer = csv.writer(f, delimiter=' ')
-
-        if dataloader_type in ['video_clip', 'sparse_video']:
-            for video_id, video_label in zip(video_ids, video_labels):
-                writer.writerow([os.path.join(sample_path_prefix, '{:05d}.mp4'.format(video_id)), video_id, video_label])
-        elif dataloader_type == 'sparse_frames':
-            for video_id, video_label in zip(video_ids, video_labels):
-                frames_dir = os.path.join(sample_path_prefix, '{:05d}'.format(video_id))
-                num_frames = len([name for name in os.listdir(frames_dir) if os.path.isfile(os.path.join(frames_dir, name))])
-                writer.writerow([frames_dir, video_id, video_label, num_frames])
+#def save_dataloader_csv(csv_path, sample_path_prefix, video_ids, video_labels, dataloader_type='video_clip'):
+#    with open(csv_path, 'w') as f:
+#        writer = csv.writer(f, delimiter=' ')
+#
+#        if dataloader_type in ['video_clip', 'sparse_video']:
+#            for video_id, video_label in zip(video_ids, video_labels):
+#                writer.writerow([os.path.join(sample_path_prefix, '{:05d}.mp4'.format(video_id)), video_id, video_label])
+#        elif dataloader_type == 'sparse_frames':
+#            for video_id, video_label in zip(video_ids, video_labels):
+#                frames_dir = os.path.join(sample_path_prefix, '{:05d}'.format(video_id))
+#                num_frames = len([name for name in os.listdir(frames_dir) if os.path.isfile(os.path.join(frames_dir, name))])
+#                writer.writerow([frames_dir, video_id, video_label, num_frames])
 
 
 def grouped(iterable, n):
@@ -89,9 +96,9 @@ def get_pred_info(video_predictions, video_labels, video_ids, k=5):
     assert len(video_predictions) == len(video_labels) == len(video_ids)
     num_samples, num_classes = video_predictions.shape
 
-    predicted_scores_for_ground_truth_class = np.zeros(num_samples, dtype=np.float)
-    topk_labels = np.zeros((num_samples,k), dtype=np.int)
-    topk_preds = np.zeros((num_samples,k), dtype=np.float)
+    predicted_scores_for_ground_truth_class = np.zeros(num_samples, dtype=np.float64)
+    topk_labels = np.zeros((num_samples,k), dtype=np.int64)
+    topk_preds = np.zeros((num_samples,k), dtype=np.float64)
 
     for i, (video_prediction, video_label, video_id) in enumerate(zip(video_predictions, video_labels, video_ids)):
         predicted_scores_for_ground_truth_class[i] = video_prediction[video_label]
@@ -148,25 +155,54 @@ if __name__ == '__main__':
     parser = get_parser()
     args = parser.parse_args()
 
+    cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
+    dataset_cfg = cfg.dataset_cfg
+    model_cfg = cfg.model_cfg
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, telegram_key_ini = config.KEY_INI_PATH)
-    dataset_cfg = dataset_configs.load_cfg(args.dataset)
-    model_cfg = model_configs.load_cfg(args.model)
+    metrics = cfg.dataset_cfg.task.get_metrics(cfg)
+    summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
 
-    predictions_file_path = os.path.join(exp.predictions_dir, 'epoch_%04d_%sval.pkl' % (args.load_epoch, args.mode))
+    if args.version == 'last':
+        _expversion = -2    # choose the last version
+    else:
+        _expversion = int(args.version)
+
+
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
+            summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
+            version=_expversion,
+            telegram_key_ini = config.KEY_INI_PATH)
+
+    if args.load_epoch == -1:
+        exp.load_summary()
+        load_epoch = int(exp.summary['epoch'].iloc[-1])
+    elif args.load_epoch == -2:
+        exp.load_summary()
+        best_metric, best_metric_fieldname = metrics.get_best_metric_and_fieldname()
+        logger.info(f'Using the best metric from CSV field `{best_metric_fieldname}`')
+        load_epoch = int(exp.get_best_model_stat(best_metric_fieldname, best_metric.is_better)['epoch'])
+    elif args.load_epoch >= 0:
+        load_epoch = args.load_epoch
+    else:
+        raise ValueError(f"Wrong args.load_epoch value: {args.load_epoch}")
+
+    predictions_file_path = os.path.join(exp.predictions_dir, 'epoch_%04d_%sval.pkl' % (load_epoch, args.mode))
 
     with open(predictions_file_path, 'rb') as f:
         predictions = pickle.load(f)
 
-    if dataset_cfg.input_frame_length == 32:
+    if cfg.input_frame_length == 32:
         vis_frame_x = 8
         vis_frame_y = 4
-    elif dataset_cfg.input_frame_length == 8:
+    elif cfg.input_frame_length == 8:
         vis_frame_x = 4
         vis_frame_y = 2
     else:
         raise ValueError('only support num_frames == 32 and 8')
 
+    if args.input_size is None:
+        args.input_size = cfg.crop_size
+        
     vis_width = args.input_size * vis_frame_x
     vis_height = vis_width // 4 * 3        # 4:3 aspect ratio
     assert vis_height >= args.input_size * vis_frame_y, 'Not enough pixels to put the frames'
@@ -193,7 +229,7 @@ if __name__ == '__main__':
     best_idxs = predicted_scores_for_ground_truth_class.argsort()[-20:][::-1]
     worst_idxs = predicted_scores_for_ground_truth_class.argsort()[:20]
 
-    output_dir = os.path.join(exp.plots_dir, 'success_failures_epoch_{:04d}'.format(args.load_epoch))
+    output_dir = os.path.join(exp.plots_dir, 'success_failures_epoch_{:04d}'.format(load_epoch))
     output_dir_jpg = os.path.join(output_dir, 'jpg')
     output_dir_gif = os.path.join(output_dir, 'gif')
     output_dir_jpg_best = os.path.join(output_dir_jpg, 'best')
@@ -226,11 +262,12 @@ if __name__ == '__main__':
     # evaluate each clip again to get the clip-based predictions
     print("Saving clip-based visualisations.")
 
+    dataloader_type = 'sparse_frames'
 
     for mode in ['best', 'worst']:
         print("{:s} predictions..".format(mode))
 
-        csv_path = os.path.join(output_dir, '{:s}_samples.csv'.format(mode))
+        #csv_path = os.path.join(output_dir, '{:s}_samples.csv'.format(mode))
 
         if mode == 'best':
             filter_idxs = best_idxs
@@ -238,18 +275,22 @@ if __name__ == '__main__':
             filter_idxs = worst_idxs
 
         best_video_ids = video_ids[filter_idxs].tolist()   # for later, to get best video rank from video id.
-        save_dataloader_csv(csv_path, args.path_prefix, video_ids[filter_idxs], video_labels[filter_idxs], dataloader_type=model_cfg.dataloader_type)
+        #save_dataloader_csv(csv_path, dataset_cfg.frames_dir, video_ids[filter_idxs], video_labels[filter_idxs], dataloader_type=model_cfg.dataloader_type)
 
-        dataset = dataset_cfg.get_torch_dataset(csv_path, 'test', model_cfg.dataloader_type)
-        data_unpack_func = dataset_cfg._get_unpack_func(model_cfg.dataloader_type)
+        dataset = cfg.get_torch_dataset('val')
+        dataset.filter_samples(best_video_ids)
+
+
+        data_unpack_func = cfg.get_data_unpack_func('val')
+        input_reshape_func = cfg.get_input_reshape_func('val')
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, sampler=None, num_workers=4, pin_memory=True, drop_last=False)
 
-        model = model_cfg.load_model(dataset_cfg.num_classes, dataset_cfg.input_frame_length)
+        model = cfg.load_model()
         cur_device = torch.cuda.current_device()
         # Transfer the model to the current GPU device
         model = model.to(device=cur_device, non_blocking=True)
 
-        weights_path = exp.get_checkpoint_path(args.load_epoch)
+        weights_path = exp.get_checkpoint_path(load_epoch)
         #logger.info("Loading weights: " + weights_path) 
         checkpoint = torch.load(weights_path, map_location = "cuda:{}".format(cur_device))
         model.load_state_dict(checkpoint["model_state"])
@@ -261,8 +302,10 @@ if __name__ == '__main__':
 
             for it, data in enumerate(dataloader):
                 print("Iteration {:d} / {:d}".format(it+1, len(dataloader)))
-                inputs, labels, uids, curr_batch_size, spatial_temporal_idxs = data_unpack_func(data)
-                outputs = model_cfg.model_predict(model, inputs)
+                inputs, uids, labels, spatial_temporal_idxs = data_unpack_func(data)
+                inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
+
+                outputs = model(input_reshape_func(inputs))
                 softmaxed_outputs = torch.nn.Softmax(dim=1)(outputs).cpu().numpy()
 
                 labels = labels.cpu().numpy()
@@ -271,15 +314,16 @@ if __name__ == '__main__':
 
                 inputs = inputs.cpu().numpy()
                 inputs = inputs.transpose((0,2,3,4,1))      # B, F, H, W, C
-                inputs = (inputs * dataset.std + dataset.mean) * 255
+                inputs = (inputs * dataset.std.tolist() + dataset.mean.tolist()) * 255
                 inputs = inputs.astype(np.uint8)
-                inputs = inputs[...,::-1]   # BGR
+                if dataset.bgr:
+                    inputs = inputs[...,::-1]   # BGR
 
                 for input_vid, softmaxed_output, label, uid, spatial_temporal_idx, topk_label, topk_pred in zip(inputs, softmaxed_outputs, labels, uids, spatial_temporal_idxs, topk_labels, topk_preds):
-                    if model_cfg.dataloader_type == 'video_clip':
+                    if dataloader_type == 'video_clip':
                         spatial_idx = spatial_temporal_idx % 3
                         temporal_idx = spatial_temporal_idx // 3
-                    elif model_cfg.dataloader_type.startswith('sparse'):
+                    elif dataloader_type.startswith('sparse'):
                         spatial_idx = spatial_temporal_idx % 10
                         temporal_idx = None
                     best_idx = best_video_ids.index(uid)

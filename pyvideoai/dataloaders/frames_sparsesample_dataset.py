@@ -175,6 +175,19 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             )
         )#}}}
 
+    def filter_samples(self, video_ids: list):
+        """Given a video_ids list, filter the samples.
+        """
+        indices_of_video_ids = [x for x, v in enumerate(self._video_ids) if v in video_ids]
+
+        self._path_to_frames = [self._path_to_frames[x] for x in indices_of_video_ids]
+        self._video_ids = [self._video_ids[x] for x in indices_of_video_ids]
+        self._labels = [self._labels[x] for x in indices_of_video_ids]
+        self._start_frames = [self._start_frames[x] for x in indices_of_video_ids]
+        self._end_frames = [self._end_frames[x] for x in indices_of_video_ids]
+        self._spatial_temporal_idx = [self._spatial_temporal_idx[x] for x in indices_of_video_ids]
+
+
     def __getitem__(self, index):
         """
         Given the video index, return the list of frames, label, and video
