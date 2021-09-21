@@ -36,7 +36,7 @@ sampling_mode = 'RGB'   # RGB, TC, GreyST
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
-base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
+base_learning_rate = 5e-6      # when batch_size == 1 and #GPUs == 1
 
 # Dynamic label smoothing
 """Use split == 'traindata_testmode' in tools/run_eval.py to generate the pickle file.
@@ -155,19 +155,8 @@ def _get_torch_dataset(csv_path, split):
         mode = 'test'
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
-    else:
-        mode = dataset_cfg.split2mode[split]
-        if split == 'val':
-            _test_scale = val_scale
-            _test_num_spatial_crops = val_num_spatial_crops
-        else:
-            _test_scale = test_scale
-            _test_num_spatial_crops = test_num_spatial_crops
-
-    if split == 'train':
-        return FramesSparsesampleDatasetDynamicLabel(csv_path, mode, 
+        return FramesSparsesampleDataset(csv_path, mode,
                 input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
-                student_predictions_pkl, student_weight,
                 train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
                 train_horizontal_flip=dataset_cfg.horizontal_flip,
                 test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
@@ -180,8 +169,24 @@ def _get_torch_dataset(csv_path, split):
                 sample_index_code=sample_index_code,
                 )
     else:
-        return FramesSparsesampleDataset(csv_path, mode,
+        mode = dataset_cfg.split2mode[split]
+        if split == 'train':
+            _student_predictions_pkl = student_predictions_pkl
+            _student_weight = student_weight
+        else:
+            _student_predictions_pkl = None
+            _student_weight = 0.0 
+
+        if split == 'val':
+            _test_scale = val_scale
+            _test_num_spatial_crops = val_num_spatial_crops
+        else:
+            _test_scale = test_scale
+            _test_num_spatial_crops = test_num_spatial_crops
+
+        return FramesSparsesampleDatasetDynamicLabel(csv_path, mode, 
                 input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
+                dataset_cfg.num_classes, _student_predictions_pkl, _student_weight,
                 train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
                 train_horizontal_flip=dataset_cfg.horizontal_flip,
                 test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,

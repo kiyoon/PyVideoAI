@@ -17,25 +17,7 @@ import pickle
 
 logger = logging.getLogger(__name__)
 
-def count_class_frequency(csv_file):
-    assert os.path.exists(csv_file), "{} not found".format(
-        csv_file
-    )
-
-    labels = []
-    with open(csv_file, "r") as f:
-        self.num_classes = int(f.readline())
-        for clip_idx, path_label in enumerate(f.read().splitlines()):
-            assert len(path_label.split()) == 5
-            path, video_id, label, start_frame, end_frame = path_label.split()
-            label = int(label)
-            labels.append(label)
-
-    labels = np.array(labels)
-    assert labels.min() == 0, 'class label has to start with 0'
-
-    class_frequency = np.bincount(labels, minlength=labels.max())
-    return class_frequency
+from .frames_sparsesample_dataset import count_class_frequency
 
 class FramesSparsesampleDatasetDynamicLabel(torch.utils.data.Dataset):
     """
@@ -48,7 +30,7 @@ class FramesSparsesampleDatasetDynamicLabel(torch.utils.data.Dataset):
     """
 
     def __init__(self, csv_file, mode, num_frames, 
-            student_predictions_pkl, student_weight = 0.5,  # here, student means the model, teacher means the label.
+            num_classes, student_predictions_pkl, student_weight = 0.5,  # here, student means the model, teacher means the label.
             train_jitter_min=256, train_jitter_max=320,
             train_horizontal_flip = True,
             test_scale=256, test_num_spatial_crops=10, 
@@ -130,13 +112,17 @@ class FramesSparsesampleDatasetDynamicLabel(torch.utils.data.Dataset):
 
         # Dynamic label smoothing: listen to student (model)
         self.student_weight = student_weight
-        with open(student_predictions_pkl, 'rb') as f:
-            predictions = pickle.load(f)
-        self.student_predictions = {}   # format: key=video_id, value=prediction
-        for video_id, pred in zip(predictions['video_ids'], predictions['video_predictions']):
-            assert video_id not in self.student_predictions.keys(), f'Already added {video_id = }'
-            self.student_predictions[video_id] = pred
-        self.num_classes = predictions['video_predictions'].shape[1]
+        self.student_predictions_pkl = student_predictions_pkl    # when set to None, skip label smoothing and use one-hot instead
+        if not (student_weight == 0.0 or student_predictions_pkl is None):
+            with open(student_predictions_pkl, 'rb') as f:
+                predictions = pickle.load(f)
+            self.student_predictions = {}   # format: key=video_id, value=prediction
+            for video_id, pred in zip(predictions['video_ids'], predictions['video_predictions']):
+                assert video_id not in self.student_predictions.keys(), f'Already added {video_id = }'
+                self.student_predictions[video_id] = pred
+
+        #self.num_classes = predictions['video_predictions'].shape[1]
+        self.num_classes = num_classes
 
         logger.info("Constructing video dataset {}...".format(mode))
         self._construct_loader()
@@ -168,7 +154,8 @@ class FramesSparsesampleDatasetDynamicLabel(torch.utils.data.Dataset):
                 label_smooth = np.zeros(self.num_classes, dtype=np.float32)
                 label_smooth[label] = 1.0
 
-                label_smooth = (1-self.student_weight)*label_smooth + self.student_weight*self.student_predictions[video_id]
+                if self.student_predictions_pkl is not None:
+                    label_smooth = (1-self.student_weight)*label_smooth + self.student_weight*self.student_predictions[video_id]
 
                 for idx in range(self._num_clips):
                     self._path_to_frames.append(
