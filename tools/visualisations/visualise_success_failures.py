@@ -319,8 +319,11 @@ if __name__ == '__main__':
                 inputs = inputs.transpose((0,2,3,4,1))      # B, F, H, W, C
                 inputs = (inputs * dataset.std.tolist() + dataset.mean.tolist()) * 255
                 inputs = inputs.astype(np.uint8)
-                if dataset.bgr:
+                if not dataset.bgr:
+                    # The inputs has to be BGR if it was RGB.
+                    # b.c. we're using OpenCV here.
                     inputs = inputs[...,::-1]   # BGR
+
 
                 for input_vid, softmaxed_output, label, uid, spatial_temporal_idx, topk_label, topk_pred in zip(inputs, softmaxed_outputs, labels, uids, spatial_temporal_idxs, topk_labels, topk_preds):
                     if dataloader_type == 'video_clip':
