@@ -44,3 +44,95 @@ def compute_balanced_class_weight(y, num_classes):
             extended_weight[class_idx] = weight_val
         return extended_weight  # zero if no sample
 
+
+"""
+Kiyoon implementation of Label Smoothing Cross Entropy Loss taken from `https://stackoverflow.com/questions/55681502/label-smoothing-in-pytorch`
+Edits:
+    1. Apply official label smoothing formula from the paper. With smoothing=a and num_classes=K, y^LS = y(1-a) + a/K. True label becomes something like 0.933 when a=0.1, depending on how many classes you have.
+        a. The original code from the URL implements differently. y^LS = y(1-a) + (1-y)*a/(K-1). True label becomes 0.9 when a=0.1
+    2. Accepts custom smooth label instead of 1D tensor label. (OneHotCrossEntropyLoss).
+        a. Make sure to provide labels that sum to 1.
+"""
+import torch
+import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.autograd import Variable
+from torch.nn import CrossEntropyLoss
+from torch.nn.modules.loss import _WeightedLoss
+
+class OneHotCrossEntropyLoss(_WeightedLoss):
+    def __init__(self, weight=None, reduction='mean'):
+        super().__init__(weight=weight, reduction=reduction)
+        self.weight = weight
+        self.reduction = reduction
+
+    def reduce_loss(self, loss):
+        return loss.mean() if self.reduction == 'mean' else loss.sum() \
+        if self.reduction == 'sum' else loss
+
+    def forward(self, inputs, targets):
+        log_preds = F.log_softmax(inputs, -1)
+
+        if self.weight is not None:
+            log_preds = log_preds * self.weight.unsqueeze(0)
+
+        return self.reduce_loss(-(targets * log_preds).sum(dim=-1))
+
+
+class LabelSmoothCrossEntropyLoss(OneHotCrossEntropyLoss):
+    def __init__(self, weight=None, reduction='mean', smoothing=0.0):
+        super().__init__(weight=weight, reduction=reduction)
+        self.smoothing = smoothing
+
+    @staticmethod
+    def k_one_hot(targets:torch.Tensor, n_classes:int, smoothing=0.0):
+        with torch.no_grad():
+            targets = torch.empty(size=(targets.size(0), n_classes),
+                                  device=targets.device) \
+                                  .fill_(smoothing /n_classes) \
+                                  .scatter_(1, targets.data.unsqueeze(1), 1.-smoothing + smoothing /n_classes)
+        return targets
+
+    def forward(self, inputs, targets):
+        assert 0 <= self.smoothing < 1
+
+        targets = LabelSmoothCrossEntropyLoss.k_one_hot(targets, inputs.size(-1), self.smoothing)
+        return super().forward(inputs, targets)
+
+
+
+if __name__ == '__main__':
+    crit = CrossEntropyLoss()
+    predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
+				 [0, 0.9, 0.2, 0.2, 1], 
+				 [1, 0.2, 0.7, 0.9, 1]])
+    label = torch.LongTensor([2, 1, 0])
+    onehot_label = torch.FloatTensor([[0., 0., 1., 0., 0.],
+				 [0., 1., 0., 0., 0.], 
+				 [1., 0, 0, 0, 0]])
+
+    # Official PyTorch CrossEntropyLoss test with 1D tensor labels.
+    v = crit(Variable(predict),
+	     Variable(label))
+    print(f'Official PyTorch CrossEntropyLoss: {v}')
+
+    # OneHotCrossEntropyLoss test with one-hot labels
+    crit = OneHotCrossEntropyLoss()
+    v = crit(Variable(predict),
+	     Variable(onehot_label))
+    print(f'OneHotCrossEntropyLoss: {v}')
+
+    # OneHotCrossEntropyLoss test with custom applied smooth labels
+    smooth_label = LabelSmoothCrossEntropyLoss.k_one_hot(label, 5, smoothing=0.3)
+    print(f'{smooth_label = }')
+    v = crit(Variable(predict),
+	     Variable(smooth_label))
+    print(f'OneHotCrossEntropyLoss with smooth label: {v}')
+
+    # LabelSmoothCrossEntropyLoss test
+    smooth_crit = LabelSmoothCrossEntropyLoss(smoothing=0.3)
+    v = smooth_crit(Variable(predict),
+	     Variable(label))
+    print(f'LabelSmoothCrossEntropyLoss (1D labels but smooth internally): {v}')
+
