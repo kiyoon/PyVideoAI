@@ -97,8 +97,9 @@ def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
 
 # optional
-#def load_pretrained(model):
-#    return
+pretrained_path = os.path.join(DATA_DIR, 'pretrained', 'hmdb/i3d_resnet50/crop224_lr0001_batch8_8x8_largejit_plateau_1scrop5tcrop_split1-epoch_0199.pth')
+def load_pretrained(model):
+    loader.model_load_weights_GPU(model, pretrained_path)
 
 def _dataloader_shape_to_model_input_shape(inputs):
     return model_cfg.NCTHW_to_model_input_shape(inputs)
@@ -141,12 +142,17 @@ def get_data_unpack_func(split):
 
 def _get_torch_dataset(csv_path, split):
     mode = dataset_cfg.split2mode[split]
-    if split == 'val':
-        _test_scale = val_scale
-        _test_num_spatial_crops = val_num_spatial_crops
-    else:
+    if split == 'traindata_testmode':
+        mode = 'test'
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
+    else:
+        if split == 'val':
+            _test_scale = val_scale
+            _test_num_spatial_crops = val_num_spatial_crops
+        else:
+            _test_scale = test_scale
+            _test_num_spatial_crops = test_num_spatial_crops
     return FramesSparsesampleDataset(csv_path, mode,
             input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
@@ -162,7 +168,10 @@ def _get_torch_dataset(csv_path, split):
             )
 
 def get_torch_dataset(split):
-    csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename[split])
+    if split == 'traindata_testmode':
+        csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename['train'])
+    else:
+        csv_path = os.path.join(dataset_cfg.frames_split_file_dir, dataset_cfg.split_file_basename[split])
 
     return _get_torch_dataset(csv_path, split)
 
