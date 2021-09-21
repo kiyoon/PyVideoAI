@@ -97,9 +97,9 @@ def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
 
 # optional
-pretrained_path = os.path.join(DATA_DIR, 'pretrained', 'hmdb/i3d_resnet50/crop224_lr0001_batch8_8x8_largejit_plateau_1scrop5tcrop_split1-epoch_0199.pth')
-def load_pretrained(model):
-    loader.model_load_weights_GPU(model, pretrained_path)
+#pretrained_path = os.path.join(DATA_DIR, 'pretrained', 'hmdb/i3d_resnet50/crop224_lr0001_batch8_8x8_largejit_plateau_1scrop5tcrop_split1-epoch_0199.pth')
+#def load_pretrained(model):
+#    loader.model_load_weights_GPU(model, pretrained_path)
 
 def _dataloader_shape_to_model_input_shape(inputs):
     return model_cfg.NCTHW_to_model_input_shape(inputs)
@@ -141,12 +141,12 @@ def get_data_unpack_func(split):
 
 
 def _get_torch_dataset(csv_path, split):
-    mode = dataset_cfg.split2mode[split]
     if split == 'traindata_testmode':
         mode = 'test'
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
     else:
+        mode = dataset_cfg.split2mode[split]
         if split == 'val':
             _test_scale = val_scale
             _test_num_spatial_crops = val_num_spatial_crops
@@ -196,28 +196,30 @@ Recommeded to change this settings in model_configs
 ## For both train & val
 Changing last_activation and leaving metrics/predictions_gatherers commented out will still change the default metrics and predictions_gatherers' activation function
 """
-#last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
+last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
 
 """
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
-#from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
-#best_metric = ClipAccuracyMetric()
-#metrics = {'train': [ClipAccuracyMetric()],
-#        'val': [best_metric],
-#        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
-#        }
-#
+from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+best_metric = ClipAccuracyMetric()
+metrics = {'train': [ClipAccuracyMetric()],
+        'traindata_testmode': [ClipAccuracyMetric()],
+        'val': [best_metric],
+        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
+        }
+
 """
 ## For validation, (tools/run_val.py)
 how to gather predictions when --save_predictions is set
 """
-#from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
-#predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
-#        'multicropval': VideoPredictionsGatherer(last_activation),
-#        }
-#
+from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
+predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
+        'traindata_testmode': ClipPredictionsGatherer(last_activation),
+        'multicropval': VideoPredictionsGatherer(last_activation),
+        }
+
 """How will you plot"""
 #from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
 #metric_plotter = DefaultMetricPlotter()

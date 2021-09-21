@@ -205,9 +205,9 @@ def evaluation(args):
                 video_predictions, video_labels, video_ids = predictions_gatherer.get_predictions_numpy()
 
                 if load_epoch is None:
-                    predictions_file_path = os.path.join(exp.predictions_dir, 'pretrained_%sval.pkl' % (args.mode))
+                    predictions_file_path = os.path.join(exp.predictions_dir, f'pretrained_{split}_{args.mode}.pkl')
                 else:
-                    predictions_file_path = os.path.join(exp.predictions_dir, 'epoch_%04d_%sval.pkl' % (load_epoch, args.mode))
+                    predictions_file_path = os.path.join(exp.predictions_dir, f'epoch_{load_epoch:04d}_{split}_{args.mode}.pkl')
                 os.makedirs(exp.predictions_dir, exist_ok=True)
                 
                 print("Saving predictions to: " + predictions_file_path) 
