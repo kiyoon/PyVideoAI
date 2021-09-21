@@ -2,9 +2,16 @@ import torch
 import numpy as np
 from .metric import Metric, AverageMetric
 
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k using PyTorch"""
+def accuracy(output:torch.Tensor, target:torch.Tensor, topk=(1,)):
+    """Computes the precision@k for the specified values of k using PyTorch.
+    Kiyoon edit: target possible to be either 1D tensor or one-hot/labelsmooth 2D tensor.
+
+    """
     maxk = max(topk)
+    assert target.dim() in [1,2], f'target has to be 1D or 2D tensor but got {target.dim()}-D.'
+    if target.dim() == 2:
+        # Convert 2D one-hot label to 1D label
+        target = target.argmax(dim=1)
     batch_size = target.size(0)
 
     _, pred = output.topk(maxk, 1, True, True)
@@ -44,6 +51,10 @@ class ClipAccuracyMetric(Metric):
         super().add_clip_predictions(video_ids, clip_predictions, labels)
 
         maxk = max(self.topk)
+        assert labels.dim() in [1,2], f'target has to be 1D or 2D tensor but got {target.dim()}-D.'
+        if labels.dim() == 2:
+            # Convert 2D one-hot label to 1D label
+            labels = labels.argmax(dim=1)
         batch_size = labels.size(0)
 
         _, pred = clip_predictions.topk(maxk, 1, True, True)

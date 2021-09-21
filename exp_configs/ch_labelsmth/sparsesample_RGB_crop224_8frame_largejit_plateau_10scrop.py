@@ -1,6 +1,9 @@
 import os
 
 from pyvideoai.dataloaders.frames_sparsesample_dataset import FramesSparsesampleDataset
+from pyvideoai.dataloaders.frames_sparsesample_dataset_dynamiclabel import FramesSparsesampleDatasetDynamicLabel
+from pyvideoai.utils.loss import OneHotCrossEntropyLoss
+from pyvideoai.utils import loader
 
 import torch
 
@@ -35,9 +38,17 @@ sample_index_code = 'pyvideoai'
 
 base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
 
+# Dynamic label smoothing
+"""Use split == 'traindata_testmode' in tools/run_eval.py to generate the pickle file.
+You also have to uncomment below metrics for the new split definitions, but comment them out for training"""
+pretrained_path = '/home/kiyoon/storage/experiments/experiments_tcswap_modelsync/something_v2/tsm_resnet50_nopartialbn/RGB_8frame/version_000/weights/epoch_0069.pth'
+student_weight = 0.5
+student_predictions_pkl = '/home/kiyoon/storage/experiments/experiments_tcswap_modelsync/something_v2/tsm_resnet50_nopartialbn/RGB_8frame/version_000/predictions/epoch_0069_traindata_testmode_multicrop.pkl'
+
+
 #### OPTIONAL
-#def criterion():
-#    return torch.nn.CrossEntropyLoss()
+def criterion():
+    return OneHotCrossEntropyLoss()
 #
 #def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
 #    return None
@@ -97,9 +108,8 @@ def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
 
 # optional
-#pretrained_path = os.path.join(DATA_DIR, 'pretrained', 'hmdb/i3d_resnet50/crop224_lr0001_batch8_8x8_largejit_plateau_1scrop5tcrop_split1-epoch_0199.pth')
-#def load_pretrained(model):
-#    loader.model_load_weights_GPU(model, pretrained_path)
+def load_pretrained(model):
+    loader.model_load_weights_GPU(model, pretrained_path)
 
 def _dataloader_shape_to_model_input_shape(inputs):
     return model_cfg.NCTHW_to_model_input_shape(inputs)
@@ -153,19 +163,36 @@ def _get_torch_dataset(csv_path, split):
         else:
             _test_scale = test_scale
             _test_num_spatial_crops = test_num_spatial_crops
-    return FramesSparsesampleDataset(csv_path, mode,
-            input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
-            train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
-            train_horizontal_flip=dataset_cfg.horizontal_flip,
-            test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
-            crop_size=crop_size,
-            mean = [model_cfg.input_mean[0]] if greyscale else model_cfg.input_mean,
-            std = [model_cfg.input_std[0]] if greyscale else model_cfg.input_std,
-            normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
-            greyscale=greyscale,
-            path_prefix=dataset_cfg.frames_dir,
-            sample_index_code=sample_index_code,
-            )
+
+    if split == 'train':
+        return FramesSparsesampleDatasetDynamicLabel(csv_path, mode, 
+                input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
+                student_predictions_pkl, student_weight,
+                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+                train_horizontal_flip=dataset_cfg.horizontal_flip,
+                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+                crop_size=crop_size,
+                mean = [model_cfg.input_mean[0]] if greyscale else model_cfg.input_mean,
+                std = [model_cfg.input_std[0]] if greyscale else model_cfg.input_std,
+                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+                greyscale=greyscale,
+                path_prefix=dataset_cfg.frames_dir,
+                sample_index_code=sample_index_code,
+                )
+    else:
+        return FramesSparsesampleDataset(csv_path, mode,
+                input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
+                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+                train_horizontal_flip=dataset_cfg.horizontal_flip,
+                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+                crop_size=crop_size,
+                mean = [model_cfg.input_mean[0]] if greyscale else model_cfg.input_mean,
+                std = [model_cfg.input_std[0]] if greyscale else model_cfg.input_std,
+                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+                greyscale=greyscale,
+                path_prefix=dataset_cfg.frames_dir,
+                sample_index_code=sample_index_code,
+                )
 
 def get_torch_dataset(split):
     if split == 'traindata_testmode':
@@ -196,29 +223,29 @@ Recommeded to change this settings in model_configs
 ## For both train & val
 Changing last_activation and leaving metrics/predictions_gatherers commented out will still change the default metrics and predictions_gatherers' activation function
 """
-last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
+#last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
 
 """
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
-from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
-best_metric = ClipAccuracyMetric()
-metrics = {'train': [ClipAccuracyMetric()],
-        'traindata_testmode': [ClipAccuracyMetric()],
-        'val': [best_metric],
-        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
-        }
+#from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+#best_metric = ClipAccuracyMetric()
+#metrics = {'train': [ClipAccuracyMetric()],
+#        'traindata_testmode': [ClipAccuracyMetric()],
+#        'val': [best_metric],
+#        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
+#        }
 
 """
 ## For validation, (tools/run_val.py)
 how to gather predictions when --save_predictions is set
 """
-from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
-predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
-        'traindata_testmode': ClipPredictionsGatherer(last_activation),
-        'multicropval': VideoPredictionsGatherer(last_activation),
-        }
+#from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
+#predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
+#        'traindata_testmode': ClipPredictionsGatherer(last_activation),
+#        'multicropval': VideoPredictionsGatherer(last_activation),
+#        }
 
 """How will you plot"""
 #from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter

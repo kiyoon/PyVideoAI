@@ -423,7 +423,7 @@ class Metrics(dict):
         best_metric_fieldname = best_metric.get_csv_fieldnames()
         if isinstance(best_metric_fieldname, tuple):
             if len(best_metric_fieldname) > 1:
-                logger.warn(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
+                logger.info(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
             best_metric_fieldname = best_metric_fieldname[0]
 
         return best_metric, best_metric_fieldname

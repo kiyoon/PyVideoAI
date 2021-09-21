@@ -128,13 +128,15 @@ class FramesSparsesampleDatasetDynamicLabel(torch.utils.data.Dataset):
         self.test_num_spatial_crops = test_num_spatial_crops
 
 
-        # listen to student
+        # Dynamic label smoothing: listen to student (model)
         self.student_weight = student_weight
         with open(student_predictions_pkl, 'rb') as f:
             predictions = pickle.load(f)
         self.student_predictions = {}   # format: key=video_id, value=prediction
         for video_id, pred in zip(predictions['video_ids'], predictions['video_predictions']):
+            assert video_id not in self.student_predictions.keys(), f'Already added {video_id = }'
             self.student_predictions[video_id] = pred
+        self.num_classes = predictions['video_predictions'].shape[1]
 
         logger.info("Constructing video dataset {}...".format(mode))
         self._construct_loader()
@@ -154,13 +156,15 @@ class FramesSparsesampleDatasetDynamicLabel(torch.utils.data.Dataset):
         self._end_frames = []    # number of sample video frames
         self._spatial_temporal_idx = []
         with open(self._csv_file, "r") as f:
-            self.num_classes = int(f.readline())
+            header_num_classes = int(f.readline())
+            assert header_num_classes == 0, 'Cannot use label smoothing with multilabel datasets.'
+
             for clip_idx, path_label in enumerate(f.read().splitlines()):
                 assert len(path_label.split()) == 5
                 path, video_id, label, start_frame, end_frame = path_label.split()
-
-                assert self.num_classes == 0, 'Cannot use label smoothing with multilabel datasets.'
+                video_id = int(video_id)
                 label = int(label)
+
                 label_smooth = np.zeros(self.num_classes, dtype=np.float32)
                 label_smooth[label] = 1.0
 
