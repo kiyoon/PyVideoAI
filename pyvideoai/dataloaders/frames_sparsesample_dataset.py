@@ -22,7 +22,7 @@ def count_class_frequency(csv_file):
 
     labels = []
     with open(csv_file, "r") as f:
-        self.num_classes = int(f.readline())
+        num_classes = int(f.readline())
         for clip_idx, path_label in enumerate(f.read().splitlines()):
             assert len(path_label.split()) == 5
             path, video_id, label, start_frame, end_frame = path_label.split()

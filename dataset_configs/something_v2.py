@@ -34,6 +34,8 @@ def count_class_frequency(split='train'):
     """
     return count_cf(os.path.join(frames_split_file_dir, split_file_basename[split]))
     
+def count_train_class_frequency():
+    return count_class_frequency(split='train')
 
 
 import matplotlib
