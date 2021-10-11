@@ -33,7 +33,7 @@ input_channel_num=[3]   # RGB
 
 
 #### OPTIONAL
-#def criterion():
+#def get_criterion(split):
 #    return torch.nn.CrossEntropyLoss()
 #
 #def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):

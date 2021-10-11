@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 class SingleLabelClassificationTask(Task):
-    def _default_criterion(self):
+    def _default_criterion(self, split):
         return nn.CrossEntropyLoss()
 
     def _default_last_activation(self):
@@ -32,7 +32,7 @@ class SingleLabelClassificationTask(Task):
 
 
 class MultiLabelClassificationTask(Task):
-    def _default_criterion(self):
+    def _default_criterion(self, split):
         return nn.BCEWithLogitsLoss()
 
     def _default_last_activation(self):

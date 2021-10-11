@@ -265,7 +265,7 @@ def train(args):
             if hasattr(cfg, 'load_pretrained'):
                 cfg.load_pretrained(model)
 
-        criterion = cfg.dataset_cfg.task.get_criterion(cfg)
+        criterions = cfg.dataset_cfg.task.get_criterions(cfg, splits)
 
         optimiser = cfg.optimiser(policies)
         if args.load_epoch is not None:
@@ -442,7 +442,7 @@ def train(args):
                     train_kit["model"] = model
                     train_kit["optimiser"] = optimiser 
                     train_kit["scheduler"] = scheduler 
-                    train_kit["criterion"] = criterion 
+                    train_kit["criterions"] = criterions 
                     train_kit["train_dataloader"] = train_dataloader 
                     train_kit["data_unpack_funcs"] = data_unpack_funcs 
                     train_kit["input_reshape_funcs"] = input_reshape_funcs 
@@ -452,7 +452,7 @@ def train(args):
                     model = train_kit["model"]
                     optimiser = train_kit["optimiser"]
                     scheduler = train_kit["scheduler"]
-                    criterion = train_kit["criterion"]
+                    criterions = train_kit["criterions"]
                     train_dataloader = train_kit["train_dataloader"]
                     data_unpack_funcs = train_kit["data_unpack_funcs"]
                     input_reshape_funcs = train_kit["input_reshape_funcs"]
@@ -464,7 +464,7 @@ def train(args):
                     print()
                     logger.info("Epoch %d/%d" % (epoch, args.num_epochs-1))
 
-                sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
+                sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterions['train'], clip_grad_max_norm, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
                 if rank == 0:#{{{
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
                     
@@ -491,7 +491,7 @@ def train(args):
                                 curr_stat[csv_fieldname] = last_calculated_metric
                     #}}}
          
-                val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterion, val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler, refresh_period=args.refresh_period)
+                val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterions['val'], val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, True, rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler, refresh_period=args.refresh_period)
                 if rank == 0:#{{{
                     curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
 
@@ -519,7 +519,7 @@ def train(args):
                     #}}}
 
                 if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
-                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterion, multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None, refresh_period=args.refresh_period)  # No scheduler needed for multicropval
+                    multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterions['multicropval'], multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, False, rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None, refresh_period=args.refresh_period)  # No scheduler needed for multicropval
                     if rank == 0:#{{{
                         curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
                         multicropval_writer.add_scalar('Loss', multi_crop_val_loss, epoch)

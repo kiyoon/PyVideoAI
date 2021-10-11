@@ -169,7 +169,7 @@ def evaluation(args):
                 cfg.load_pretrained(model)
 
 
-        criterion = cfg.dataset_cfg.task.get_criterion(cfg)
+        criterion = cfg.dataset_cfg.task.get_criterion(cfg, split)
 
         oneclip = args.mode == 'oneclip'
 

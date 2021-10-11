@@ -9,17 +9,23 @@ class Task(ABC):
     def __init__(self):
         pass
 
-    def get_criterion(self, exp_cfg):
-        if hasattr(exp_cfg, 'criterion'):
-            return exp_cfg.criterion()
+    def get_criterion(self, exp_cfg, split):
+        return self.get_criterions(exp_cfg, [split])[split]
 
-        default_criterion = self._default_criterion()
-        logger.info(f'cfg.criterion not defined. Using {str(default_criterion)}')
-        return default_criterion
+    def get_criterions(self, exp_cfg, splits):
+        if hasattr(exp_cfg, 'criterion'):
+            # same criterion for all splits
+            raise ValueError('cfg.criterion() is deprecated and it will not work. Please use cfg.get_criterion(split) instead.')
+        elif hasattr(exp_cfg, 'get_criterion'):
+            return {split: exp_cfg.get_criterion(split) for split in splits}
+
+        default_criterions = {split: self._default_criterion(split) for split in splits}
+        logger.info(f'cfg.get_criterions not defined. Using {str(default_criterions)}')
+        return default_criterions
 
 
     @abstractmethod
-    def _default_criterion(self):
+    def _default_criterion(self, split):
         """
         Return:
             torch.nn.modules._Loss

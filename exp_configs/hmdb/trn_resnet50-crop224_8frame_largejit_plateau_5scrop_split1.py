@@ -48,7 +48,7 @@ base_learning_rate = float(os.getenv('BASE_LR', 1e-5))      # when batch_size ==
 ## Gradient Clipping
 #clip_grad_max_norm = 5     # you can define a function that returns a scalar too.
 #
-#def criterion():
+#def get_criterion(split):
 #    return torch.nn.CrossEntropyLoss()
 #
 #def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
