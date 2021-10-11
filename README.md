@@ -15,6 +15,11 @@ The only framework that completes your computer vision, action recognition resea
 - Colour logging  
 - All of the above come with no extra setup. Trust me and try some [examples](https://github.com/kiyoon/PyVideoAI-examples.git).
 
+** Papers implemented **
+- \[Official\] *TC Reordering* and *GrayST* (Kim et al. 2022).  
+- [*ProSelfLC* (CVPR 2021)](https://arxiv.org/abs/2005.03788).  
+
+
 This package is motivated by PySlowFast from Facebook AI. The PySlowFast is a cool framework, but it depends too much on their config system and it was difficult to add new models (other codes) or reuse part of the modules from the framework.  
 This framework by Kiyoon, is designed to replace all the configuration systems to Python files, which enables **easy-addition of custom models/LR scheduling/dataloader** etc.  
 Just modify the function bodies in the config files!
