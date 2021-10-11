@@ -12,6 +12,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from .utils.lr_scheduling import ReduceLROnPlateauMultiple
 
 
+from .utils.losses.proselflc import ProSelfLC
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,10 @@ def train_iter(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_a
     with torch.cuda.amp.autocast(enabled=use_amp):
         outputs = model(inputs)
         batch_loss = criterion(outputs, labels)
+        # some criterions require calling step() (ProSelfLC)
+        if isinstance(criterion, ProSelfLC):
+            if criterion.counter == 'iteration':
+                criterion.step()
 
     if clip_grad_max_norm is None:
         misc.check_nan_losses(batch_loss)
@@ -174,6 +180,11 @@ def train_epoch(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_
                 it, total_iters, sample_seen, total_samples, loss_accum,
                 rank, world_size,
                 input_reshape_func, max_log_length, refresh_period=refresh_period)
+
+    # some criterions require calling step() (ProSelfLC)
+    if isinstance(criterion, ProSelfLC):
+        if criterion.counter == 'epoch':
+            criterion.step()
 
     if rank == 0:
         if train_metrics is not None and len(train_metrics) > 0:

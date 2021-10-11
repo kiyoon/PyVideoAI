@@ -6,6 +6,17 @@ from ...exceptions import ParamException
 
 class ProSelfLC(CrossEntropy):
     """
+    Kiyoon edit: forward() function inputs pred and labels only,
+    and cur_time is going to be called as step().
+    Call `step()` after forward.
+    Example usage:
+
+    ```
+    loss = criterion(preds, labels) 
+    criterion.step()
+    ```
+    ---
+
     The implementation for progressive self label correction (CVPR 2021 paper).
     The target probability will be corrected by
     a predicted distributions, i.e., self knowledge.
@@ -33,6 +44,7 @@ class ProSelfLC(CrossEntropy):
         self.exp_base = exp_base
         self.counter = counter
         self.epsilon = None
+        self.cur_time = 0   # current time (epoch/iteration counter).
 
         if not (self.exp_base > 0):
             error_msg = (
@@ -78,21 +90,20 @@ class ProSelfLC(CrossEntropy):
         self.epsilon = self.epsilon[:, None]
 
     def forward(
-        self, pred_probs: Tensor, target_probs: Tensor, cur_time: int
+        self, pred_probs: Tensor, target_probs: Tensor
     ) -> Tensor:
         """
         Inputs:
             1. predicted probability distributions of shape (N, C)
             2. target probability  distributions of shape (N, C)
-            3. current time (epoch/iteration counter).
 
         Outputs:
             Loss: a scalar tensor, normalised by N.
         """
-        if not (cur_time <= self.total_time and cur_time >= 0):
+        if not (self.cur_time <= self.total_time and self.cur_time >= 0):
             error_msg = (
                 "The cur_time = "
-                + str(cur_time)
+                + str(self.cur_time)
                 + ". The total_time = "
                 + str(self.total_time)
                 + ". The cur_time has to be no larger than total time "
@@ -101,8 +112,19 @@ class ProSelfLC(CrossEntropy):
             raise (ParamException(error_msg))
 
         # update self.epsilon
-        self.update_epsilon_progressive_adaptive(pred_probs, cur_time)
+        self.update_epsilon_progressive_adaptive(pred_probs, self.cur_time)
 
         new_target_probs = (1 - self.epsilon) * target_probs + self.epsilon * pred_probs
         # reuse CrossEntropy's forward computation
         return super().forward(pred_probs, new_target_probs)
+
+    def step(self, cur_time:int = None):
+        if cur_time is None:
+            self.cur_time += 1
+        else:
+            if not isinstance(cur_time, int):
+                raise ValueError(f'cur_time has to be integer type but got {type(cur_time)}.')
+            elif cur_time < 0:
+                raise ValueError(f'cur_time has to be zero or bigger but got {cur_time}.')
+
+            self.cur_time = cur_time
