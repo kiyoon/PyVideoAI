@@ -40,7 +40,8 @@ base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
 
 label_mode = 'onehot'  # onehot, labelsmooth, proselflc
 labelsmooth_factor = 0.1
-proselflc_total_time = 263 * 40 # 40 epochs
+proselflc_total_time = 2639 * 60 # 60 epochs
+proselflc_exp_base = 1.
 
 
 #### OPTIONAL
@@ -49,7 +50,7 @@ def get_criterion(split):
         return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
     if label_mode == 'proselflc':
         if split == 'train':
-            return ProSelfLC(proselflc_total_time)
+            return ProSelfLC(proselflc_total_time, proselflc_exp_base)
         else:
             return torch.nn.CrossEntropyLoss()
     else:
@@ -102,12 +103,13 @@ from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
     #return torch.optim.lr_scheduler.StepLR(optimiser, step_size = 50 * iters_per_epoch, gamma = 0.1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
-    matches = ['cater', 'diving48']
-    if any(x in dataset_cfg.__name__ for x in matches):
-        return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
-    else:
-        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+#    matches = ['cater', 'diving48']
+#    if any(x in dataset_cfg.__name__ for x in matches):
+#        return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+#    else:
+#        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
     #return None
+    return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
 
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
