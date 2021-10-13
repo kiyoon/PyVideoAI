@@ -40,7 +40,7 @@ base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
 
 label_mode = 'onehot'  # onehot, labelsmooth, proselflc
 labelsmooth_factor = 0.1
-proselflc_total_time = 100_000
+proselflc_total_time = 263 * 40 # 40 epochs
 
 
 #### OPTIONAL

@@ -10,7 +10,7 @@ from matplotlib import pyplot as plt
 from torch import nn
 
 
-import logging
+import logging, coloredlogs
 logger = logging.getLogger(__name__)
 
 def check_nan_losses(loss):
@@ -134,4 +134,39 @@ def data_to_gpu(inputs, uids, labels):
 
     return inputs, uids, labels, curr_batch_size
 
+
+def install_colour_logger(level=logging.INFO, fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s'):
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(level)
+    console_format = coloredlogs.ColoredFormatter(fmt)
+    console_handler.setFormatter(console_format)
+
+    root_logger = logging.getLogger()
+    root_logger.addHandler(console_handler)
+
+
+def install_file_loggers(logs_dir, levels=[logging.NOTSET, logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR], fmt='%(asctime)s - %(name)s: %(lineno)4d - %(levelname)s - %(message)s', file_prefix='train'):
+    """Install multiple file loggers per level.
+    """
+    f_format = logging.Formatter(fmt)
+    root_logger = logging.getLogger()
+
+    if isinstance(levels, str):
+        levels = [levels]
+
+    for level in levels:
+        if isinstance(level, str):
+            str_level = level
+            level = getattr(logging, level) # convert to integer level
+        elif isinstance(level, int):
+            str_level = logging.getLevelName(level)
+        else:
+            raise ValueError(f'Logging level has to be either integer or string, but got {type(level)}.)')
+        
+        f_handler = logging.FileHandler(os.path.join(logs_dir, f'{file_prefix}_{str_level}.log'))
+        f_handler.setLevel(level)
+        f_handler.setFormatter(f_format)
+
+        # Add handlers to the logger
+        root_logger.addHandler(f_handler)
 

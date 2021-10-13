@@ -3,6 +3,10 @@ from torch import Tensor
 
 from .crossentropy import CrossEntropy
 from ...exceptions import ParamException
+import torch.nn.functional as F
+
+import verboselogs 
+logger = verboselogs.VerboseLogger(__name__)
 
 class ProSelfLC(CrossEntropy):
     """
@@ -15,6 +19,9 @@ class ProSelfLC(CrossEntropy):
     loss = criterion(preds, labels) 
     criterion.step()
     ```
+
+    Also, allow target to be of shape (N,) as well as (N,C). 
+    Finally, take logits instead of probability distribution.
     ---
 
     The implementation for progressive self label correction (CVPR 2021 paper).
@@ -26,7 +33,7 @@ class ProSelfLC(CrossEntropy):
             early stopping regularisation.
 
     Inputs: two tensors for predictions and target.
-        1. predicted probability distributions of shape (N, C)
+        1. predicted logits of shape (N, C)
         2. target probability  distributions of shape (N, C)
         3. current time (epoch/iteration counter).
         4. total time (total epochs/iterations)
@@ -90,12 +97,12 @@ class ProSelfLC(CrossEntropy):
         self.epsilon = self.epsilon[:, None]
 
     def forward(
-        self, pred_probs: Tensor, target_probs: Tensor
+        self, pred_logits: Tensor, target_probs: Tensor
     ) -> Tensor:
         """
         Inputs:
             1. predicted probability distributions of shape (N, C)
-            2. target probability  distributions of shape (N, C)
+            2. target probability  distributions of shape (N, C), or just (N,).
 
         Outputs:
             Loss: a scalar tensor, normalised by N.
@@ -111,10 +118,20 @@ class ProSelfLC(CrossEntropy):
             )
             raise (ParamException(error_msg))
 
+        if target_probs.dim() == 1:
+            # Shape of (N,), not (N, C).
+            # Convert it to one hot.
+            num_classes = pred_logits.shape[1]
+            target_probs = F.one_hot(target_probs, num_classes)
+
         # update self.epsilon
+        pred_probs = F.softmax(pred_logits, -1)
         self.update_epsilon_progressive_adaptive(pred_probs, self.cur_time)
 
+        logger.spam(f'Original label: {target_probs}')
+        logger.spam(f'ProSelfLC pred weight: {self.epsilon}')
         new_target_probs = (1 - self.epsilon) * target_probs + self.epsilon * pred_probs
+        logger.spam(f'ProSelfLC new label: {new_target_probs}')
         # reuse CrossEntropy's forward computation
         return super().forward(pred_probs, new_target_probs)
 

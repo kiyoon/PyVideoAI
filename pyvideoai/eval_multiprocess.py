@@ -46,7 +46,7 @@ def evaluation(args):
         local_world_size = None
     rank, world_size, local_rank, local_world_size, local_seed = du.distributed_init(args.seed, local_world_size)
     if rank == 0:
-        coloredlogs.install(fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s', level='INFO')
+        coloredlogs.install(fmt='', level=logging.NOTSET, stream=open(os.devnull, 'w'))  # Will set the output stream later on with custom level.
         #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
@@ -66,17 +66,8 @@ def evaluation(args):
     if rank == 0:
         exp.make_dirs_for_training()
 
-        f_handler = logging.FileHandler(os.path.join(exp.logs_dir, 'val.log'))
-        #f_handler.setLevel(logging.NOTSET)
-        f_handler.setLevel(logging.DEBUG)
-
-        # Create formatters and add it to handlers
-        f_format = logging.Formatter('%(asctime)s - %(name)s: %(lineno)4d - %(levelname)s - %(message)s')
-        f_handler.setFormatter(f_format)
-
-        # Add handlers to the logger
-        root_logger = logging.getLogger()
-        root_logger.addHandler(f_handler)
+        misc.install_colour_logger(level=args.console_log_level)
+        misc.install_file_loggers(exp.logs_dir, file_prefix='eval')
     else:
         du.suppress_print()
 
