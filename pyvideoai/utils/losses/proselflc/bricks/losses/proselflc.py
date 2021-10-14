@@ -10,6 +10,7 @@ logger = verboselogs.VerboseLogger(__name__)
 
 class ProSelfLC(CrossEntropy):
     """
+    IMPORTANT: I think this code is numerically instable?
     Kiyoon edit: forward() function inputs pred and labels only,
     and cur_time is going to be called as step().
     Call `step()` after forward.

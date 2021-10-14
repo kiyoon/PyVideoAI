@@ -1,7 +1,7 @@
 import os
 
 from pyvideoai.dataloaders.video_sparsesample_dataset import VideoSparsesampleDataset
-from pyvideoai.utils.losses.proselflc import ProSelfLC
+from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils import loader
 
@@ -38,9 +38,10 @@ sample_index_code = 'pyvideoai'
 
 base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
 
-label_mode = 'onehot'  # onehot, labelsmooth, proselflc
+label_mode = 'onehot'  # onehot, instable_onehot, labelsmooth, proselflc
 labelsmooth_factor = 0.1
-proselflc_total_time = 2639 * 60 # 60 epochs
+#proselflc_total_time = 2639 * 60 # 60 epochs
+proselflc_total_time = 263 * 40 # 60 epochs
 proselflc_exp_base = 1.
 
 
@@ -48,11 +49,13 @@ proselflc_exp_base = 1.
 def get_criterion(split):
     if label_mode == 'labelsmooth':
         return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
-    if label_mode == 'proselflc':
+    elif label_mode == 'proselflc':
         if split == 'train':
             return ProSelfLC(proselflc_total_time, proselflc_exp_base)
         else:
             return torch.nn.CrossEntropyLoss()
+    elif label_mode == 'instable_onehot':
+        return InstableCrossEntropy()
     else:
         return torch.nn.CrossEntropyLoss()
 #

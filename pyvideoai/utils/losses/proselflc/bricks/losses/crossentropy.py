@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch import Tensor
+import torch.nn.functional as F
 
 from ...exceptions import ParamException
 
@@ -47,3 +48,18 @@ class CrossEntropy(nn.Module):
         loss = torch.sum(target_probs * (-torch.log(pred_probs + 1e-6)), 1)
         loss = sum(loss) / num_examples
         return loss
+
+class InstableCrossEntropy(CrossEntropy):
+    def forward(self, pred_logits: Tensor, target: Tensor) -> Tensor:
+        """
+        Instead of probability distribution, it takes logits and label just like torch.nn.CrossEntropyLoss()
+        Inputs:
+            pred_logits: (N, C)
+            target: (N,)
+        """
+        pred_probs = F.softmax(pred_logits, -1)
+        num_classes = pred_logits.shape[1]
+        target_probs = F.one_hot(target, num_classes)
+        return super().forward(pred_probs, target_probs)
+
+
