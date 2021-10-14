@@ -50,7 +50,7 @@ def main():
     exp.load_summary()
 
     if args.load_epoch == -1 or args.load_epoch is None:
-        load_epoch = int(load_exp.summary['epoch'].iloc[-1])
+        load_epoch = int(exp.summary['epoch'].iloc[-1])
     elif args.load_epoch >= 0:
         load_epoch = args.load_epoch
     else:
