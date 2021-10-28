@@ -53,10 +53,12 @@ def get_parser():
     parser.add_argument("-l", "--load_epoch", type=int, default=None, help="Load from checkpoint. Set to -1 to load from the last checkpoint.")
     parser.add_argument("-b", "--batch_size", type=int, default=4, help="batch size")
     parser.add_argument("-m", "--mode", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Evaluate using 1 clip or 30 clips.")
+    parser.add_argument("-s", "--split", type=str, default=None,  help="Which split to use to evaluate? Default is auto (None)")
     parser.add_argument("-i", "--input_size", type=int, default=None, help="Input size to the model.")
     parser.add_argument('-v', '--version', default='last', help='ExperimentBuilder version')
     parser.add_argument("-n", "--num_samples", type=int, default=20, help="How many best and worst each to sample.")
     parser.add_argument("--skip_novisual", action='store_true', help="For multicrop, it will generate visualisations with overall prediction scores with no visuals in it. Skip them all.")
+    parser.add_argument("--ignore_top5", action='store_true', help="For failures, it will only visualise samples that failed to predict correct class within top5 predictions.")
     return parser
 
 
@@ -153,7 +155,7 @@ def visualise_pred_info(image, video_label, video_id, predicted_score_for_ground
         
     return image
 
-if __name__ == '__main__':
+def main():
     parser = get_parser()
     args = parser.parse_args()
 
@@ -188,7 +190,16 @@ if __name__ == '__main__':
     else:
         raise ValueError(f"Wrong args.load_epoch value: {args.load_epoch}")
 
-    predictions_file_path = os.path.join(exp.predictions_dir, 'epoch_%04d_%sval.pkl' % (load_epoch, args.mode))
+    # Dataset
+    if args.split is not None:
+        split = args.split
+    else:   # set split automatically
+        if args.mode == 'oneclip':
+            split = 'val'
+        else:   # multicrop
+            split = 'multicropval'
+    
+    predictions_file_path = os.path.join(exp.predictions_dir, f'epoch_{load_epoch:04d}_{split}_{args.mode}.pkl')
 
     with open(predictions_file_path, 'rb') as f:
         predictions = pickle.load(f)
@@ -231,6 +242,15 @@ if __name__ == '__main__':
     best_idxs = predicted_scores_for_ground_truth_class.argsort()[-args.num_samples:][::-1]
     worst_idxs = predicted_scores_for_ground_truth_class.argsort()[:args.num_samples]
 
+    if args.ignore_top5:
+        # Ignore the samples that are within top5. Good when looking at failures that are not in top5.
+        temp = []
+        for worst_idx in worst_idxs:
+            if video_labels[worst_idx] not in topk_labels[worst_idx]:
+                temp.append(worst_idx)
+        worst_idxs = np.array(temp)
+
+
     output_dir = os.path.join(exp.plots_dir, 'success_failures_epoch_{:04d}'.format(load_epoch))
     output_dir_jpg = os.path.join(output_dir, 'jpg')
     output_dir_gif = os.path.join(output_dir, 'gif')
@@ -267,7 +287,8 @@ if __name__ == '__main__':
 
     dataloader_type = 'sparse_frames'
 
-    for mode in ['best', 'worst']:
+    for mode in ['worst']:
+    #for mode in ['best', 'worst']:
         print("{:s} predictions..".format(mode))
 
         #csv_path = os.path.join(output_dir, '{:s}_samples.csv'.format(mode))
@@ -280,12 +301,12 @@ if __name__ == '__main__':
         best_video_ids = video_ids[filter_idxs].tolist()   # for later, to get best video rank from video id.
         #save_dataloader_csv(csv_path, dataset_cfg.frames_dir, video_ids[filter_idxs], video_labels[filter_idxs], dataloader_type=model_cfg.dataloader_type)
 
-        dataset = cfg.get_torch_dataset('val')
+        dataset = cfg.get_torch_dataset(split)
         dataset.filter_samples(best_video_ids)
 
 
-        data_unpack_func = cfg.get_data_unpack_func('val')
-        input_reshape_func = cfg.get_input_reshape_func('val')
+        data_unpack_func = cfg.get_data_unpack_func(split)
+        input_reshape_func = cfg.get_input_reshape_func(split)
         dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, shuffle=False, sampler=None, num_workers=4, pin_memory=True, drop_last=False)
 
         model = cfg.load_model()
@@ -376,28 +397,5 @@ if __name__ == '__main__':
                             save_all=True, append_images=gif_frames[1:], optimize=True, duration=gif_duration, loop=0)
 
 
-'''
-    val_dataset = FramesSparsesampleDataset("/home/kiyoon/datasets/EPIC_KITCHENS_2018/epic_list_frames/train.csv", "train", 8)
-    val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, sampler=None, num_workers=4, pin_memory=False, drop_last=False)
-
-    val_dataloader_it = iter(val_dataloader)
-    #data = next(val_dataloader_it)
-    #data = next(val_dataloader_it)
-    #data = next(val_dataloader_it)
-    #data = next(val_dataloader_it)
-    data = next(val_dataloader_it)
-    inputs, uids, labels, _, frame_indices, _ = data
-    inputs = inputs.numpy()
-    print(uids)
-    print(frame_indices)
-
-    inputs = inputs.transpose((0,2,3,4,1))      # B, F, H, W, C
-    batch_array = (inputs * std + mean) * 255
-    batch_array = batch_array.astype(np.uint8)
-    print(batch_array.shape)
-
-    for frame_num, img_array in enumerate(batch_array[2]):
-    #img_array = batch_array[0, 0]
-        img = Image.fromarray(img_array)
-        img.save('{:02d}.png'.format(frame_num))
-'''
+if __name__ == '__main__':
+    main()
