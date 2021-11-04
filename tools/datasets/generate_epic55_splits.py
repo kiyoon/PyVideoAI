@@ -3,6 +3,7 @@
 import tqdm
 import pickle
 import os
+from decord import VideoReader
 
 import argparse
 def get_parser():
@@ -29,6 +30,9 @@ if __name__ == '__main__':
     train_split = open(os.path.join(args.output_dir, 'train.csv'), 'w')
     val_split = open(os.path.join(args.output_dir, 'val.csv'), 'w')
 
+    train_split.write('0')
+    val_split.write('0')
+
     num_videos = len(epic_action_labels.index)
     for index in tqdm.tqdm(range(num_videos), desc="Generating splits"):
         uid = epic_action_labels.index[index]
@@ -37,7 +41,10 @@ if __name__ == '__main__':
         participant_id = epic_action_labels.participant_id.iloc[index]
 
         if args.mode == 'video':
-            write_str = os.path.join(args.root, '%05d.mp4' % uid) + ' %d %d\n' % (uid, verb_label)
+            vr = VideoReader(os.path.join(args.root, f'{uid:05d}.mp4'), num_threads=1)
+            num_frames = len(vr)
+            height, width, _ = vr[0].shape
+            write_str = f'\n{uid:05d}.mp4 {uid} {verb_label} 0 {num_frames-1} {width} {height}'
         elif args.mode == 'frames':
             dir_path = os.path.join(args.root, '%05d' % uid)
             num_frames = len([name for name in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, name))])
@@ -51,7 +58,7 @@ if __name__ == '__main__':
                 if num_frames != num_frames_annotated:
                     print("uid: {:d}, num_frames: {:d}, num_frames_annotated: {:d}".format(uid, num_frames, num_frames_annotated))
 
-            write_str = dir_path + ' %d %d %d\n' % (uid, verb_label, num_frames)
+            write_str = f'\n{uid:05d} {uid} {verb_label} 0 {num_frames-1}'
         else:
             raise NotImplementedError(args.mode)
 

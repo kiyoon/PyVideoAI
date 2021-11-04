@@ -89,7 +89,7 @@ def model_load_state_dict_partial(model, weights_state_dict):
     model.load_state_dict(model_dict)
 
 
-def model_load_weights_GPU(model, weights_path, cur_device = None, world_size = None):
+def model_load_weights_GPU(model, weights_path, cur_device = None, world_size = None, model_state_key='model_state'):
     logger.info("Loading weights: " + weights_path) 
 
     if cur_device is None:
@@ -99,6 +99,6 @@ def model_load_weights_GPU(model, weights_path, cur_device = None, world_size = 
 
     checkpoint = torch.load(weights_path, map_location = "cuda:{}".format(cur_device))
     ms = model.module if world_size > 1 else model
-    ms.load_state_dict(checkpoint["model_state"])
+    ms.load_state_dict(checkpoint[model_state_key])
 
     return checkpoint
