@@ -177,6 +177,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
 
     def filter_samples(self, video_ids: list):
         """Given a video_ids list, filter the samples.
+        Used for visualisation.
         """
         indices_of_video_ids = [x for x, v in enumerate(self._video_ids) if v in video_ids]
 
