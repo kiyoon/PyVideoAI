@@ -3,9 +3,9 @@ import os
 import pickle
 import numpy as np
 
-from video_datasets_api.epic_kitchens.definitions import NUM_CLASSES as num_classes
-from video_datasets_api.epic_kitchens.read_annotations import get_verb_uid2label_dict
-from video_datasets_api.epic_kitchens.epic_get_verb_class_keys import EPIC_get_verb_class_keys
+from video_datasets_api.epic_kitchens_55.definitions import NUM_CLASSES as num_classes
+from video_datasets_api.epic_kitchens_55.read_annotations import get_verb_uid2label_dict
+from video_datasets_api.epic_kitchens_55.epic_get_verb_class_keys import EPIC_get_verb_class_keys
 from pyvideoai.config import DATA_DIR
 
 from pyvideoai.tasks import SingleLabelClassificationTask
@@ -13,8 +13,9 @@ task = SingleLabelClassificationTask()
 
 
 # Paths
-dataset_root = os.path.join(DATA_DIR, 'EPIC_KITCHENS_2018')
-annotations_root = os.path.join(dataset_root, 'annotations')
+dataset_root = os.path.join(DATA_DIR, 'EPIC_KITCHENS_55')
+video_dir = os.path.join(dataset_root, 'segments_15fps_324')
+annotations_root = os.path.join(dataset_root, 'epic-kitchens-55-annotations')
 train_action_labels_pkl = os.path.join(annotations_root, 'EPIC_train_action_labels.pkl')
 #detection_frame_root = '/disk/scratch_fast1/s1884147/datasets/epic_detection_frame_extracted'
 
@@ -24,104 +25,14 @@ TRAINING_DATA = ['P' + x.zfill(2) for x in map(str, range(1, 26))]  # P01 to P25
 uid2label = get_verb_uid2label_dict(train_action_labels_pkl)
 class_keys = EPIC_get_verb_class_keys(os.path.join(annotations_root, 'EPIC_verb_classes.csv'))
 
-#video_split_file_dir = "/home/kiyoon/datasets/EPIC_KITCHENS_2018/epic_list"
-video_split_file_dir = os.path.join(dataset_root, "epic_list")
-frames_split_file_dir = os.path.join(dataset_root, "epic_list_frames")
+video_split_file_dir = os.path.join(dataset_root, "splits_video")
+frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv'}
-split2mode = {'train': 'train', 'val': 'val', 'multicropval': 'test', 'test': 'test'}
+split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
 
 # Training settings
 horizontal_flip = True 
 
-#def _unpack_data_videoclip(data):
-#    inputs, uids, labels, spatial_temporal_idx, _, _ = data
-#    return _data_to_gpu(inputs, uids, labels) + (spatial_temporal_idx,)
-#
-#def _unpack_data_sparse(data):
-#    inputs, uids, labels, spatial_idx, _, _, _ = data
-#    return _data_to_gpu(inputs, uids, labels) + (spatial_idx,)
-#
-#
-#from dataloaders.video_classification_dataset import VideoClassificationDataset
-#from dataloaders.video_sparsesample_dataset import VideoSparsesampleDataset
-#from dataloaders.frames_sparsesample_dataset import FramesSparsesampleDataset
-#def _get_torch_dataset_split(split, dataloader_type = 'video_clip'):
-#
-#    mode = split2mode[split]
-#    if dataloader_type == 'video_clip':
-#        csv_path = os.path.join(video_split_file_dir, split_file_basename[split])
-#    elif dataloader_type == 'sparse_video':
-#        csv_path = os.path.join(video_split_file_dir, split_file_basename[split])
-#    elif dataloader_type == 'sparse_frames':
-#        csv_path = os.path.join(frames_split_file_dir, split_file_basename[split])
-#    else:
-#        raise ValueError('Wrong dataloader type {:s}'.format(dataloader_type))
-#
-#    return get_torch_dataset(csv_path, mode, dataloader_type=dataloader_type)
-#
-#
-#def _get_unpack_func(dataloader_type = 'video_clip'):
-#    if dataloader_type == 'video_clip':
-#        return _unpack_data_videoclip
-#    elif dataloader_type == 'sparse_video':
-#        return _unpack_data_sparse
-#    elif dataloader_type == 'sparse_frames':
-#        return _unpack_data_sparse
-#    else:
-#        raise ValueError('Wrong dataloader type {:s}'.format(dataloader_type))
-#
-#
-#def get_torch_dataset(csv_path, mode, dataloader_type = 'video_clip'):
-#
-#    if dataloader_type == 'video_clip':
-#        return VideoClassificationDataset(csv_path, mode,
-#            input_frame_length, input_frame_stride, target_fps=input_target_fps, enable_multi_thread_decode=False, decoding_backend='pyav')
-#    elif dataloader_type == 'sparse_video':
-#        return VideoSparsesampleDataset(csv_path, mode,
-#            input_frame_length, target_fps=input_target_fps, enable_multi_thread_decode=False, decoding_backend='pyav')
-#    elif dataloader_type == 'sparse_frames':
-#        return FramesSparsesampleDataset(csv_path, mode,
-#            input_frame_length,)
-#    else:
-#        raise ValueError('Wrong dataloader type {:s}'.format(dataloader_type))
-#
-#
-#def get_torch_datasets(splits=['train', 'val', 'multicropval'], dataloader_type = 'video_clip'):
-#
-#    if type(splits) == list:
-#        torch_datasets = {}
-#        for split in splits:
-#            dataset = _get_torch_dataset_split(split, dataloader_type)
-#            torch_datasets[split] = dataset
-#
-#        return torch_datasets, _get_unpack_func(dataloader_type)
-#
-#    elif type(splits) == str:
-#        return _get_torch_dataset_split(splits, dataloader_type), _get_unpack_func(dataloader_type)    
-#
-#    else:
-#        raise ValueError('Wrong type of splits argument. Must be list or string')
-
-
-'''#{{{
-def get_torch_datasets(splits=['train', 'val'], include_coordinates=True):
-    from dataloaders.epic_object_feature_dataset_frames import EPIC_object_feature_dataset
-
-    if type(splits) == list:
-        torch_datasets = []
-
-        for split in splits:
-            dataset = EPIC_object_feature_dataset(train_action_labels_pkl, split_file[split], detection_frame_root, include_coordinates = include_coordinates, return_noun_labels = False)
-            torch_datasets.append(dataset)
-
-        return torch_datasets
-
-    elif type(splits) == str:
-        return EPIC_object_feature_dataset(train_action_labels_pkl, split_file[splits], detection_frame_root, include_coordinates = include_coordinates, return_noun_labels = False)
-    
-    else:
-        raise ValueError('Wrong type of splits argument. Must be list or string')
-'''#}}}
 
 
 # Misc

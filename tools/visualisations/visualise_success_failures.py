@@ -287,8 +287,8 @@ def main():
 
     dataloader_type = 'sparse_frames'
 
-    for mode in ['worst']:
-    #for mode in ['best', 'worst']:
+    #for mode in ['worst']:
+    for mode in ['best', 'worst']:
         print("{:s} predictions..".format(mode))
 
         #csv_path = os.path.join(output_dir, '{:s}_samples.csv'.format(mode))
