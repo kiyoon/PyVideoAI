@@ -15,12 +15,11 @@ from . import inflated_resnet
 import torchvision
 
 import torch.nn.functional as F
-from geotnf.transformation import GeometricTnf,GeometricTnfAffine
-from geotnf.loss import TransformedGridLoss, WeakInlierCountPool
-from utils.torch_util import expand_dim
+from ..geotnf.transformation import GeometricTnf,GeometricTnfAffine
+from ..geotnf.loss import TransformedGridLoss, WeakInlierCountPool
+from ..utils.torch_util import expand_dim
 
 import random
-import utils.imutils2
 
 
 import time
