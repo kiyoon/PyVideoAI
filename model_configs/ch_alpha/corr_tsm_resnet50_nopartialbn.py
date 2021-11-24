@@ -90,8 +90,8 @@ class CorrModel(nn.Module):
         corr_features = nn.functional.interpolate(corr_features, scale_factor = 8, mode = 'bilinear', align_corners=False)   # (N, (T-1)*2 , W, H)
 
         flow_model_output = self.flow_model(corr_features)
-        logger.info(f'{corr_features.shape = }')
-        logger.info(f'{flow_model_output.shape = }')
+        #logger.info(f'{corr_features.shape = }')
+        #logger.info(f'{flow_model_output.shape = }')
         return flow_model_output
 
     def get_optim_policies(self):
@@ -180,9 +180,10 @@ def load_model(num_classes, input_frame_length):
 #
 #    action_corr_model = ActionCorrModel(class_counts, segment_count, 224, action_model, corr_model_checkpoint_path = corr_model_checkpoint_path, enable_corr_model=False)
 
-    flow_model = TSM(class_counts, segment_count, 'Flow',
+    flow_model = TSM(class_counts, segment_count-1, 'Flow',
             base_model = base_model,
-            new_length = segment_count-1,
+            #new_length = segment_count-1,
+            new_length = 1,
             partial_bn = False,
             dropout = 0.5,
             pretrained = None
