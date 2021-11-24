@@ -19,34 +19,38 @@ from pyvideoai.config import PYVIDEOAI_DIR
 corr_model_checkpoint_path = os.path.join(PYVIDEOAI_DIR, 'tools', 'timecycle', 'checkpoint_14.pth.tar')
 
 class ActionCorrModel(nn.Module):
-    def __init__(self, num_classes, num_segments, crop_size, action_model, corr_model = None, corr_model_checkpoint_path = 'checkpoint_14.pth.tar'):
+    def __init__(self, num_classes, num_segments, crop_size, action_model, corr_model = None, corr_model_checkpoint_path = 'checkpoint_14.pth.tar', enable_corr_model=True):
         super(ActionCorrModel, self).__init__()
         self.action_model = action_model
-        if corr_model is None:
-            self.corr_model = video3d.CycleTime(trans_param_num=3)
+        self.enable_corr_model = enable_corr_model
+        if self.enable_corr_model:
+            if corr_model is None:
+                self.corr_model = video3d.CycleTime(trans_param_num=3)
 
-            assert os.path.isfile(corr_model_checkpoint_path), 'Error: no checkpoint directory found!'
-            device = torch.cuda.current_device()
-            checkpoint = torch.load(corr_model_checkpoint_path, map_location=f'cuda:{device}')
-            #start_epoch = checkpoint['epoch']
-            partial_load(checkpoint['state_dict'], self.corr_model)
-            del checkpoint
+                assert os.path.isfile(corr_model_checkpoint_path), 'Error: no checkpoint directory found!'
+                device = torch.cuda.current_device()
+                checkpoint = torch.load(corr_model_checkpoint_path, map_location=f'cuda:{device}')
+                #start_epoch = checkpoint['epoch']
+                partial_load(checkpoint['state_dict'], self.corr_model)
+                del checkpoint
 
-        else:
-            self.corr_model = corr_model
+            else:
+                self.corr_model = corr_model
+
+            # freeze corr model params
+            for param in self.corr_model.parameters():
+                param.requires_grad = False
 
 
         # classifier
         backbone_feature_dim = 2048
         action_feature_dim = backbone_feature_dim * num_segments
         corr_feature_dim = crop_size ** 2 // 8 // 8 * (num_segments-1)
-        self.output = nn.Linear(action_feature_dim+corr_feature_dim, num_classes)
 
-
-        # freeze corr model params
-        for param in self.corr_model.parameters():
-            param.requires_grad = False
-
+        if self.enable_corr_model:
+            self.output = nn.Linear(action_feature_dim+corr_feature_dim, num_classes)
+        else:
+            self.output = nn.Linear(action_feature_dim, num_classes)
 
 
     def forward(self, x):
@@ -65,16 +69,19 @@ class ActionCorrModel(nn.Module):
         imgs_tensor = x[:,0:T-1,...].contiguous()   # N, T-1, C, H, W
         target_tensor = x[:,T-1:T,...].contiguous() # N, 1, C, H, W
 
-        self.corr_model.eval()
-        corr_features = self.corr_model(imgs_tensor, target_tensor) # (N, W/8*H/8, H/8, W/8)
-        # make flows from the corr feature by finding max activation
-        corr_features = corr_features.view(N, T-1, W//8*H//8, H//8*W//8)
-        corr_features = torch.argmax(corr_features, dim=3) # (N, T-1, W/8*H/8)
-        corr_features = corr_features.view(N, -1)
-        
-        concat_features = torch.cat((action_features, corr_features), dim=1)
+        if self.enable_corr_model:
+            self.corr_model.eval()
+            corr_features = self.corr_model(imgs_tensor, target_tensor) # (N, W/8*H/8, H/8, W/8)
+            # make flows from the corr feature by finding max activation
+            corr_features = corr_features.view(N, T-1, W//8*H//8, H//8*W//8)
+            corr_features = torch.argmax(corr_features, dim=3) # (N, T-1, W/8*H/8)
+            corr_features = corr_features.view(N, -1)
+            
+            concat_features = torch.cat((action_features, corr_features), dim=1)
 
-        return self.output(concat_features)
+            return self.output(concat_features)
+        else:
+            return self.output(action_features)
 
     def get_optim_policies(self):
         return self.action_model.get_optim_policies()
@@ -92,7 +99,7 @@ def load_model(num_classes, input_frame_length):
             dropout=0.5,
             pretrained=pretrained)
 
-    action_corr_model = ActionCorrModel(class_counts, segment_count, 224, action_model, corr_model_checkpoint_path = corr_model_checkpoint_path)
+    action_corr_model = ActionCorrModel(class_counts, segment_count, 224, action_model, corr_model_checkpoint_path = corr_model_checkpoint_path, enable_corr_model=False)
 
 
     return action_corr_model
