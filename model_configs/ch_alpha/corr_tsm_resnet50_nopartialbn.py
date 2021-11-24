@@ -4,6 +4,9 @@ from torch import optim, nn
 from pyvideoai.models.epic.tsm import TSM
 import pyvideoai.models.timecycle.videos.model_test as video3d
 
+import logging
+logger = logging.getLogger(__name__)
+
 def partial_load(pretrained_dict, model):
     model_dict = model.state_dict()
 
@@ -25,7 +28,7 @@ class CorrModel(nn.Module):
         if corr_model is None:
             self.corr_model = video3d.CycleTime(trans_param_num=3)
 
-            assert os.path.isfile(corr_model_checkpoint_path), 'Error: no checkpoint file found!'
+            assert os.path.isfile(corr_model_checkpoint_path), f'Error: no checkpoint file found! {corr_model_checkpoint_path}'
             device = torch.cuda.current_device()
             checkpoint = torch.load(corr_model_checkpoint_path, map_location=f'cuda:{device}')
             #start_epoch = checkpoint['epoch']
@@ -38,6 +41,8 @@ class CorrModel(nn.Module):
         # freeze corr model params
         for param in self.corr_model.parameters():
             param.requires_grad = False
+
+        self.device = torch.cuda.current_device()
 
 
     def forward(self, x):
@@ -63,15 +68,31 @@ class CorrModel(nn.Module):
         corr_features = corr_features.view(N, T-1, W//8, H//8, 1).repeat(1,1,1,1,2) # (N, T-1, W/8, H/8, 2). The last dim for flow x and y
 
         # Convert idx to x and y
-        corr_features[..., 0] %= W//8   # flow x
-        corr_features[..., 1] /= W//8   # flow y
+        corr_features[..., 0] %= W//8   # flow dest x (absolute point)
+        corr_features[..., 1] = torch.div(corr_features[..., 1], W//8, rounding_mode='floor')   # flow dest y (absolute point)
+
+        # We have to make flow relative.
+        # Subtract indices
+
+        X = torch.arange(0, W//8, device=self.device).view(1,1,W//8,1)
+        corr_features[..., 0] -= X
+        Y = torch.arange(0, H//8, device=self.device).view(1,1,1,H//8)
+        corr_features[..., 1] -= Y
+
+        # Type conversion to float, and scale between -1 and 1
+        corr_features = corr_features.float()
+        corr_features[..., 0] /= W//8//2
+        corr_features[..., 1] /= H//8//2
 
         # interpolate
-        corr_features = corr_features.permute(0,4,1,2,3) # (N, C=2, T-1, W//8, H//8)
-        corr_features = nn.functional.interpolate(corr_features, scale_factor = 8, mode = 'bilinear')
-        corr_features = corr_features.permute(0,2,1,3,4) # (N, T-1, C=2, W, H)
+        corr_features = corr_features.permute(0,1,4,2,3) # (N, T-1, C=2, W//8, H//8)
+        corr_features = corr_features.reshape(N, (T-1)*2, W//8, H//8)
+        corr_features = nn.functional.interpolate(corr_features, scale_factor = 8, mode = 'bilinear', align_corners=False)   # (N, (T-1)*2 , W, H)
 
-        return self.flow_model(corr_features)
+        flow_model_output = self.flow_model(corr_features)
+        logger.info(f'{corr_features.shape = }')
+        logger.info(f'{flow_model_output.shape = }')
+        return flow_model_output
 
     def get_optim_policies(self):
         return self.flow_model.get_optim_policies()
@@ -166,7 +187,7 @@ def load_model(num_classes, input_frame_length):
             dropout = 0.5,
             pretrained = None
             )
-    corr_model = CorrModel(flow_model)
+    corr_model = CorrModel(flow_model, corr_model_checkpoint_path = corr_model_checkpoint_path)
 
     return corr_model
 
@@ -187,7 +208,7 @@ def get_optim_policies(model):
     return model.get_optim_policies()
 
 
-ddp_find_unused_parameters = True
+ddp_find_unused_parameters = False
 use_amp = True
 
 
