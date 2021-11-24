@@ -18,6 +18,74 @@ import os
 from pyvideoai.config import PYVIDEOAI_DIR
 corr_model_checkpoint_path = os.path.join(PYVIDEOAI_DIR, 'tools', 'timecycle', 'checkpoint_14.pth.tar')
 
+class CorrModel(nn.Module):
+    def __init__(self, flow_model, corr_model = None, corr_model_checkpoint_path = 'checkpoint_14.pth.tar'):
+        super(CorrModel, self).__init__()
+        self.flow_model = flow_model
+        if corr_model is None:
+            self.corr_model = video3d.CycleTime(trans_param_num=3)
+
+            assert os.path.isfile(corr_model_checkpoint_path), 'Error: no checkpoint directory found!'
+            device = torch.cuda.current_device()
+            checkpoint = torch.load(corr_model_checkpoint_path, map_location=f'cuda:{device}')
+            #start_epoch = checkpoint['epoch']
+            partial_load(checkpoint['state_dict'], self.corr_model)
+            del checkpoint
+
+        else:
+            self.corr_model = corr_model
+
+        # freeze corr model params
+        for param in self.corr_model.parameters():
+            param.requires_grad = False
+
+        # classifier
+        backbone_feature_dim = 2048
+        action_feature_dim = backbone_feature_dim * num_segments
+        corr_feature_dim = crop_size ** 2 // 8 // 8 * (num_segments-1)
+
+        if self.enable_corr_model:
+            self.output = nn.Linear(action_feature_dim+corr_feature_dim, num_classes)
+        else:
+            self.output = nn.Linear(action_feature_dim, num_classes)
+
+
+    def forward(self, x):
+        if x.dim() == 4:
+            N, TC, H, W = x.shape
+            T = TC // 3
+            C = 3
+            x = x.view(N, T, C, H, W)
+        elif x.dim() == 5:
+            N, T, C, H, W = x.shape
+        else:
+            raise ValueError(f'x.shape {x.shape} not recognised.')
+
+        imgs_tensor = x[:,0:T-1,...].contiguous()   # N, T-1, C, H, W
+        target_tensor = x[:,T-1:T,...].contiguous() # N, 1, C, H, W
+
+        self.corr_model.eval()
+        corr_features = self.corr_model(imgs_tensor, target_tensor) # (N * (T-1), W/8*H/8, H/8, W/8)
+
+        # make flows from the corr feature by finding max activation
+        corr_features = corr_features.view(N, T-1, W//8*H//8, H//8*W//8)
+        corr_features = torch.argmax(corr_features, dim=3) # (N, T-1, W/8*H/8)
+        corr_features = corr_features.view(N, T-1, W//8, H//8, 1).repeat(1,1,1,1,2) # (N, T-1, W/8, H/8, 2). The last dim for flow x and y
+
+        # Convert idx to x and y
+        corr_features[..., 0] %= W//8   # flow x
+        corr_features[..., 1] /= W//8   # flow y
+
+        # interpolate
+        corr_features = corr_features.permute(0,4,1,2,3) # (N, C=2, T-1, W//8, H//8)
+        corr_features = nn.functional.interpolate(corr_features, scale_factor = 8, mode = 'bilinear')
+        corr_features = corr_features.permute(0,2,1,3,4) # (N, T-1, C=2, W, H)
+
+        return self.flow_model(corr_features)
+
+    def get_optim_policies(self):
+        return self.flow_model.get_optim_policies()
+
 class ActionCorrModel(nn.Module):
     def __init__(self, num_classes, num_segments, crop_size, action_model, corr_model = None, corr_model_checkpoint_path = 'checkpoint_14.pth.tar', enable_corr_model=True):
         super(ActionCorrModel, self).__init__()
@@ -90,19 +158,27 @@ def load_model(num_classes, input_frame_length):
     class_counts = num_classes
     segment_count = input_frame_length
     base_model = 'resnet50'
-    pretrained = 'imagenet'
+#    pretrained = 'imagenet'
+#
+#    action_model = TSM(class_counts, segment_count, 'RGB',
+#            base_model = base_model,
+#            consensus_type='avg',
+#            partial_bn = False,
+#            dropout=0.5,
+#            pretrained=pretrained)
+#
+#    action_corr_model = ActionCorrModel(class_counts, segment_count, 224, action_model, corr_model_checkpoint_path = corr_model_checkpoint_path, enable_corr_model=False)
 
-    action_model = TSM(class_counts, segment_count, 'RGB',
+    flow_model = TSM(class_counts, segment_count, 'Flow',
             base_model = base_model,
-            consensus_type='avg',
+            new_length = segment_count-1,
             partial_bn = False,
-            dropout=0.5,
-            pretrained=pretrained)
+            dropout = 0.5,
+            pretrained = None
+            )
+    corr_model = CorrModel(flow_model)
 
-    action_corr_model = ActionCorrModel(class_counts, segment_count, 224, action_model, corr_model_checkpoint_path = corr_model_checkpoint_path, enable_corr_model=False)
-
-
-    return action_corr_model
+    return corr_model
 
 
 def NCTHW_to_model_input_shape(inputs):
