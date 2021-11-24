@@ -4,7 +4,7 @@ The only framework that completes your computer vision, action recognition resea
 
 ** Key features **  
 - Supports multi-gpu, multi-node training.  
-- STOA models such as I3D, Non-local, TSN, TRN, TSM, ..., and even ImageNet training!
+- STOA models such as I3D, Non-local, TSN, TRN, TSM, MVFNet, ..., and even ImageNet training!
 - Many datasets such as Kinetics-400, EPIC-Kitchens-55, Something-Something-V1/V2, HMDB-51, UCF-101, Diving48, CATER, ...
 - Supports both video decoding (straight from .avi/mp4) and frame extracted (.jpg/png) dataloaders, sparse-sample and dense-sample.
 - Any popular LR scheduling like Cosine Annealing with Warm Restart, Step LR, and Reduce LR on Plateau.
