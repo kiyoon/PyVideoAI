@@ -25,7 +25,7 @@ class CorrModel(nn.Module):
         if corr_model is None:
             self.corr_model = video3d.CycleTime(trans_param_num=3)
 
-            assert os.path.isfile(corr_model_checkpoint_path), 'Error: no checkpoint directory found!'
+            assert os.path.isfile(corr_model_checkpoint_path), 'Error: no checkpoint file found!'
             device = torch.cuda.current_device()
             checkpoint = torch.load(corr_model_checkpoint_path, map_location=f'cuda:{device}')
             #start_epoch = checkpoint['epoch']
@@ -38,16 +38,6 @@ class CorrModel(nn.Module):
         # freeze corr model params
         for param in self.corr_model.parameters():
             param.requires_grad = False
-
-        # classifier
-        backbone_feature_dim = 2048
-        action_feature_dim = backbone_feature_dim * num_segments
-        corr_feature_dim = crop_size ** 2 // 8 // 8 * (num_segments-1)
-
-        if self.enable_corr_model:
-            self.output = nn.Linear(action_feature_dim+corr_feature_dim, num_classes)
-        else:
-            self.output = nn.Linear(action_feature_dim, num_classes)
 
 
     def forward(self, x):
