@@ -56,6 +56,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             path_prefix = "",
             num_retries = 10,
             sample_index_code = 'pyvideoai',
+            flow = None,       # if 'RG', treat R and G channels as u and v. Discard B.
             ):
         """
         Construct the video loader with a given csv file. The format of
@@ -111,6 +112,13 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         self.normalise = normalise
         self.bgr = bgr
         self.greyscale = greyscale 
+
+        self.flow = flow.lower()
+        if self.flow == 'rg':
+            assert len(mean) in [1, 2]
+            assert len(std)  in [1, 2]
+            assert not greyscale, 'For optical flow data, it is impossible to use BGR channel ordering.'
+            assert not bgr, 'For optical flow data, it is impossible to use BGR channel ordering.'
 
         # For training mode, one single clip is sampled from every
         # video. For testing, NUM_ENSEMBLE_VIEWS clips are sampled from every
@@ -246,14 +254,9 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
 
         frame_paths = [self._path_to_frames[index].format(frame_idx) for frame_idx in frame_indices]
 
-#        # make sure to close the images to avoid memory leakage.
-#        frames = [0] * len(frame_paths)
-#        for i, frame_path in enumerate(frame_paths):
-#            with Image.open(frame_path) as frame:
-#                frames[i] = np.array(frame)
-        #frames = [np.array(Image.open(frame_path)) for frame_path in frame_paths]
         frames = utils.retry_load_images(frame_paths, retry=self._num_retries, backend='pytorch', bgr=self.bgr, greyscale=self.greyscale)
-        #frames = torch.as_tensor(np.stack(frames))
+        if self.flow == 'rg':
+            frames = frames[..., 0:2]   # Use R and G as u and v (x,y). Discard B channel.
 
         # Perform color normalization.
         frames = utils.tensor_normalize(
