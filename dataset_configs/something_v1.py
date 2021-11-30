@@ -12,6 +12,7 @@ task = SingleLabelClassificationTask()
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'something-something-v1')
 frames_dir = os.path.join(dataset_root, 'frames')
+flow_dir = os.path.join(dataset_root, 'flow')
 annotations_root = os.path.join(dataset_root, 'annotations')
 label_csv = os.path.join(annotations_root, 'something-something-v1-labels.csv')
 class_keys = pd.DataFrame(get_class_keys_shrinked(label_csv), columns=['class_keys'])['class_keys']
@@ -21,6 +22,7 @@ for key in split_file.keys():
 
 video_split_file_dir = os.path.join(dataset_root, "splits_video")
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
+flow_split_file_dir = os.path.join(dataset_root, "splits_flow")
 split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv'}
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
 
