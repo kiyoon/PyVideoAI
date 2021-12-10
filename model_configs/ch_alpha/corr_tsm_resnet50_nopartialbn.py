@@ -59,8 +59,10 @@ class CorrModel(nn.Module):
         else:
             raise ValueError(f'x.shape {x.shape} not recognised.')
 
-        imgs_tensor = x[:,0:T-1,...].contiguous()   # N, T-1, C, H, W
-        target_tensor = x[:,T-1:T,...].contiguous() # N, 1, C, H, W
+        #imgs_tensor = x[:,0:T-1,...].contiguous()   # N, T-1, C, H, W
+        #target_tensor = x[:,T-1:T,...].contiguous() # N, 1, C, H, W
+        imgs_tensor = x[:,0:T-1,...].reshape(N*(T-1), 1, C, H, W)
+        target_tensor = x[:,1:T,...].reshape(N*(T-1), 1, C, H, W)
 
         self.corr_model.eval()
         corr_features = self.corr_model(imgs_tensor, target_tensor) # (N * (T-1), W/8*H/8, H/8, W/8)

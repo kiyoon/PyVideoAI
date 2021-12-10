@@ -84,9 +84,9 @@ class CorrModel(nn.Module):
             else:
                 raise ValueError(f'x.shape {x.shape} not recognised.')
 
-
-            imgs_tensor = video[:,0:T,...].contiguous()   # N, T, C, H, W
-            target_tensor = video[:,T-1:T,...].contiguous() # N, 1, C, H, W
+            imgs_tensor = video.view(N*T, 1, C, H, W)
+            target_frames = list(range(1,T)) + [T-1]    # repeat last frame
+            target_tensor = video[:,target_frames,...].reshape(N*T, 1, C, H, W)
 
             self.corr_model.eval()
             corr_features = self.corr_model(imgs_tensor, target_tensor) # (N * (T), W/8*H/8, H/8, W/8)
@@ -161,7 +161,7 @@ class CorrModel(nn.Module):
     def get_optim_policies(self):
         return self.flow_model.get_optim_policies()
 
-def load_model(num_classes, input_frame_length, num_channels=3):
+def load_model(num_classes, input_frame_length, num_channels=2):
     class_counts = num_classes
     segment_count = input_frame_length
     base_model = 'resnet50'
@@ -177,7 +177,7 @@ def load_model(num_classes, input_frame_length, num_channels=3):
             )
 
 
-    corr_model = CorrModel(RGB_model, corr_model_checkpoint_path = corr_model_checkpoint_path, num_channels=3)
+    corr_model = CorrModel(RGB_model, corr_model_checkpoint_path = corr_model_checkpoint_path, num_channels=num_channels)
 
     return corr_model
 
