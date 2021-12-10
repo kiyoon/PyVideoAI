@@ -139,7 +139,6 @@ class CorrModel(nn.Module):
             # correlation concat
             # x.shape NT, 512, 28, 28
             x = self.after_layer2_match_channel(x)          # (NT, 256, 28, 28)
-            import ipdb; ipdb.set_trace()
             corr_features_conv = self.corr_conv_layers(corr_features)    # (NT, 256, 28, 28)
             x = torch.cat((x, corr_features_conv), dim=1)   # (NT, 512, 28, 28)
             
