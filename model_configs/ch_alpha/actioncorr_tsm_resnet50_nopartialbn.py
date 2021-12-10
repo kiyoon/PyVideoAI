@@ -159,7 +159,7 @@ class CorrModel(nn.Module):
         return self.action_model(x)
 
     def get_optim_policies(self):
-        return self.flow_model.get_optim_policies()
+        return self.action_model.get_optim_policies()
 
 def load_model(num_classes, input_frame_length, num_channels=2):
     class_counts = num_classes
