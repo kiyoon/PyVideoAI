@@ -22,7 +22,7 @@ from pyvideoai.config import PYVIDEOAI_DIR
 corr_model_checkpoint_path = os.path.join(PYVIDEOAI_DIR, 'tools', 'timecycle', 'checkpoint_14.pth.tar')
 
 class CorrModel(nn.Module):
-    def __init__(self, flow_model, corr_model = None, corr_model_checkpoint_path = 'checkpoint_14.pth.tar'):
+    def __init__(self, flow_model, corr_model = None, corr_model_checkpoint_path = 'checkpoint_14.pth.tar', num_channels = 2):
         super(CorrModel, self).__init__()
         self.flow_model = flow_model
         if corr_model is None:
@@ -37,6 +37,9 @@ class CorrModel(nn.Module):
 
         else:
             self.corr_model = corr_model
+
+        assert num_channels in [2, 3], "2 for flow x y, 3 for flow x y and its confidence."
+        self.num_channels = num_channels
 
         # freeze corr model params
         for param in self.corr_model.parameters():
@@ -63,9 +66,14 @@ class CorrModel(nn.Module):
         corr_features = self.corr_model(imgs_tensor, target_tensor) # (N * (T-1), W/8*H/8, H/8, W/8)
 
         # make flows from the corr feature by finding max activation
-        corr_features = corr_features.view(N, T-1, W//8*H//8, H//8*W//8)
-        corr_features = torch.argmax(corr_features, dim=3) # (N, T-1, W/8*H/8)
-        corr_features = corr_features.view(N, T-1, W//8, H//8, 1).repeat(1,1,1,1,2) # (N, T-1, W/8, H/8, 2). The last dim for flow x and y
+        corr_features_orig = corr_features.view(N, T-1, W//8*H//8, H//8*W//8)
+        if self.num_channels == 2:
+            corr_features_argmax = torch.argmax(corr_features_orig, dim=3) # (N, T-1, W/8*H/8)
+        elif self.num_channels == 3:
+            corr_features_confidence, corr_features_argmax = corr_features_orig.max(dim=3)
+            corr_features_confidence = corr_features_confidence.view(N, T-1, W//8, H//8, 1)
+
+        corr_features = corr_features_argmax.view(N, T-1, W//8, H//8, 1).repeat(1,1,1,1,2) # (N, T-1, W/8, H/8, 2). The last dim for flow x and y
 
         # Convert idx to x and y
         corr_features[..., 0] %= W//8   # flow dest x (absolute point)
@@ -84,9 +92,13 @@ class CorrModel(nn.Module):
         corr_features[..., 0] /= W//8//2
         corr_features[..., 1] /= H//8//2
 
+        # 3rd channel which is confidence score
+        if self.num_channels == 3:
+            corr_features = torch.cat([corr_features, corr_features_confidence], dim=-1)
+
         # interpolate
-        corr_features = corr_features.permute(0,1,4,2,3) # (N, T-1, C=2, W//8, H//8)
-        corr_features = corr_features.reshape(N, (T-1)*2, W//8, H//8)
+        corr_features = corr_features.permute(0,1,4,2,3) # (N, T-1, C=2 or 3, W//8, H//8)
+        corr_features = corr_features.reshape(N, -1, W//8, H//8)
         corr_features = nn.functional.interpolate(corr_features, scale_factor = 8, mode = 'bilinear', align_corners=False)   # (N, (T-1)*2 , W, H)
 
         flow_model_output = self.flow_model(corr_features)
@@ -145,12 +157,18 @@ class ActionCorrModel(nn.Module):
         action_features = self.action_model.features(x) # N*T, F
         action_features = action_features.view(N, -1)
 
-        imgs_tensor = x[:,0:T-1,...].contiguous()   # N, T-1, C, H, W
-        target_tensor = x[:,T-1:T,...].contiguous() # N, 1, C, H, W
+#        imgs_tensor = x[:,0:T-1,...].contiguous()   # N, T-1, C, H, W
+#        target_tensor = x[:,T-1:T,...].contiguous() # N, 1, C, H, W
+        # Above will have 1 target image and compute correspondences from 1 to T, 2 to T, ...
+        # Below will treat frames as batch. It will calculate corr from 1 to 2, 2 to 3, ..., T-1 to T-th frame.
+        # However, later reshaping needed to detach N and T-1
+        imgs_tensor = x[:,0:T-1,...].reshape(N*(T-1), 1, C, H, W)   # N, T-1, C, H, W -> N*(T-1), 1, C, H, W
+        target_tensor = x[:,1:T,...].reshape(N*(T-1), 1, C, H, W)   # N, T-1, C, H, W -> N*(T-1), 1, C, H, W
+        
 
         if self.enable_corr_model:
             self.corr_model.eval()
-            corr_features = self.corr_model(imgs_tensor, target_tensor) # (N, W/8*H/8, H/8, W/8)
+            corr_features = self.corr_model(imgs_tensor, target_tensor) # (N*(T-1), 1*W/8*H/8, H/8, W/8)
             # make flows from the corr feature by finding max activation
             corr_features = corr_features.view(N, T-1, W//8*H//8, H//8*W//8)
             corr_features = torch.argmax(corr_features, dim=3) # (N, T-1, W/8*H/8)
@@ -165,7 +183,7 @@ class ActionCorrModel(nn.Module):
     def get_optim_policies(self):
         return self.action_model.get_optim_policies()
 
-def load_model(num_classes, input_frame_length):
+def load_model(num_classes, input_frame_length, num_channels=2):
     class_counts = num_classes
     segment_count = input_frame_length
     base_model = 'resnet50'
@@ -180,15 +198,29 @@ def load_model(num_classes, input_frame_length):
 #
 #    action_corr_model = ActionCorrModel(class_counts, segment_count, 224, action_model, corr_model_checkpoint_path = corr_model_checkpoint_path, enable_corr_model=False)
 
-    flow_model = TSM(class_counts, segment_count-1, 'Flow',
-            base_model = base_model,
-            #new_length = segment_count-1,
-            new_length = 1,
-            partial_bn = False,
-            dropout = 0.5,
-            pretrained = None
-            )
-    corr_model = CorrModel(flow_model, corr_model_checkpoint_path = corr_model_checkpoint_path)
+    if num_channels == 2:
+        flow_model = TSM(class_counts, segment_count-1, 'Flow',
+                base_model = base_model,
+                #new_length = segment_count-1,
+                new_length = 1,
+                partial_bn = False,
+                dropout = 0.5,
+                pretrained = None
+                )
+        corr_model = CorrModel(flow_model, corr_model_checkpoint_path = corr_model_checkpoint_path)
+    elif num_channels == 3:
+        RGB_model = TSM(class_counts, segment_count-1, 'RGB',
+                base_model = base_model,
+                #new_length = segment_count-1,
+                new_length = 1,
+                partial_bn = False,
+                dropout = 0.5,
+                pretrained = None
+                )
+        corr_model = CorrModel(RGB_model, corr_model_checkpoint_path = corr_model_checkpoint_path, num_channels=3)
+    else:
+        raise NotImplementedError(f'num_channels has to be 2 or 3 but got {num_channels}')
+
 
     return corr_model
 

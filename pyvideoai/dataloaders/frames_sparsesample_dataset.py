@@ -113,7 +113,11 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         self.bgr = bgr
         self.greyscale = greyscale 
 
-        self.flow = flow.lower()
+        if flow is None:
+            self.flow = None
+        else:
+            # string
+            self.flow = flow.lower()
         if self.flow == 'rg':
             assert len(mean) in [1, 2]
             assert len(std)  in [1, 2]

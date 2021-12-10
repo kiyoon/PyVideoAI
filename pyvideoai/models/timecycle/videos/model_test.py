@@ -98,13 +98,13 @@ class CycleTime(nn.Module):
 
     def compute_corr_softmax(self, patch_feat1, r50_feat2, finput_num, spatial_out1):
 
-        r50_feat2 = r50_feat2.transpose(3, 4) # for the inlier counter
+        r50_feat2 = r50_feat2.transpose(3, 4) # for the inlier counter      # (N, C, T, s, s)   # s = spatial_out1
         r50_feat2 = r50_feat2.contiguous()
-        r50_feat2_vec = r50_feat2.view(r50_feat2.size(0), r50_feat2.size(1), -1)
-        r50_feat2_vec = r50_feat2_vec.transpose(1, 2)
+        r50_feat2_vec = r50_feat2.view(r50_feat2.size(0), r50_feat2.size(1), -1)    # (N, C, T*s*s)
+        r50_feat2_vec = r50_feat2_vec.transpose(1, 2)                               # (N, T*s*s, C)
 
-        patch_feat1_vec = patch_feat1.view(patch_feat1.size(0), patch_feat1.size(1), -1)
-        corrfeat = torch.matmul(r50_feat2_vec, patch_feat1_vec)
+        patch_feat1_vec = patch_feat1.view(patch_feat1.size(0), patch_feat1.size(1), -1)    # (N, C, s*s)
+        corrfeat = torch.matmul(r50_feat2_vec, patch_feat1_vec)                             # (N, T*s*s, s*s)
 
         # if self.use_l2norm is False:
         corrfeat = torch.div(corrfeat, self.div_num**-.5)
@@ -144,7 +144,7 @@ class CycleTime(nn.Module):
         img_feat2 = self.afterconv1(img_feat2_pre)
         img_feat2 = self.relu(img_feat2)
         img_feat2 = img_feat2.contiguous()
-        img_feat2 = img_feat2.view(img_feat2.size(0), img_feat2.size(1), img_feat2.size(3), img_feat2.size(4))
+        img_feat2 = img_feat2.view(img_feat2.size(0), img_feat2.size(1), img_feat2.size(3), img_feat2.size(4))  # (N, C, spatial_out1, spatial_out1)
         img_feat2_norm = F.normalize(img_feat2, p=2, dim=1)
 
         spatial_out1 = img_feat2.size(3)
