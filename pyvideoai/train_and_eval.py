@@ -9,7 +9,7 @@ from .utils.distributed_sampler_for_val import count_true_samples, get_last_batc
 
 from .utils.stdout_logger import OutputLogger
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from .utils.lr_scheduling import ReduceLROnPlateauMultiple
+from .utils.lr_scheduling import ReduceLROnPlateauMultiple, GradualWarmupScheduler
 
 
 from .utils.losses.proselflc import ProSelfLC
@@ -24,11 +24,35 @@ def get_lr(optimiser):
     for param_group in optimiser.param_groups:
         return param_group['lr']
 
+def get_scheduler_type(scheduler):
+    """
+    See type of scheduler (if plateau or not).
+    If warmup scheduler, see what after_scheduler is.
+
+    Returns:
+        'none', 'others', 'plateau', 'plateau_multiple'
+    """
+    if scheduler is None:
+        return 'none'
+    elif isinstance(scheduler, ReduceLROnPlateau):
+        return 'plateau' 
+    elif isinstance(scheduler, ReduceLROnPlateauMultiple):
+        return 'plateau_multiple' 
+    else:
+        if isinstance(scheduler, GradualWarmupScheduler):
+            if isinstance(scheduler.after_scheduler, ReduceLROnPlateau):
+                return 'plateau'
+            elif isinstance(scheduler.after_scheduler, ReduceLROnPlateauMultiple):
+                return 'plateau_multiple'
+        else:
+            return 'others' 
+
 def train_iter(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_amp, amp_scaler, data, data_unpack_func, train_metrics, batch_size, speed = 'standard', start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0, refresh_period=1):
     inputs, uids, labels, _ = data_unpack_func(data)#{{{
     inputs, uids, labels, curr_batch_size = misc.data_to_gpu(inputs, uids, labels)
 
-    if scheduler is not None and not isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple)):
+    scheduler_type = get_scheduler_type(scheduler)
+    if scheduler_type not in ['none', 'plateau', 'plateau_multiple']:
         lr = scheduler.get_last_lr()[0]
     else:
         lr = get_lr(optimiser)
@@ -60,7 +84,7 @@ def train_iter(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_a
     # If gradient clipping happened, the optimiser's gradients are already unscaled, so amp_scaler.step does not unscale them
     amp_scaler.step(optimiser)
     amp_scaler.update()
-    if scheduler is not None and not isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple)):      # Plateau scheduler will update at the end of epoch after validation.
+    if scheduler_type not in ['none', 'plateau', 'plateau_multiple']:
         with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
             scheduler.step()
 
@@ -237,7 +261,8 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
 
     cur_device = torch.cuda.current_device()
 
-    is_scheduler_plateau = one_clip and isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple))
+    scheduler_type = get_scheduler_type(scheduler)
+    is_scheduler_plateau = one_clip and scheduler_type.startswith('plateau')
 
     with torch.no_grad():#{{{
         model.eval()
@@ -444,10 +469,10 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
                     # Metric not calculated. Calculate now
                     best_metric.calculate_metrics()
 
-        if isinstance(scheduler, ReduceLROnPlateau):
+        if scheduler_type == 'plateau'
             with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
-                scheduler.step(loss)
-        elif isinstance(scheduler, ReduceLROnPlateauMultiple):
+                scheduler.step(metrics=loss)
+        elif schduler_type == 'plateau_multiple'
             """This gets complicated.
             Since all metrics are only calculated on rank 0, we have to broadcast the final calculated value across the world.
             """
@@ -465,7 +490,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
             last_best_metric = last_best_metric.item()
 
             with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
-                scheduler.step(loss, last_best_metric, best_metric.is_better)
+                scheduler.step(metrics=loss, metrics2=last_best_metric, metrics2_is_better=best_metric.is_better)
 
 
     if rank != 0:
