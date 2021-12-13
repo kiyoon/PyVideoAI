@@ -469,10 +469,10 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
                     # Metric not calculated. Calculate now
                     best_metric.calculate_metrics()
 
-        if scheduler_type == 'plateau'
+        if scheduler_type == 'plateau':
             with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
                 scheduler.step(metrics=loss)
-        elif schduler_type == 'plateau_multiple'
+        elif schduler_type == 'plateau_multiple':
             """This gets complicated.
             Since all metrics are only calculated on rank 0, we have to broadcast the final calculated value across the world.
             """
