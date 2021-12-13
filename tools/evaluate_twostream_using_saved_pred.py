@@ -64,7 +64,7 @@ def evaluate_pred(args):
         else:
             raise ValueError("Wrong load_epoch value: {:d}".format(load_epoch))
 
-        predictions_file_path = os.path.join(exp.predictions_dir, 'epoch_%04d_%sval.pkl' % (real_load_epoch, mode))
+        predictions_file_path = os.path.join(exp.predictions_dir, f'epoch_{real_load_epoch:04d}_val_{mode}.pkl')
         with open(predictions_file_path, 'rb') as f:
             predictions = pickle.load(f)
 
@@ -81,13 +81,23 @@ def evaluate_pred(args):
     else:
         raise ValueError(f'Unknown task {cfg.dataset_cfg.task}')
     ## 1
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH)
+    if args.version == 'auto':
+        version = -2
+    else:
+        version = int(args.version)
+
+    if args.version2 == 'auto':
+        version2 = -2
+    else:
+        version2 = int(args.version2)
+
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, version=version)
     exp.load_summary()
     video_predictions, video_labels, video_ids = load_predictions(args.load_epoch, args.mode, exp, multilabel)
 
 
     ## 2
-    exp2 = ExperimentBuilder(args.experiment_root, args.dataset, args.model2, args.experiment_name2, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH)
+    exp2 = ExperimentBuilder(args.experiment_root, args.dataset, args.model2, args.experiment_name2, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, version=version2)
     exp2.load_summary()
     video_predictions2, video_labels2, video_ids2 = load_predictions(args.load_epoch2, args.mode2, exp2, multilabel)
 
@@ -125,17 +135,19 @@ def main():
     parser = argparse.ArgumentParser(
         description='Load predictions, and generating per-class accuracy and confusion matrix')
 
-    add_exp_arguments(parser, dataset_configs.available_datasets, model_configs.available_models, root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='epic_verb', model_default='i3d', name_default='test',
+    add_exp_arguments(parser, root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='something_v1', model_default='i3d', name_default='test',
             dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)
     parser.add_argument("-l", "--load_epoch", type=int, default=-2, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
-    parser.add_argument("-L", "--load_epoch2", type=int, default=-2, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
+    parser.add_argument("-l2", "--load_epoch2", type=int, default=-2, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
     parser.add_argument("-m", "--mode", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
-    parser.add_argument("-d", "--mode2", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
+    parser.add_argument("-m2", "--mode2", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
 
-    parser.add_argument("-O", "--model2", type=str, default="i3d", choices=model_configs.available_models,  help="The second model")
-    parser.add_argument("-c:m2", "--model_channel2", type=str, default="",  help="The second model channel")
-    parser.add_argument("-X", "--experiment_name2", type=str, default="test",  help="The second experiment name")
-    parser.add_argument("-c:e2", "--experiment_channel2", type=str, default="",  help="The second experiment channel")
+    parser.add_argument("-M2", "--model2", type=str, default="i3d", help="The second model")
+    parser.add_argument("-c:m2", "--model_channel2", type=str, default="", choices=model_configs.available_channels, help="The second model channel")
+    parser.add_argument("-E2", "--experiment_name2", type=str, default="test",  help="The second experiment name")
+    parser.add_argument("-c:e2", "--experiment_channel2", type=str, default="", choices=exp_configs.available_channels, help="The second experiment channel")
+    parser.add_argument("-v", "--version", type=str, default='auto', help="Experiment version (`auto` or integer). `auto` chooses the last version.")
+    parser.add_argument("-v2", "--version2", type=str, default='auto', help="Experiment version (`auto` or integer). `auto` chooses the last version.")
 
     args = parser.parse_args()
 
