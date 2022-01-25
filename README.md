@@ -1,3 +1,6 @@
+This reposity contains official implementation of:  
+- Capturing Temporal Information in a Single Frame: Channel Sampling Strategies for Action Recognition (Kim et al., 2022)
+
 # PyVideoAI: Action Recognition Framework
 
 The only framework that completes your computer vision, action recognition research environment.  
@@ -92,9 +95,9 @@ TL;DR,
 ```bash
 conda create -n videoai python=3.8
 conda activate videoai
-conda install pytorch==1.9.0 torchvision==0.10.0 cudatoolkit=10.2 -c pytorch
+conda install pytorch==1.9.1 torchvision==0.10.1 cudatoolkit=10.2 -c pytorch
 ### For RTX 30xx GPUs,
-#conda install pytorch==1.9.0 torchvision==0.10.0 cudatoolkit=11.1 -c pytorch -c nvidia
+#conda install pytorch==1.9.1 torchvision==0.10.1 cudatoolkit=11.1 -c pytorch -c nvidia
  
 
 git clone --recurse-submodules https://github.com/kiyoon/PyVideoAI.git

@@ -4,7 +4,7 @@
 ## Python dependencies
 
 Python >= 3.8  
-PyTorch >= 1.6.0 (Recommend >= 1.9.0)
+PyTorch >= 1.9.0
 
 ## Installation
 
@@ -26,7 +26,7 @@ git submodule foreach git checkout master
 Preferrably, checkout to a stable release.
 
 ```bash
-git checkout v0.1
+git checkout v0.2
 git submodule update --recursive
 ```
 
