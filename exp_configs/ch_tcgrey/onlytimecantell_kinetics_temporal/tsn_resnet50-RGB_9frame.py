@@ -1,1 +1,0 @@
-trn_resnet50-RGB_9frame.py
