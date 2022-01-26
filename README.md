@@ -1,5 +1,5 @@
 **This reposity contains official implementation of:**  
-- [Capturing Temporal Information in a Single Frame: Channel Sampling Strategies for Action Recognition](http://arxiv.org/abs/2201.10394) (Kim et al., 2022) [`Instruction`](docs/projects/channel_sampling.md)
+- [Capturing Temporal Information in a Single Frame: Channel Sampling Strategies for Action Recognition](http://arxiv.org/abs/2201.10394) (Kim et al., 2022) [`Instruction`](docs/projects/channel_sampling)
 
 # PyVideoAI: Action Recognition Framework
 
