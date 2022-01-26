@@ -26,7 +26,7 @@ git submodule foreach git checkout master
 Preferrably, checkout to a stable release.
 
 ```bash
-git checkout v0.2
+git checkout v0.3
 git submodule update --recursive
 ```
 

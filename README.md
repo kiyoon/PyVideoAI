@@ -102,7 +102,7 @@ conda install pytorch==1.9.1 torchvision==0.10.1 cudatoolkit=10.2 -c pytorch
 
 git clone --recurse-submodules https://github.com/kiyoon/PyVideoAI.git
 cd PyVideoAI
-git checkout v0.2
+git checkout v0.3
 git submodule update --recursive
 cd submodules/video_datasets_api
 pip install -e .
