@@ -130,6 +130,10 @@ def generate_confusion_matrix(args, sort_method, dataset_cfg, output_dir, video_
         cm = normalize(cm, axis=1, norm='l1')     # row (true labels) will sum to 1.
         sort_labels = cm.diagonal().argsort()[::-1]
 
+    elif sort_method == 'class_id':
+        # No sorting
+        sort_labels = class_indices
+
     else:
         raise ValueError('Wrong sort_method')
 
@@ -260,9 +264,9 @@ def main():
         raise ValueError(f"Wrong args.load_epoch value: {args.load_epoch}")
 
     if load_epoch is not None:
-        predictions_file_path = os.path.join(exp.predictions_dir, f'epoch_{load_epoch:04d}_{args.mode}val.pkl')
+        predictions_file_path = os.path.join(exp.predictions_dir, f'epoch_{load_epoch:04d}_val_{args.mode}.pkl')
     else:
-        predictions_file_path = os.path.join(exp.predictions_dir, f'pretrained_{args.mode}val.pkl')
+        predictions_file_path = os.path.join(exp.predictions_dir, f'pretrained_val_{args.mode}.pkl')
 
     with open(predictions_file_path, 'rb') as f:
         predictions = pickle.load(f)
@@ -277,7 +281,7 @@ def main():
 
     for shrink in [False, True]:
         if args.sort_method == 'all':
-            for sort_method in ['train_class_frequency', 'val_class_frequency', 'val_per_class_accuracy']:
+            for sort_method in ['train_class_frequency', 'val_class_frequency', 'val_per_class_accuracy', 'class_id']:
                 logger.info(sort_method)
                 generate_confusion_matrix(args, sort_method, cfg.dataset_cfg, output_dir, video_predictions, video_labels, tb_writer, shrink)
         else:
