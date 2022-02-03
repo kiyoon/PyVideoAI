@@ -23,7 +23,7 @@ args = parser.parse_args()
 
 if __name__ == '__main__':
     os.makedirs(args.output_dir, exist_ok=True)
-    narration_id_to_uid = epic_narration_id_to_unique_id(os.path.join(args.annotation_root_dir, 'EPIC_100_train.pkl'), os.path.join(args.annotation_root_dir, 'EPIC_100_validation.pkl'))
+    narration_id_to_uid, _ = epic_narration_id_to_unique_id(args.annotations_root_dir)
 
     for split in ['train', 'validation']:
         with open(os.path.join(args.annotations_root_dir, f'EPIC_100_{split}.pkl'), 'rb') as f:
