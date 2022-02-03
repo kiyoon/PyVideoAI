@@ -44,7 +44,7 @@ if __name__ == '__main__':
             verb_label = epic_action_labels.verb_class.iloc[index]
 
             if args.mode == 'video':
-                vr = VideoReader(os.path.join(args.root, f'{uid:05d}.mp4'), num_threads=1)
+                vr = VideoReader(os.path.join(args.root, f'{split}/{narration_id}.mp4'), num_threads=1)
                 num_frames = len(vr)
                 height, width, _ = vr[0].shape
                 write_str = f'\n{narration_id}.mp4 {uid} {verb_label} 0 {num_frames-1} {width} {height}'
