@@ -178,9 +178,8 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
                     self._spatial_temporal_idx.append(idx)
         assert (
             len(self._path_to_frames) > 0
-        ), "Failed to load video loader split {} from {}".format(
-            self._split_idx, self._csv_file
-        )
+        ), f"Failed to load video loader from {self._csv_file}"
+        
         logger.info(
             "Constructing video dataloader (size: {}) from {}".format(
                 len(self._path_to_frames), self._csv_file

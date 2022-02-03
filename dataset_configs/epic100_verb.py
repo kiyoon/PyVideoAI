@@ -14,10 +14,10 @@ task = SingleLabelClassificationTask()
 
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'EPIC_KITCHENS_100')
-video_dir = os.path.join(dataset_root, 'segments_15fps_324')
+video_dir = os.path.join(dataset_root, 'segments324_15fps')
 annotations_root = os.path.join(dataset_root, 'epic-kitchens-100-annotations')
 
-narration_id_to_video_id = epic_narration_id_to_unique_id(annotations_root)
+narration_id_to_video_id, narration_id_sorted = epic_narration_id_to_unique_id(annotations_root)
 uid2label = get_verb_uid2label_dict(annotations_root, narration_id_to_video_id)
 class_keys = EPIC100_get_class_keys(os.path.join(annotations_root, 'EPIC_100_verb_classes.csv'))
 

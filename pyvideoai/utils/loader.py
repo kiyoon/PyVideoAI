@@ -12,50 +12,6 @@ import torch.distributed as dist
 import logging
 logger = logging.getLogger(__name__)
 
-#def construct_loader(cfg, split):
-#    """
-#    Constructs the data loader for the given dataset.
-#    Args:
-#        cfg (CfgNode): configs. Details can be found in
-#            slowfast/config/defaults.py
-#        split (str): the split of the data loader. Options include `train`,
-#            `val`, and `test`.
-#    """
-#    assert split in ["train", "val", "test"]
-#    if split in ["train"]:
-#        dataset_name = cfg.TRAIN.DATASET
-#        batch_size = int(cfg.TRAIN.BATCH_SIZE / cfg.NUM_GPUS)
-#        shuffle = True
-#        drop_last = True
-#    elif split in ["val"]:
-#        dataset_name = cfg.TRAIN.DATASET
-#        batch_size = int(cfg.TRAIN.BATCH_SIZE / cfg.NUM_GPUS)
-#        shuffle = False
-#        drop_last = False
-#    elif split in ["test"]:
-#        dataset_name = cfg.TEST.DATASET
-#        batch_size = int(cfg.TEST.BATCH_SIZE / cfg.NUM_GPUS)
-#        shuffle = False
-#        drop_last = False
-#
-#    # Construct the dataset
-#    dataset = build_dataset(dataset_name, cfg, split)
-#    # Create a sampler for multi-process training
-#    sampler = DistributedSampler(dataset) if cfg.NUM_GPUS > 1 else None
-#    # Create a loader
-#    loader = torch.utils.data.DataLoader(
-#        dataset,
-#        batch_size=batch_size,
-#        shuffle=(False if sampler else shuffle),
-#        sampler=sampler,
-#        num_workers=cfg.DATA_LOADER.NUM_WORKERS,
-#        pin_memory=cfg.DATA_LOADER.PIN_MEMORY,
-#        drop_last=drop_last,
-#        collate_fn=detection_collate if cfg.DETECTION.ENABLE else None,
-#    )
-#    return loader
-
-
 def shuffle_dataset(loader, cur_epoch, seed):
     """"
     Shuffles the data.
@@ -88,6 +44,34 @@ def model_load_state_dict_partial(model, weights_state_dict):
     # 3. load the new state dict
     model.load_state_dict(model_dict)
 
+def model_load_state_dict_partial_nostrict(model, weights_state_dict):
+    """Ignore size mismatch
+    https://github.com/PyTorchLightning/pytorch-lightning/issues/4690
+    """
+    model_state_dict = model.state_dict()
+
+    is_changed = False
+    for k in weights_state_dict:
+        if k in model_state_dict:
+            if weights_state_dict[k].shape != model_state_dict[k].shape:
+                logger.warning(f"Skip loading parameter: {k}, "
+                        f"required shape: {model_state_dict[k].shape}, "
+                        f"loaded shape: {weights_state_dict[k].shape}")
+                weights_state_dict[k] = model_state_dict[k]
+                is_changed = True
+        else:
+            logger.warning(f"Dropping parameter {k}")
+            is_changed = True
+
+
+    if is_changed:
+    #   checkpoint.pop("optimizer_states", None) 
+        logger.warning("Parameters have been changed. You may not want to use optimiser_state from the checkpoint")
+
+    model.load_state_dict(weights_state_dict)
+
+    return is_changed
+
 
 def model_load_weights_GPU(model, weights_path, cur_device = None, world_size = None, model_state_key='model_state'):
     logger.info("Loading weights: " + weights_path) 
@@ -100,5 +84,20 @@ def model_load_weights_GPU(model, weights_path, cur_device = None, world_size = 
     checkpoint = torch.load(weights_path, map_location = "cuda:{}".format(cur_device))
     ms = model.module if world_size > 1 else model
     ms.load_state_dict(checkpoint[model_state_key])
+
+    return checkpoint
+
+def model_load_weights_GPU_partial_nostrict(model, weights_path, cur_device = None, world_size = None, model_state_key='model_state'):
+    logger.info("Loading partial weights: " + weights_path) 
+
+    if cur_device is None:
+        cur_device = torch.cuda.current_device()
+    if world_size is None:
+        world_size = dist.get_world_size() if dist.is_initialized() else 1
+
+    checkpoint = torch.load(weights_path, map_location = "cuda:{}".format(cur_device))
+    ms = model.module if world_size > 1 else model
+
+    model_load_state_dict_partial_nostrict(ms, checkpoint[model_state_key])
 
     return checkpoint

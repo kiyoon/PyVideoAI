@@ -47,7 +47,7 @@ if __name__ == '__main__':
                 vr = VideoReader(os.path.join(args.root, f'{split}/{narration_id}.mp4'), num_threads=1)
                 num_frames = len(vr)
                 height, width, _ = vr[0].shape
-                write_str = f'\n{narration_id}.mp4 {uid} {verb_label} 0 {num_frames-1} {width} {height}'
+                write_str = f'\n{split}/{narration_id}.mp4 {uid} {verb_label} 0 {num_frames-1} {width} {height}'
             elif args.mode == 'frames':
                 dir_path = os.path.join(args.root, narration_id)
                 num_frames = len([name for name in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, name))])
@@ -61,8 +61,10 @@ if __name__ == '__main__':
                     if num_frames != num_frames_annotated:
                         print("uid: {:d}, num_frames: {:d}, num_frames_annotated: {:d}".format(uid, num_frames, num_frames_annotated))
 
-                write_str = f'\n{narration_id} {uid} {verb_label} 0 {num_frames-1}'
+                write_str = f'\n{split}/{narration_id} {uid} {verb_label} 0 {num_frames-1}'
             else:
                 raise NotImplementedError(args.mode)
+
+            split_file.write(write_str)
 
         split_file.close()

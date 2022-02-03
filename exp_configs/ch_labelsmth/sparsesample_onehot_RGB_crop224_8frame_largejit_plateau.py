@@ -102,17 +102,11 @@ def optimiser(params):
 
     return torch.optim.SGD(params, lr = learning_rate, momentum = 0.9, weight_decay = 5e-4)
 
-from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple
+from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple, GradualWarmupScheduler
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
-    #return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimiser, T_0 = 100 * iters_per_epoch, T_mult = 1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
-    #return torch.optim.lr_scheduler.StepLR(optimiser, step_size = 50 * iters_per_epoch, gamma = 0.1, last_epoch=last_epoch)     # Here, last_epoch means last iteration.
-#    matches = ['cater', 'diving48']
-#    if any(x in dataset_cfg.__name__ for x in matches):
-#        return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
-#    else:
-#        return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
-    #return None
-    return ReduceLROnPlateauMultiple(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+    after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+
+    return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
 
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
