@@ -651,7 +651,7 @@ def test_epoch_DALI(model, criterion, dataloader, data_unpack_func, num_classes,
 
     return sample_seen, total_samples, loss, acc, vid_acc_top1, vid_acc_top5, elapsed_time, video_metrics#}}}
 
-def extract_features(model, feature_extract_func, dataloader, data_unpack_func, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, refresh_period = 1, PAD_VALUE = -1):
+def extract_features(model, dataloader, data_unpack_func, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, refresh_period = 1, PAD_VALUE = -1):
     """Extract features for all samples in the dataset.
 
     Args:
@@ -702,7 +702,8 @@ def extract_features(model, feature_extract_func, dataloader, data_unpack_func, 
             inputs, uids, labels, extra_info = data_unpack_func(data)
             spatial_idx = extra_info['spatial_idx']
             temporal_idx = extra_info['temporal_idx']
-            inputs, uids, labels, spatial_idx, temporal_idx curr_batch_size = misc.data_to_gpu(inputs, uids, labels, spatial_idx, temporal_idx)
+            
+            inputs, uids, labels, spatial_idx, temporal_idx, curr_batch_size = misc.data_to_gpu(inputs, uids, labels, spatial_idx, temporal_idx)
 
             perform_forward = it < num_iters - 1 or last_batch_size > 0     # not last batch or last batch size is at least 1
 
@@ -721,47 +722,51 @@ def extract_features(model, feature_extract_func, dataloader, data_unpack_func, 
             if perform_forward:
                 if input_reshape_func:
                     inputs = input_reshape_func(inputs)
-                outputs = feature_extract_func(model, inputs)
+                outputs = model(inputs)
 
             # Gather data
             if world_size > 1:
-                if val_metrics is not None and len(val_metrics) > 0:
-                    (curr_batch_sizes,) = du.all_gather([curr_batch_size])
-                    max_batch_size = curr_batch_sizes.max()
+                (curr_batch_sizes,) = du.all_gather([curr_batch_size])
+                max_batch_size = curr_batch_sizes.max()
 
-                    # Pad to make the data same size before all_gather
-                    uids = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
-                    spatial_idx = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
-                    temporal_idx = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                # Pad to make the data same size before all_gather
+                uids = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                spatial_idx = nn.functional.pad(spatial_idx, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                temporal_idx = nn.functional.pad(temporal_idx, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
 
-                    if labels.dim() == 2:
-                        # multilabel
-                        labels = nn.functional.pad(labels, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
-                    elif labels.dim() == 1:
-                        # singlelabel
-                        labels = nn.functional.pad(labels, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
-                    else:
-                        raise NotImplementedError('Label with dim not 1 or 2 not expected.')
+                if labels.dim() == 2:
+                    # multilabel
+                    labels = nn.functional.pad(labels, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                elif labels.dim() == 1:
+                    # singlelabel
+                    labels = nn.functional.pad(labels, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                else:
+                    raise NotImplementedError('Label with dim not 1 or 2 not expected.')
 
-                    if curr_batch_size == 0:
-                        outputs = torch.ones((max_batch_size, num_classes), dtype=torch.float32, device=cur_device) * PAD_VALUE
-                    else:
-                        outputs = nn.functional.pad(outputs, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                if curr_batch_size == 0:
+                    outputs = torch.ones((max_batch_size, num_classes), dtype=torch.float32, device=cur_device) * PAD_VALUE
+                else:
+                    outputs = nn.functional.pad(outputs, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
 
-                    # Communicate with the padded data
-                    (uids_gathered,labels_gathered,outputs_gathered,spatial_idx_gathered, temporal_idx_gathered) = du.all_gather([uids, labels, outputs, spatial_idx, temporal_idx])
+                # Communicate with the padded data
+                (uids_gathered,labels_gathered,outputs_gathered,spatial_idx_gathered, temporal_idx_gathered) = du.all_gather([uids, labels, outputs, spatial_idx, temporal_idx])
 
-                    if rank == 0:
-                        # Remove padding from the received data
-                        no_pad_row_mask = []     # logical indices
-                        for proc_batch_size in curr_batch_sizes:
-                            no_pad_row_mask.extend([i < proc_batch_size.item() for i in range(max_batch_size)])
+                if rank == 0:
+                    # Remove padding from the received data
+                    no_pad_row_mask = []     # logical indices
+                    for proc_batch_size in curr_batch_sizes:
+                        no_pad_row_mask.extend([i < proc_batch_size.item() for i in range(max_batch_size)])
 
-                        uids = uids_gathered[no_pad_row_mask]
-                        labels = labels_gathered[no_pad_row_mask]
-                        outputs = outputs_gathered[no_pad_row_mask]
-                        spatial_idx = spatial_idx_gathered[no_pad_row_mask]
-                        temporal_idx = temporal_idx_gathered[no_pad_row_mask]
+#                    print(f'{uids_gathered.shape = }')
+#                    print(f'{labels_gathered.shape = }')
+#                    print(f'{outputs_gathered.shape = }')
+#                    print(f'{spatial_idx_gathered.shape = }')
+#                    print(f'{temporal_idx_gathered.shape = }')
+                    uids = uids_gathered[no_pad_row_mask]
+                    labels = labels_gathered[no_pad_row_mask]
+                    outputs = outputs_gathered[no_pad_row_mask]
+                    spatial_idx = spatial_idx_gathered[no_pad_row_mask]
+                    temporal_idx = temporal_idx_gathered[no_pad_row_mask]
                     
                 # Communicate other data
                 dist.reduce(curr_batch_size, dst=0)
@@ -780,7 +785,7 @@ def extract_features(model, feature_extract_func, dataloader, data_unpack_func, 
                 else:
                     feature_data['video_ids'] = np.array(uids.cpu())
                     feature_data['labels'] = np.array(labels.cpu())
-                    feature_data['clip_features'] = np.array(output.cpu())
+                    feature_data['clip_features'] = np.array(outputs.cpu())
                     feature_data['spatial_indices'] = np.array(spatial_idx.cpu())
                     feature_data['temporal_indices'] = np.array(temporal_idx.cpu())
 

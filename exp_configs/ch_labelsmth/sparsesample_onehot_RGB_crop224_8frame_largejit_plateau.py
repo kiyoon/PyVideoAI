@@ -111,6 +111,18 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
 
+# If you need to extract features, use this. It can be defined in model_cfg too.
+#def feature_extract_model(model):
+#    from torch.nn import Module
+#    class FeatureExtractModel(Module):
+#        def __init__(self, model):
+#            super().__init__()
+#            self.model = model
+#        def forward(self, x):
+#            return self.model.features(x)
+#
+#    return FeatureExtractModel(model)
+
 # optional
 #def load_pretrained(model):
 #    loader.model_load_weights_GPU(model, pretrained_path)
@@ -137,7 +149,7 @@ def _unpack_data(data):
     From dataloader returning values to (inputs, uids, labels, [reserved]) format
     '''
     inputs, uids, labels, spatial_idx, _, _ = data
-    return inputs, uids, labels, spatial_idx
+    return inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': -1 *torch.ones_like(labels)}
 
 
 def get_data_unpack_func(split):

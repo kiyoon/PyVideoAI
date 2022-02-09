@@ -131,6 +131,20 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, crop_size, input_channel_num)
 
+
+# If you need to extract features, use this. It can be defined in model_cfg too.
+#def feature_extract_model(model):
+#    from torch.nn import Module
+#    class FeatureExtractModel(Module):
+#        def __init__(self, model):
+#            super().__init__()
+#            self.model = model
+#        def forward(self, x):
+#            return self.model.features(x)
+#
+#    return FeatureExtractModel(model)
+
+
 # optional
 def load_pretrained(model):
     model_cfg.load_pretrained_kinetics400(model, model_cfg.kinetics400_pretrained_path_8x8)

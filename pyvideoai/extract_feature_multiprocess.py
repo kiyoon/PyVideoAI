@@ -103,9 +103,6 @@ def feature_extraction(args):
             else:   # multicrop
                 split = 'multicropval'
 
-        if args.save_predictions:
-            predictions_gatherer = cfg.dataset_cfg.task.get_predictions_gatherers(cfg)[split]
-            metrics[split].append(predictions_gatherer)
 
         val_dataset = cfg.get_torch_dataset(split)
         data_unpack_func = cfg.get_data_unpack_func(split)
@@ -123,17 +120,8 @@ def feature_extraction(args):
         model = cfg.load_model()
         # Determine the GPU used by the current process
         cur_device = torch.cuda.current_device()
-        # Transfer the model to the current GPU device
-        model = model.to(device=cur_device, non_blocking=True)
-        # Use multi-process data parallel model in the multi-gpu setting
-        if world_size > 1:
-            # Make model replica operate on the current device
-            model = nn.parallel.DistributedDataParallel(
-                module=model, device_ids=[cur_device], output_device=cur_device
-            )
 
-        misc.log_model_info(model)
-
+        # Load weights
         if args.load_epoch == -1:
             exp.load_summary()
             load_epoch = int(exp.summary['epoch'].iloc[-1])
@@ -152,22 +140,38 @@ def feature_extraction(args):
 
         if load_epoch is not None:
             weights_path = exp.get_checkpoint_path(load_epoch)
-            checkpoint = loader.model_load_weights_GPU(model, weights_path)
+            checkpoint = torch.load(weights_path, map_location=f'cuda:{cur_device}')
+            model.load_state_dict(checkpoint['model_state'])
 
             logger.info("Training stats: %s", json.dumps(exp.get_epoch_stat(load_epoch), sort_keys=False, indent=4))
         else:
             if hasattr(cfg, 'load_pretrained'):
                 cfg.load_pretrained(model)
 
+        # Convert the model to feature model
+        if hasattr(cfg, 'feature_extract_model'):
+            model = cfg.feature_extract_model(model)
+        else:
+            model = cfg.model_cfg.feature_extract_model(model)
 
-        criterion = cfg.dataset_cfg.task.get_criterion(cfg, split)
+        # Transfer the model to the current GPU device
+        model = model.to(device=cur_device, non_blocking=True)
+        # Use multi-process data parallel model in the multi-gpu setting
+        if world_size > 1:
+            # Make model replica operate on the current device
+            model = nn.parallel.DistributedDataParallel(
+                module=model, device_ids=[cur_device], output_device=cur_device
+            )
+
+        misc.log_model_info(model)
+
 
         oneclip = args.mode == 'oneclip'
 
         if rank == 0:
             exp.tg_send_text_with_expname(f'Starting to extract features..')
 
-        feature_data, _, _, _, eval_log_str = extract_features(model, cfg.feature_extract_func, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
+        feature_data, _, _, _, eval_log_str = extract_features(model, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
 
         if rank == 0:
             # save features

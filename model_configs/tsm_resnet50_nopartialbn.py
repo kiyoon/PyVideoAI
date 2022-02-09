@@ -35,6 +35,21 @@ def get_optim_policies(model):
     # return model.parameters()     # no policies
     return model.get_optim_policies()
 
+# If you need to extract features, use this. It can be defined in model_cfg too.
+def feature_extract_model(model):
+    from torch.nn import Module
+    class FeatureExtractModel(Module):
+        def __init__(self, model):
+            super().__init__()
+            self.model = model
+        def forward(self, x):
+            batch_size = x.shape[0]
+            imagenet_features = self.model.features(x)
+            # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
+            return imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
+
+    return FeatureExtractModel(model)
+
 
 ddp_find_unused_parameters = False
 use_amp = True
