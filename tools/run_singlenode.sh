@@ -12,26 +12,33 @@ fi
 
 MODE="$1"
 
-if ! [[ $MODE =~ ^(train|eval)$ ]]
+if ! [[ $MODE =~ ^(train|eval|feature)$ ]]
 then
-	echo "Only train or eval mode is accepted but got $MODE."
+	echo "Only train, eval and feature modes are accepted but got $MODE."
 	help_print
 fi
 
 NUM_GPUS="$2"
 # Any arguments from the third one are captured by ${@:3}
 
-if [ $MODE == 'train' ]
+if [[ $MODE == 'train' ]]
 then
 	python -m torch.distributed.run 	\
 		--standalone 					\
 		--nnodes=1						\
 		--nproc_per_node="$NUM_GPUS"	\
 		$(dirname "$0")/train_dist.py ${@:3}
-else
+elif [[ $MODE == 'eval' ]]
+then
 	python -m torch.distributed.run 	\
 		--standalone 					\
 		--nnodes=1						\
 		--nproc_per_node="$NUM_GPUS"	\
 		$(dirname "$0")/eval_dist.py ${@:3}
+else
+	python -m torch.distributed.run 	\
+		--standalone 					\
+		--nnodes=1						\
+		--nproc_per_node="$NUM_GPUS"	\
+		$(dirname "$0")/feature_extract_dist.py ${@:3}
 fi

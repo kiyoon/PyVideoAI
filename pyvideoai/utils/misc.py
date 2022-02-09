@@ -125,14 +125,23 @@ def frozen_bn_stats(model):
         if isinstance(m, nn.BatchNorm3d):
             m.eval()
 
-def data_to_gpu(inputs, uids, labels):
-    cur_device = torch.cuda.current_device()
-    inputs = inputs.to(cur_device, non_blocking=True)
-    labels = labels.to(cur_device, non_blocking=True)
-    uids = uids.to(cur_device, non_blocking=True)
-    curr_batch_size = torch.LongTensor([labels.shape[0]]).to(cur_device, non_blocking=True)
+def data_to_gpu(*args):         #(inputs, uids, labels):
+    """
+    Get inputs, labels, uids, etc. and copy to GPU.
+    It will return inputs, labels, uids, etc. plus current batch size.
+    """
+    assert len(args) > 0
 
-    return inputs, uids, labels, curr_batch_size
+    cur_device = torch.cuda.current_device()
+
+    gpu_tensors = [] 
+    for arg in args:
+        assert arg.shape[0] == args[0].shape[0], f'Different number of batch size found when copying to GPU. {arg.shape[0]} and {args[0].shape[0]}'
+        gpu_tensors.append(arg.to(cur_device, non_blocking=True))
+
+    curr_batch_size = torch.LongTensor([args[0].shape[0]]).to(cur_device, non_blocking=True)
+
+    return *gpu_tensors, curr_batch_size
 
 
 def install_colour_logger(level=logging.INFO, fmt='%(name)s: %(lineno)4d - %(levelname)s - %(message)s'):

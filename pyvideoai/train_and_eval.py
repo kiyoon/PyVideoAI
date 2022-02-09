@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import nn
 import torch.distributed as dist
@@ -649,3 +650,181 @@ def test_epoch_DALI(model, criterion, dataloader, data_unpack_func, num_classes,
         video_metrics = None
 
     return sample_seen, total_samples, loss, acc, vid_acc_top1, vid_acc_top5, elapsed_time, video_metrics#}}}
+
+def extract_features(model, feature_extract_func, dataloader, data_unpack_func, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, refresh_period = 1, PAD_VALUE = -1):
+    """Extract features for all samples in the dataset.
+
+    Args:
+        model: PyTorch model
+        dataloader (iterator): Mini-batch data iterator. Requires self.epoch_size and self.num_iters variable.
+        data_unpack_func: Should return (inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': temporal_idx})
+        rank (int): Rank of the process in distributed training.
+        world_size (int): Total number of processes in distributed training.
+        PAD_VALUE (int): The value to be padded when each process has different number of batch size. These padded value will be removed anyway after all gathering.
+    
+    Returns:
+        tuple: sample_seen, total_samples, elapsed_time, eval_log_str
+    """
+
+    cur_device = torch.cuda.current_device()
+
+    with torch.no_grad():
+        model.eval()
+
+        sample_seen = 0
+
+        if rank == 0:
+            total_samples = len(dataloader.dataset)
+            total_iters = len(dataloader)
+
+            start_time = time.time()
+            max_log_length = 0
+
+            if one_clip:
+                extract_mode = "One-clip Feature Extraction"
+                split = 'val'
+            else:
+                extract_mode = "Multi-crop Feature Extraction"
+                split = 'multicropval'
+
+            feature_data = {}
+
+        if world_size > 1:
+            shard_size, num_iters, last_batch_size = count_true_samples(dataloader.sampler, dataloader.batch_size)
+        else:
+            shard_size, num_iters, last_batch_size = total_samples, total_iters, get_last_batch_size_singleGPU(total_samples, dataloader.batch_size)
+
+        if rank == 0 :
+            assert num_iters == total_iters, "Implementation error"
+
+        #for it in range(max_num_iters):
+        for it, data in enumerate(dataloader):
+            inputs, uids, labels, extra_info = data_unpack_func(data)
+            spatial_idx = extra_info['spatial_idx']
+            temporal_idx = extra_info['temporal_idx']
+            inputs, uids, labels, spatial_idx, temporal_idx curr_batch_size = misc.data_to_gpu(inputs, uids, labels, spatial_idx, temporal_idx)
+
+            perform_forward = it < num_iters - 1 or last_batch_size > 0     # not last batch or last batch size is at least 1
+
+            if it == num_iters - 1:
+                """last batch true data sampling"""
+
+                inputs = inputs[:last_batch_size]
+                labels = labels[:last_batch_size]
+                uids = uids[:last_batch_size]
+                spatial_idx = spatial_idx[:last_batch_size]
+                temporal_idx = temporal_idx[:last_batch_size]
+
+                curr_batch_size = torch.LongTensor([last_batch_size]).to(cur_device, non_blocking=True)
+
+            # forward
+            if perform_forward:
+                if input_reshape_func:
+                    inputs = input_reshape_func(inputs)
+                outputs = feature_extract_func(model, inputs)
+
+            # Gather data
+            if world_size > 1:
+                if val_metrics is not None and len(val_metrics) > 0:
+                    (curr_batch_sizes,) = du.all_gather([curr_batch_size])
+                    max_batch_size = curr_batch_sizes.max()
+
+                    # Pad to make the data same size before all_gather
+                    uids = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    spatial_idx = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    temporal_idx = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+
+                    if labels.dim() == 2:
+                        # multilabel
+                        labels = nn.functional.pad(labels, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    elif labels.dim() == 1:
+                        # singlelabel
+                        labels = nn.functional.pad(labels, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    else:
+                        raise NotImplementedError('Label with dim not 1 or 2 not expected.')
+
+                    if curr_batch_size == 0:
+                        outputs = torch.ones((max_batch_size, num_classes), dtype=torch.float32, device=cur_device) * PAD_VALUE
+                    else:
+                        outputs = nn.functional.pad(outputs, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+
+                    # Communicate with the padded data
+                    (uids_gathered,labels_gathered,outputs_gathered,spatial_idx_gathered, temporal_idx_gathered) = du.all_gather([uids, labels, outputs, spatial_idx, temporal_idx])
+
+                    if rank == 0:
+                        # Remove padding from the received data
+                        no_pad_row_mask = []     # logical indices
+                        for proc_batch_size in curr_batch_sizes:
+                            no_pad_row_mask.extend([i < proc_batch_size.item() for i in range(max_batch_size)])
+
+                        uids = uids_gathered[no_pad_row_mask]
+                        labels = labels_gathered[no_pad_row_mask]
+                        outputs = outputs_gathered[no_pad_row_mask]
+                        spatial_idx = spatial_idx_gathered[no_pad_row_mask]
+                        temporal_idx = temporal_idx_gathered[no_pad_row_mask]
+                    
+                # Communicate other data
+                dist.reduce(curr_batch_size, dst=0)
+
+            if rank == 0:
+                # Copy the stats from GPU to CPU (sync point).
+                curr_batch_size = curr_batch_size.item()
+                sample_seen += curr_batch_size
+
+                if 'video_ids' in feature_data.keys():
+                    feature_data['video_ids'] = np.concatenate((feature_data['video_ids'], uids.cpu()), axis=0)
+                    feature_data['labels'] = np.concatenate((feature_data['labels'], labels.cpu()), axis=0)
+                    feature_data['clip_features'] = np.concatenate((feature_data['clip_features'], outputs.cpu()), axis=0)
+                    feature_data['spatial_indices'] = np.concatenate((feature_data['spatial_indices'], spatial_idx.cpu()), axis=0)
+                    feature_data['temporal_indices'] = np.concatenate((feature_data['temporal_indices'], temporal_idx.cpu()), axis=0)
+                else:
+                    feature_data['video_ids'] = np.array(uids.cpu())
+                    feature_data['labels'] = np.array(labels.cpu())
+                    feature_data['clip_features'] = np.array(output.cpu())
+                    feature_data['spatial_indices'] = np.array(spatial_idx.cpu())
+                    feature_data['temporal_indices'] = np.array(temporal_idx.cpu())
+
+                elapsed_time = time.time() - start_time
+                #eta = int((total_samples-sample_seen) * elapsed_time / sample_seen)
+                eta = int((total_iters-(it+1)) * elapsed_time / (it+1))
+
+                write_str = "\r {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - ETA: {:4d}s".format(extract_mode, it+1, total_iters, sample_seen, total_samples, eta)
+                # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
+                if max_log_length < len(write_str):
+                    max_log_length = len(write_str)
+                else:
+                    # Pad empty spaces
+                    write_str += ' ' * (max_log_length - len(write_str))
+
+                if it % refresh_period == 0:
+                    sys.stdout.write(write_str)
+                    sys.stdout.flush()
+
+
+        # Reset the iterator. Needs to be done at the end of epoch when __next__ is directly called instead of doing iteration.
+#        dataloader.reset()
+
+
+    if rank == 0:
+        sys.stdout.write("\r")
+        sys.stdout.flush()
+
+        eval_log_str = " {:s} Iter: {:4d}/{:4d} - Sample: {:6d}/{:6d} - {:d}s".format(extract_mode, it+1, total_iters, sample_seen, total_samples, round(elapsed_time))
+        # Make sure you overwrite the entire line. To do so, we pad empty space characters to the string.
+        if max_log_length < len(eval_log_str):
+            max_log_length = len(eval_log_str)
+        else:
+            # Pad empty spaces
+            eval_log_str += ' ' * (max_log_length - len(eval_log_str))
+
+        logger.info(eval_log_str)
+
+
+    if rank != 0:
+        feature_data = None
+        sample_seen = None
+        total_samples = None
+        elapsed_time = None
+        eval_log_str = None
+
+    return feature_data, sample_seen, total_samples, elapsed_time, eval_log_str

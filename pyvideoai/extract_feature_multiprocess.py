@@ -21,7 +21,7 @@ from torch.utils.data.distributed import DistributedSampler
 
 from .utils import distributed as du
 from .utils import misc
-from .train_and_eval import eval_epoch
+from .train_and_eval import extract_features
 
 from .metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 
@@ -39,7 +39,7 @@ import socket
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
 
-def evaluation(args):
+def feature_extraction(args):
     if hasattr(args, 'local_world_size'):
         local_world_size = args.local_world_size
     else:
@@ -67,7 +67,7 @@ def evaluation(args):
         exp.make_dirs_for_training()
 
         misc.install_colour_logger(level=args.console_log_level)
-        misc.install_file_loggers(exp.logs_dir, file_prefix='eval')
+        misc.install_file_loggers(exp.logs_dir, file_prefix='extract_features')
     else:
         du.suppress_print()
 
@@ -85,13 +85,13 @@ def evaluation(args):
 #            exp.dump_args(args)
             logger.info("args: " + json.dumps(args.__dict__, sort_keys=False, indent=4))
             du.log_distributed_info(world_size, local_world_size)
-            dataset_config_dir = os.path.join(exp.configs_dir, 'dataset_configs_eval')
+            dataset_config_dir = os.path.join(exp.configs_dir, 'dataset_configs_extract_features')
             dataset_configs.copy_cfg_files(cfg.dataset_cfg, dataset_config_dir)
 
-            model_config_dir = os.path.join(exp.configs_dir, 'model_configs_eval')
+            model_config_dir = os.path.join(exp.configs_dir, 'model_configs_extract_features')
             model_configs.copy_cfg_files(cfg.model_cfg, model_config_dir)
 
-            exp_config_dir = os.path.join(exp.configs_dir, 'exp_configs_eval')
+            exp_config_dir = os.path.join(exp.configs_dir, 'exp_configs_extract_features')
             exp_configs.copy_cfg_files(cfg, exp_config_dir)
 
         # Dataset
@@ -165,57 +165,32 @@ def evaluation(args):
         oneclip = args.mode == 'oneclip'
 
         if rank == 0:
-            exp.tg_send_text_with_expname(f'Starting evaluation..')
+            exp.tg_send_text_with_expname(f'Starting to extract features..')
 
-        _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], None, cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
+        feature_data, _, _, _, eval_log_str = extract_features(model, cfg.feature_extract_func, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
 
         if rank == 0:
-            # Update summary.csv
-            curr_stat = {'epoch': load_epoch, f'{split}_runtime_sec': elapsed_time, f'{split}_loss': loss}
-
-            for metric in metrics[split]:
-                csv_fieldnames = metric.get_csv_fieldnames()
-                if not isinstance(csv_fieldnames, (list, tuple)):
-                    csv_fieldnames = (csv_fieldnames,)
-                last_calculated_metrics = metric.last_calculated_metrics
-                if not isinstance(last_calculated_metrics, (list, tuple)):
-                    last_calculated_metrics = (last_calculated_metrics,)
-
-                for csv_fieldname, last_calculated_metric in zip(csv_fieldnames, last_calculated_metrics):
-                    if csv_fieldname is not None:   # PredictionsGatherers return None for the CSV fieldname.
-                        curr_stat[csv_fieldname] = last_calculated_metric
-
-            if load_epoch is not None and load_epoch >= 0:
-                logger.info(f'Updating exp--summary.csv line with {curr_stat}.')
-                exp.update_summary_line(curr_stat)
+            # save features
+            if load_epoch is None:
+                features_file_path = os.path.join(exp.predictions_dir, f'features_pretrained_{split}_{args.mode}.pkl')
             else:
-                logger.info(f'epoch {load_epoch} is not supported. Not updating the summary.csv line.')
-
-            # save predictions
-            if args.save_predictions:
-                video_predictions, video_labels, video_ids = predictions_gatherer.get_predictions_numpy()
-
-                if load_epoch is None:
-                    predictions_file_path = os.path.join(exp.predictions_dir, f'pretrained_{split}_{args.mode}.pkl')
-                else:
-                    predictions_file_path = os.path.join(exp.predictions_dir, f'epoch_{load_epoch:04d}_{split}_{args.mode}.pkl')
+                features_file_path = os.path.join(exp.predictions_dir, f'features_epoch_{load_epoch:04d}_{split}_{args.mode}.pkl')
                 os.makedirs(exp.predictions_dir, exist_ok=True)
                 
-                print("Saving predictions to: " + predictions_file_path) 
-                with open(predictions_file_path, 'wb') as f:
-                    pickle.dump({'video_predictions': video_predictions, 'video_labels': video_labels, 'video_ids': video_ids}, f, pickle.HIGHEST_PROTOCOL)
+                print("Saving features to: " + features_file_path) 
+                with open(features_file_path, 'wb') as f:
+                    pickle.dump(feature_data, f, pickle.HIGHEST_PROTOCOL)
 
 
-
-        logger.success('Finished evaluation')
+        logger.success('Finished extracting features')
         if rank == 0:
-            exp.tg_send_text_with_expname('Finished evaluation\n\n' + eval_log_str)
+            exp.tg_send_text_with_expname('Finished extracting features\n\n' + eval_log_str)
 
     except Exception as e:
-        logger.exception("Exception occurred whilst evaluating")
+        logger.exception("Exception occurred whilst extracting features")
         # Every process is going to send exception.
         # This can make your Telegram report filled with many duplicates,
         # but at the same time it ensures that you receive a message when anything wrong happens.
 #        if rank == 0:
-        exp.tg_send_text_with_expname('Exception occurred whilst evaluating\n\n' + repr(e))
+        exp.tg_send_text_with_expname('Exception occurred whilst extracting features\n\n' + repr(e))
 

@@ -641,11 +641,11 @@ def train(args):
                 exp.tg_send_text_with_expname('Finished training')
 
     except Exception as e:
-        logger.exception("Exception occurred")
+        logger.exception("Exception occurred whilst training")
         # Every process is going to send exception.
         # This can make your Telegram report filled with many duplicates,
         # but at the same time it ensures that you receive a message when anything wrong happens.
 #        if rank == 0:
-        exp.tg_send_text_with_expname('Exception occurred\n\n' + repr(e))
+        exp.tg_send_text_with_expname('Exception occurred whilst training\n\n' + repr(e))
 
 
