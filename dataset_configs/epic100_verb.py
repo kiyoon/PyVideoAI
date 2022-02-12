@@ -23,8 +23,8 @@ class_keys = EPIC100_get_class_keys(os.path.join(annotations_root, 'EPIC_100_ver
 
 video_split_file_dir = os.path.join(dataset_root, "splits_video")
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
-split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv'}
-split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
+split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv', 'traindata_testmode': 'train.csv'}
+split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test', 'traindata_testmode': 'test'}
 
 # Training settings
 horizontal_flip = True 
