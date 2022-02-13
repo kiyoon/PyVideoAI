@@ -112,7 +112,10 @@ def evaluation(args):
 
 
         input_reshape_func = cfg.get_input_reshape_func(split)
-        batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
+        if hasattr(cfg, 'val_batch_size'):
+            batch_size = cfg.val_batch_size() if callable(cfg.val_batch_size) else cfg.val_batch_size
+        else:
+            batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
         logger.info(f'Using batch size of {batch_size} per process (per GPU), resulting in total size of {batch_size * world_size}.')
 
         val_sampler = DistributedSampler(val_dataset, shuffle=False) if world_size > 1 else None
