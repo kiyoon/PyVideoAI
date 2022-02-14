@@ -13,7 +13,8 @@ import model_configs, dataset_configs, exp_configs
 
 from pyvideoai.utils import misc
 
-from scipy.special import softmax
+import matplotlib.pyplot as plt
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ def get_parser():
     add_exp_arguments(parser, 
             root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='epic100_verb', model_default='tsm_resnet50_nopartialbn', name_default='onehot',
             dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)
-    parser.add_argument("-l", "--load_epoch", type=int, default=None, help="Load from checkpoint. Set to -1 to load from the last checkpoint.")
+    parser.add_argument("-l", "--load_epoch", type=int, default=-2, help="Load from checkpoint. Set to -1 to load from the last checkpoint.")
     parser.add_argument("-m", "--mode", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Evaluate using 1 clip or 30 clips.")
     parser.add_argument("-s", "--split", type=str, default=None,  help="Which split to use to evaluate? Default is auto (None)")
     parser.add_argument('-v', '--version', default='last', help='ExperimentBuilder version')
@@ -85,8 +86,43 @@ def main():
     video_labels = predictions['video_labels']
     video_ids = predictions['video_ids']
 
-    video_predictions = softmax(video_predictions) * 100
+    video_predlabels = np.argmax(video_predictions, axis=1)
+    success_idx = video_predlabels == video_labels
+    failure_idx = video_predlabels != video_labels
+
+    video_predictions = video_predictions * 100
 
     bins = [a* 10 for a in range(11)]
-    histogram = np.histogram(video_predictions, bins)
-    print(histogram)
+    success_confidence_histogram, _ = np.histogram(video_predictions[success_idx], bins)
+    failure_confidence_histogram, _ = np.histogram(video_predictions[failure_idx], bins)
+    print(success_confidence_histogram)
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(4, 1, 1)
+    ax2 = fig.add_subplot(4, 1, 2)
+    ax3 = fig.add_subplot(4, 1, 3)
+    ax4 = fig.add_subplot(4, 1, 4)
+
+    ax1.hist(video_predictions[success_idx], bins=bins, density=True, facecolor='b')
+    ax2.hist(video_predictions[failure_idx], bins=bins, density=True, facecolor='b')
+    ax3.hist(video_predictions[success_idx], bins=bins[1:], density=True, facecolor='b')
+    ax4.hist(video_predictions[failure_idx], bins=bins[1:], density=True, facecolor='b')
+    #ax1.bar(bins[:-1], success_confidence_histogram)
+    #ax2.bar(bins[:-1], failure_confidence_histogram)
+
+    plt.title('Histogram of Success / failure confidences, and without 0-10%')
+    ax1.title.set_text('Success')
+    ax2.title.set_text('Failure')
+    ax3.title.set_text('Success without 0-10%')
+    ax4.title.set_text('Failure without 0-10%')
+    
+
+
+    os.makedirs(exp.plots_dir, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(os.path.join(exp.plots_dir, 'success_failure_confidence_histogram.pdf'))
+    fig.savefig(os.path.join(exp.plots_dir, 'success_failure_confidence_histogram.png'))
+
+
+if __name__ == '__main__':
+    main()
