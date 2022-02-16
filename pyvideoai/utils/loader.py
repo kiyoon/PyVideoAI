@@ -37,6 +37,13 @@ def model_load_state_dict_partial(model, weights_state_dict):
 
     model_dict = model.state_dict()
 
+    for k in weights_state_dict:
+        if k not in model_dict:
+            logger.warning(f'Skip loading parameter: {k}, not in model definition.')
+    for k in model_dict:
+        if k not in weights_state_dict:
+            logger.warning(f'Skip loading module: {k}, not in weight state dict.')
+
     # 1. filter out unnecessary keys
     weights_state_dict_filtered = {k: v for k, v in weights_state_dict.items() if k in model_dict}
     # 2. overwrite entries in the existing state dict
@@ -44,7 +51,7 @@ def model_load_state_dict_partial(model, weights_state_dict):
     # 3. load the new state dict
     model.load_state_dict(model_dict)
 
-def model_load_state_dict_partial_nostrict(model, weights_state_dict):
+def model_load_state_dict_nostrict(model, weights_state_dict, partial=True):
     """Ignore size mismatch
     https://github.com/PyTorchLightning/pytorch-lightning/issues/4690
     """
@@ -60,15 +67,17 @@ def model_load_state_dict_partial_nostrict(model, weights_state_dict):
                 weights_state_dict[k] = model_state_dict[k]
                 is_changed = True
         else:
-            logger.warning(f"Dropping parameter {k}")
+            #logger.warning(f"Dropping parameter {k}")
             is_changed = True
-
 
     if is_changed:
     #   checkpoint.pop("optimizer_states", None) 
         logger.warning("Parameters have been changed. You may not want to use optimiser_state from the checkpoint")
 
-    model.load_state_dict(weights_state_dict)
+    if partial:
+        model_load_state_dict_partial(model, weights_state_dict)
+    else:
+        model.load_state_dict(weights_state_dict)
 
     return is_changed
 
@@ -87,8 +96,8 @@ def model_load_weights_GPU(model, weights_path, cur_device = None, world_size = 
 
     return checkpoint
 
-def model_load_weights_GPU_partial_nostrict(model, weights_path, cur_device = None, world_size = None, model_state_key='model_state'):
-    logger.info("Loading partial weights: " + weights_path) 
+def model_load_weights_GPU_nostrict(model, weights_path, cur_device = None, world_size = None, model_state_key='model_state', partial=True):
+    logger.info("Loading weights but ignoring size: " + weights_path) 
 
     if cur_device is None:
         cur_device = torch.cuda.current_device()
@@ -98,6 +107,6 @@ def model_load_weights_GPU_partial_nostrict(model, weights_path, cur_device = No
     checkpoint = torch.load(weights_path, map_location = "cuda:{}".format(cur_device))
     ms = model.module if world_size > 1 else model
 
-    model_load_state_dict_partial_nostrict(ms, checkpoint[model_state_key])
+    model_load_state_dict_nostrict(ms, checkpoint[model_state_key], partial=partial)
 
     return checkpoint
