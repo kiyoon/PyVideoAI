@@ -43,10 +43,10 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
         the csv file is:
         ```
         num_classes     # set it to zero for single label. Only needed for multilabel.
-        path_to_frames_dir_1/{:05d}.jpg video_id_1 label_1 start_frame_1 end_frame_1
-        path_to_frames_dir_2/{:05d}.jpg video_id_2 label_2 start_frame_2 end_frame_2
+        path_to_frames_dir_1/{frame:05d}.jpg video_id_1 label_1 start_frame_1 end_frame_1
+        path_to_frames_dir_2/{frame:05d}.jpg video_id_2 label_2 start_frame_2 end_frame_2
         ...
-        path_to_frames_dir_N/{:05d}.jpg video_id_N label_N start_frame_N end_frame_N
+        path_to_frames_dir_N/{frame:05d}.jpg video_id_N label_N start_frame_N end_frame_N
         ```
         Args:
             mode (string): Options includes `train`, `val`, or `test` mode.
@@ -202,7 +202,12 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
         frame_indices = utils.dense_frame_indices(num_video_frames, self.num_frames, self.sampling_rate, clip_idx = temporal_sample_index, num_clips = self.test_num_emsemble_views)
         frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
 
-        frame_paths = [self._path_to_frames[index].format(frame_idx) for frame_idx in frame_indices]
+        try:
+            # {frame:05d} format (new)
+            frame_paths = [self._path_to_frames[index].format(frame=frame_idx) for frame_idx in frame_indices]
+        except IndexError:
+            # {:05d} format (old)
+            frame_paths = [self._path_to_frames[index].format(frame_idx) for frame_idx in frame_indices]
 
 #        # make sure to close the images to avoid memory leakage.
 #        frames = [0] * len(frame_paths)

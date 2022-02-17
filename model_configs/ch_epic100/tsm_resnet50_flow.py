@@ -1,14 +1,16 @@
 import torch
 from torch import optim
 
-from pyvideoai.models.epic100.tsn import MTRN
+from pyvideoai.models.epic100.tsm import TSM
 from pyvideoai.config import PYVIDEOAI_DIR
 from pyvideoai.utils.loader import model_load_state_dict_nostrict
 import os
 
-pretrained_path = os.path.join(PYVIDEOAI_DIR, 'data', 'pretrained', 'epic100', 'trn_rgb.ckpt')
+from video_datasets_api.epic_kitchens_100.definitions import NUM_VERB_CLASSES, NUM_NOUN_CLASSES
 
-def load_model(num_classes, input_frame_length):
+pretrained_path = os.path.join(PYVIDEOAI_DIR, 'data', 'pretrained', 'epic100', 'tsm_flow.ckpt')
+
+def load_model(num_classes = NUM_VERB_CLASSES+NUM_NOUN_CLASSES, input_frame_length = 8):
     """
     num_classes can be integer or tuple
     """
@@ -18,7 +20,7 @@ def load_model(num_classes, input_frame_length):
     base_model = 'resnet50'
     pretrained = None
 
-    model = MTRN(class_counts, segment_count, 'RGB',
+    model = TSM(class_counts, segment_count, 'Flow',
             base_model = base_model,
             pretrained=pretrained)
 
@@ -31,8 +33,6 @@ def load_model(num_classes, input_frame_length):
         new_state_dict[name] = v
 
     model_load_state_dict_nostrict(model, new_state_dict, partial=True)
-
-
 
     del checkpoint, new_state_dict
     return model
@@ -75,6 +75,6 @@ use_amp = True
 # input configs
 input_normalise = True
 input_bgr = False
-input_mean = [0.485, 0.456, 0.406]
-input_std = [0.229, 0.224, 0.225]
+input_mean = [0.5]
+input_std = [0.226]
 

@@ -56,17 +56,23 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             path_prefix = "",
             num_retries = 10,
             sample_index_code = 'pyvideoai',
-            flow = None,       # if 'RG', treat R and G channels as u and v. Discard B.
+            flow = None,        # If 'RG', treat R and G channels as u and v. Discard B.
+                                # If 'RR', load two greyscale images and use R channel only.
+                                #     Need to define flow_folder_x and flow_folder_y,
+                                #     and the path in CSV needs to have {flow_direction}
+                                #     which will be replaced to the definitions.
+            flow_folder_x = 'u',
+            flow_folder_y = 'v',    # These are only needed for flow='RR'
             ):
         """
         Construct the video loader with a given csv file. The format of
         the csv file is:
         ```
         num_classes     # set it to zero for single label. Only needed for multilabel.
-        path_to_frames_dir_1/{:05d}.jpg video_id_1 label_1 start_frame_1 end_frame_1
-        path_to_frames_dir_2/{:05d}.jpg video_id_2 label_2 start_frame_2 end_frame_2
+        path_to_frames_dir_1/{frame:05d}.jpg video_id_1 label_1 start_frame_1 end_frame_1
+        path_to_frames_dir_2/{frame:05d}.jpg video_id_2 label_2 start_frame_2 end_frame_2
         ...
-        path_to_frames_dir_N/{:05d}.jpg video_id_N label_N start_frame_N end_frame_N
+        path_to_frames_dir_N/{frame:05d}.jpg video_id_N label_N start_frame_N end_frame_N
         ```
         Args:
             mode (str): Options includes `train`, or `test` mode.
@@ -121,8 +127,18 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         if self.flow == 'rg':
             assert len(mean) in [1, 2]
             assert len(std)  in [1, 2]
-            assert not greyscale, 'For optical flow data, it is impossible to use BGR channel ordering.'
-            assert not bgr, 'For optical flow data, it is impossible to use BGR channel ordering.'
+            assert not greyscale, 'For optical flow RG data, it is impossible to use greyscale.'
+            assert not bgr, 'For optical flow RG data, it is impossible to use BGR channel ordering.'
+        elif self.flow == 'rr':
+            assert len(mean) in [1, 2]
+            assert len(std)  in [1, 2]
+            assert not greyscale, 'For optical flow RR data, it is impossible to use greyscale. It actually just uses R channels and ignore the rest.'
+            assert not bgr, 'For optical flow RR data, it is impossible to use BGR channel ordering.'
+            self.flow_folder_x = flow_folder_x
+            self.flow_folder_y = flow_folder_y
+        else:
+            raise ValueError(f'Not recognised flow format: {self.flow}. Choose one of RG (use red and green channels), RR (two greyscale images representing x and y directions)'.
+
 
         # For training mode, one single clip is sampled from every
         # video. For testing, NUM_ENSEMBLE_VIEWS clips are sampled from every
@@ -255,11 +271,23 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             raise ValueError(f'Wrong self.sample_index_code: {self.sample_index_code}. Should be pyvideoai, TSN, TDN')
         frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
 
-        frame_paths = [self._path_to_frames[index].format(frame_idx) for frame_idx in frame_indices]
+        if self.flow == 'rr':
+            frame_paths_x = [self._path_to_frames[index].format(flow_direction=self.flow_folder_x, frame=frame_idx) for frame_idx in frame_indices]
+            frame_paths_y = [self._path_to_frames[index].format(flow_direction=self.flow_folder_y, frame=frame_idx) for frame_idx in frame_indices]
+            frames_x = utils.retry_load_images(frame_paths_x, retry=self._num_retries, backend='pytorch', bgr=False, greyscale=False)
+            frames_y = utils.retry_load_images(frame_paths_y, retry=self._num_retries, backend='pytorch', bgr=False, greyscale=False)
+            frames = torch.cat((frames_x[...,0], frames_y[...,0]), dim=-1)
+        else:
+            try:
+                # {frame:05d} format (new)
+                frame_paths = [self._path_to_frames[index].format(frame=frame_idx) for frame_idx in frame_indices]
+            except IndexError:
+                # {:05d} format (old)
+                frame_paths = [self._path_to_frames[index].format(frame_idx) for frame_idx in frame_indices]
 
-        frames = utils.retry_load_images(frame_paths, retry=self._num_retries, backend='pytorch', bgr=self.bgr, greyscale=self.greyscale)
-        if self.flow == 'rg':
-            frames = frames[..., 0:2]   # Use R and G as u and v (x,y). Discard B channel.
+            frames = utils.retry_load_images(frame_paths, retry=self._num_retries, backend='pytorch', bgr=self.bgr, greyscale=self.greyscale)
+            if self.flow == 'rg':
+                frames = frames[..., 0:2]   # Use R and G as u and v (x,y). Discard B channel.
 
         # Perform color normalization.
         frames = utils.tensor_normalize(
