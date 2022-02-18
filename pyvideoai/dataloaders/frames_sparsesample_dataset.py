@@ -61,6 +61,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
                                 #     Need to define flow_folder_x and flow_folder_y,
                                 #     and the path in CSV needs to have {flow_direction}
                                 #     which will be replaced to the definitions.
+            flow_neighbours = 5     # How many flow frames to stack.
             flow_folder_x = 'u',
             flow_folder_y = 'v',    # These are only needed for flow='RR'
             ):
@@ -124,6 +125,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         else:
             # string
             self.flow = flow.lower()
+            self.flow_neighbours = flow_neighbours
         if self.flow == 'rg':
             assert len(mean) in [1, 2]
             assert len(std)  in [1, 2]
@@ -137,16 +139,16 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             self.flow_folder_x = flow_folder_x
             self.flow_folder_y = flow_folder_y
         else:
-            raise ValueError(f'Not recognised flow format: {self.flow}. Choose one of RG (use red and green channels), RR (two greyscale images representing x and y directions)'.
+            raise ValueError(f'Not recognised flow format: {self.flow}. Choose one of RG (use red and green channels), RR (two greyscale images representing x and y directions)')
 
 
         # For training mode, one single clip is sampled from every
         # video. For testing, NUM_ENSEMBLE_VIEWS clips are sampled from every
         # video. For every clip, NUM_SPATIAL_CROPS is cropped spatially from
         # the frames.
-        if self.mode in ["train"]:
+        if self.mode == "train":
             self._num_clips = 1
-        elif self.mode in ["test"]:
+        elif self.mode == "test":
             self._num_clips = test_num_spatial_crops
 
         assert test_num_spatial_crops in [1, 5, 10], "1 for centre, 5 for centre and four corners, 10 for their horizontal flips"
@@ -233,13 +235,13 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
                 index of the video replacement that can be decoded.
         """
         crop_size = self.crop_size
-        if self.mode in ["train"]:
+        if self.mode == "train":
             # -1 indicates random sampling.
             spatial_sample_index = -1
             min_scale = self.train_jitter_min
             max_scale = self.train_jitter_max
             sample_uniform = False
-        elif self.mode in ["test"]:
+        elif self.mode == "test":
             # spatial_sample_index is in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].
             spatial_sample_index = (
                 self._spatial_temporal_idx[index]
@@ -260,9 +262,9 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
 #        frame_indices = utils.TRN_sample_indices(self._num_sample_frames[index], self.num_frames, mode = self.mode)
         num_video_frames = self._end_frames[index] - self._start_frames[index] + 1
         if self.sample_index_code == 'pyvideoai':
-            frame_indices = utils.sparse_frame_indices(num_video_frames, self.num_frames, uniform=sample_uniform)
+            frame_indices = utils.sparse_frame_indices(num_video_frames, self.num_frames, uniform=sample_uniform, num_neighbours=1 if self.flow is None else self.flow_neighbours)
         elif self.sample_index_code == 'tsn':
-            frame_indices = utils.TSN_sample_indices(num_video_frames, self.num_frames, mode = self.mode)
+            frame_indices = utils.TSN_sample_indices(num_video_frames, self.num_frames, mode = self.mode, new_length=1 if self.flow is None else self.flow_neighbours)
         elif self.sample_index_code == 'tdn':
             frame_indices = utils.TDN_sample_indices(num_video_frames, self.num_frames, mode = self.mode)
         elif self.sample_index_code == 'tdn_greyst':
@@ -289,13 +291,24 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             if self.flow == 'rg':
                 frames = frames[..., 0:2]   # Use R and G as u and v (x,y). Discard B channel.
 
+
+
         # Perform color normalization.
         frames = utils.tensor_normalize(
             frames, self.mean, self.std, normalise = self.normalise
         )
 
-        # T, H, W, C -> C, T, H, W
-        frames = frames.permute(3, 0, 1, 2)
+        if self.flow is not None:
+            # Reshape so that neighbouring frames go in the channel dimension.
+            _, H, W, _ = frames.shape
+            # T*neighbours, H, W, C -> T*neighbours, C, H, W
+            frames = frames.permute(0, 3, 1, 2)
+            frames = frames.view(self.num_frames, 2*self.num_neighbours, H, W)  # T, C=2*neighbours, H, W
+            # T, C, H, W -> C, T, H, W
+            frames = frames.permute(1, 0, 2, 3)
+        else:
+            # T, H, W, C -> C, T, H, W
+            frames = frames.permute(3, 0, 1, 2)
 
         # Perform data augmentation.
         frames, scale_factor_width, scale_factor_height, x_offset, y_offset, is_flipped = utils.spatial_sampling_5(

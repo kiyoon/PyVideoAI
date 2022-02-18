@@ -299,30 +299,41 @@ def dense_frame_indices(num_video_frames, num_sample_frames, sampling_rate, clip
 
 
 
-def sparse_frame_indices(num_input_frames, num_output_frames, uniform=True):
-    video_frame_indices = list(range(num_input_frames))
-    if num_input_frames < num_output_frames:
-        num_repeats = num_output_frames // num_input_frames if num_output_frames % num_input_frames == 0 else num_output_frames // num_input_frames + 1
-        logger.debug(f"Cannot sample {num_output_frames:d} frames from {num_input_frames:d}. Duplicating frames {num_repeats} times.")
+def sparse_frame_indices(num_input_frames, num_output_frames, uniform=True, num_neighbours=1):
+    """
+    Actual number of output frames would be num_output_frames * num_neighbours.
+    num_neighbours samples neighbouring frames (used for optical flow)
+
+    Difference between TSN code: for TSN, when input video is short it just returns zeros. This code efficiently selects more meaningful frames
+    """
+
+    # Assume that input is shorter. At the end, we just add neighbours per each frame index.
+    num_input_frames_wo_neighbour_length = num_input_frames - num_neighbours + 1
+
+    video_frame_indices = list(range(num_input_frames_wo_neighbour_length))
+    if num_input_frames_wo_neighbour_length < num_output_frames:
+        num_repeats = num_output_frames // num_input_frames_wo_neighbour_length if num_output_frames % num_input_frames_wo_neighbour_length == 0 else num_output_frames // num_input_frames_wo_neighbour_length + 1
+        logger.debug(f"Cannot sample {num_output_frames:d} frames with {num_neighbours} neighbouring frames from {num_input_frames:d}. Duplicating frames {num_repeats} times.")
         video_frame_indices = list(itertools.chain.from_iterable(itertools.repeat(x, num_repeats) for x in video_frame_indices))
-        num_input_frames *= num_repeats     # equal to: len(video_frame_indices)
+        num_input_frames_wo_neighbour_length *= num_repeats     # equal to: len(video_frame_indices)
 
     segment_start_indices = []      # [segment_start_indices[i], segment_start_indices[i+1]) is the range to sample 1 frame (snippet) from the i-th segment.
     for output_frame_id in range(num_output_frames):
-        segment_start_indices.append(int(num_input_frames * output_frame_id / num_output_frames))
+        segment_start_indices.append(int(num_input_frames_wo_neighbour_length * output_frame_id / num_output_frames))
 
     if uniform:
         sampled_frame_indices = [video_frame_indices[idx] for idx in segment_start_indices]
     else:
         # Random sampling from each segment
-        segment_start_indices.append(num_input_frames)      # since last frame is num_input_frames - 1
+        segment_start_indices.append(num_input_frames_wo_neighbour_length)      # since last frame is num_input_frames_wo_neighbour_length - 1
         frame_indices = []
         for output_frame_id in range(num_output_frames):
             frame_indices.append(random.randrange(*segment_start_indices[output_frame_id:output_frame_id+2]))
 
         sampled_frame_indices = [video_frame_indices[idx] for idx in frame_indices]
 
-    return sampled_frame_indices
+    # Add neighbours
+    return [idx + n for idx in sampled_frame_indices for n in range(num_neighbours)]
 
 
 # num_input_frames = num_frames
