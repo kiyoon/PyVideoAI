@@ -15,6 +15,8 @@ def get_parser():
     parser.add_argument("root_100", help="Path to the directory with flow files. (EPIC-100 extensions directory)")
     parser.add_argument("output_dir", help="Directory to save train.csv and val.csv")
     parser.add_argument("annotations_root_dir", type=str, help="Path to annotations root dir.")
+    parser.add_argument("--video_ids_pickle", type=str, help="Path to pickle of video IDs to subsample.")
+
     return parser
 
 parser = get_parser()
@@ -23,6 +25,10 @@ args = parser.parse_args()
 if __name__ == '__main__':
     os.makedirs(args.output_dir, exist_ok=True)
     narration_id_to_uid, _ = epic_narration_id_to_unique_id(args.annotations_root_dir)
+
+    if args.video_ids_pickle is not None:
+        with open(args.video_ids_pickle, 'rb') as f:
+        video_ids_to_include = pickle.load(f)
 
     for split in ['train', 'validation']:
         label_path = os.path.join(args.annotations_root_dir, f'EPIC_100_{split}_flow.pkl')
@@ -36,7 +42,10 @@ if __name__ == '__main__':
         if split == 'validation':
             split = 'val'
         
-        split_file = open(os.path.join(args.output_dir, f'{split}.csv'), 'w')
+        if args.video_ids_pickle is None:
+            split_file = open(os.path.join(args.output_dir, f'{split}.csv'), 'w')
+        else:
+            split_file = open(os.path.join(args.output_dir, f'{split}_partial.csv'), 'w')
 
         split_file.write('0')
 
@@ -44,6 +53,9 @@ if __name__ == '__main__':
         for index in tqdm.tqdm(range(num_videos), desc="Generating splits"):
             narration_id = epic_action_labels.index[index]
             uid = narration_id_to_uid[narration_id]
+            if args.video_ids_pickle is not None:
+                if uid not in video_ids_to_include:
+                    continue
             verb_label = epic_action_labels.verb_class.iloc[index]
 
             dir_path = os.path.join(args.root, narration_id)

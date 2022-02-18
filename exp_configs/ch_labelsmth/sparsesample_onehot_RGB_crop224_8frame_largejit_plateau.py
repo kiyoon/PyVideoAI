@@ -216,29 +216,29 @@ Recommeded to change this settings in model_configs
 ## For both train & val
 Changing last_activation and leaving metrics/predictions_gatherers commented out will still change the default metrics and predictions_gatherers' activation function
 """
-#last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
+last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
 
 """
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
-#from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
-#best_metric = ClipAccuracyMetric()
-#metrics = {'train': [ClipAccuracyMetric()],
-#        'traindata_testmode': [ClipAccuracyMetric()],
-#        'val': [best_metric],
-#        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
-#        }
+from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+best_metric = ClipAccuracyMetric()
+metrics = {'train': [ClipAccuracyMetric()],
+        'traindata_testmode': [ClipAccuracyMetric()],
+        'val': [best_metric],
+        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
+        }
 
 """
 ## For validation, (tools/run_val.py)
 how to gather predictions when --save_predictions is set
 """
-#from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
-#predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
-#        'traindata_testmode': ClipPredictionsGatherer(last_activation),
-#        'multicropval': VideoPredictionsGatherer(last_activation),
-#        }
+from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
+predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
+        'traindata_testmode': ClipPredictionsGatherer(last_activation),
+        'multicropval': VideoPredictionsGatherer(last_activation),
+        }
 
 """How will you plot"""
 #from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
