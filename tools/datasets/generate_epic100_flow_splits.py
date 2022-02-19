@@ -11,8 +11,7 @@ import argparse
 def get_parser():
     parser = argparse.ArgumentParser(description="Generate EPIC-Kitchens-100 verb-only flow splits. You MUST run epic_convert_rgb_to_flow_frame_idxs.py before running this.",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("root_55", help="Path to the directory with flow files. (EPIC-55 directory structure)")
-    parser.add_argument("root_100", help="Path to the directory with flow files. (EPIC-100 extensions directory)")
+    parser.add_argument("root", help="Path to the directory with flow files. (EPIC-100 extensions directory)")
     parser.add_argument("output_dir", help="Directory to save train.csv and val.csv")
     parser.add_argument("annotations_root_dir", type=str, help="Path to annotations root dir.")
     parser.add_argument("--video_ids_pickle", type=str, help="Path to pickle of video IDs to subsample.")
@@ -28,7 +27,7 @@ if __name__ == '__main__':
 
     if args.video_ids_pickle is not None:
         with open(args.video_ids_pickle, 'rb') as f:
-        video_ids_to_include = pickle.load(f)
+            video_ids_to_include = pickle.load(f)
 
     for split in ['train', 'validation']:
         label_path = os.path.join(args.annotations_root_dir, f'EPIC_100_{split}_flow.pkl')
@@ -56,6 +55,9 @@ if __name__ == '__main__':
             if args.video_ids_pickle is not None:
                 if uid not in video_ids_to_include:
                     continue
+
+            participant_id = epic_action_labels.participant_id.iloc[index]
+            epicvideo_id = epic_action_labels.video_id.iloc[index]
             verb_label = epic_action_labels.verb_class.iloc[index]
 
             dir_path = os.path.join(args.root, narration_id)
@@ -63,7 +65,13 @@ if __name__ == '__main__':
             start_frame = epic_action_labels.start_frame.iloc[index]
             stop_frame = epic_action_labels.stop_frame.iloc[index]
 
-            write_str = f'\n{split}/{narration_id} {uid} {verb_label} {start_frame} {stop_frame}'
+            for i in range(start_frame, stop_frame+1):
+                u_path = os.path.join(args.root, participant_id, epicvideo_id, 'u', f'frame_{i:010d}.jpg')
+                v_path = os.path.join(args.root, participant_id, epicvideo_id, 'v', f'frame_{i:010d}.jpg')
+                assert os.path.isfile(u_path), f'File does not exist: {u_path}'
+                assert os.path.isfile(v_path), f'File does not exist: {v_path}'
+
+            write_str = f'\n{participant_id}/{epicvideo_id}/{{flow_direction}}/frame_{{frame:010d}}.jpg {uid} {verb_label} {start_frame} {stop_frame}'
 
             split_file.write(write_str)
 
