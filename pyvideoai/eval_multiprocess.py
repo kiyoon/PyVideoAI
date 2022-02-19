@@ -54,7 +54,10 @@ def evaluation(args):
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
 
     if args.version == 'auto':
-        _expversion = -2    # last version (do not create new)
+        if args.load_epoch is not None:
+            _expversion = -2    # last version (do not create new)
+        else:
+            _expversion = -1    # create new version
     else:
         _expversion = int(args.version)
 

@@ -1,6 +1,6 @@
 import os
 
-from pyvideoai.dataloaders.video_sparsesample_dataset import VideoSparsesampleDataset
+from pyvideoai.dataloaders import FramesSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils import loader
@@ -32,7 +32,6 @@ test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 
 greyscale=False
-sampling_mode = 'RGB'   # RGB, TC, GreyST
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
@@ -176,8 +175,8 @@ def _get_torch_dataset(csv_path, split):
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
 
-    return VideoSparsesampleDataset(csv_path, mode, 
-            input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
+    return FramesSparsesampleDataset(csv_path, mode, 
+            input_frame_length, 
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
             train_horizontal_flip=dataset_cfg.horizontal_flip,
             test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
@@ -186,12 +185,16 @@ def _get_torch_dataset(csv_path, split):
             std = [model_cfg.input_std[0]] if greyscale else model_cfg.input_std,
             normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
             greyscale=greyscale,
-            path_prefix=dataset_cfg.video_dir,
+            path_prefix=dataset_cfg.flowframes_dir,
             sample_index_code=sample_index_code,
+            flow = 'RR',
+            flow_neighbours = 5,
+            flow_folder_x = 'u',
+            flow_folder_y = 'v',
             )
 
 def get_torch_dataset(split):
-    csv_path = os.path.join(dataset_cfg.video_split_file_dir, dataset_cfg.split_file_basename[split])
+    csv_path = os.path.join(dataset_cfg.flowframes_split_file_dir, dataset_cfg.split_file_basename[split])
 
     return _get_torch_dataset(csv_path, split)
 

@@ -1,4 +1,5 @@
 import torch
+from torch.nn import Module
 from torch import optim
 
 from pyvideoai.models.epic100.tsm import TSM
@@ -10,12 +11,15 @@ from video_datasets_api.epic_kitchens_100.definitions import NUM_VERB_CLASSES, N
 
 pretrained_path = os.path.join(PYVIDEOAI_DIR, 'data', 'pretrained', 'epic100', 'tsm_flow.ckpt')
 
-def load_model(num_classes = NUM_VERB_CLASSES+NUM_NOUN_CLASSES, input_frame_length = 8):
+def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8):
     """
     num_classes can be integer or tuple
     """
+
+    assert 0 < num_classes <= NUM_VERB_CLASSES+NUM_NOUN_CLASSES
+
     #class_counts = (num_classes,352)
-    class_counts = num_classes
+    class_counts = NUM_VERB_CLASSES+NUM_NOUN_CLASSES
     segment_count = input_frame_length
     base_model = 'resnet50'
     pretrained = None
@@ -35,7 +39,14 @@ def load_model(num_classes = NUM_VERB_CLASSES+NUM_NOUN_CLASSES, input_frame_leng
     model_load_state_dict_nostrict(model, new_state_dict, partial=True)
 
     del checkpoint, new_state_dict
-    return model
+    class VerbModel(Module):
+        def __init__(self, model):
+            super().__init__()
+            self.model = model
+        def forward(self, x):
+            return self.model(x)[:num_classes]
+
+    return VerbModel(model)
 
 
 def NCTHW_to_model_input_shape(inputs):
@@ -53,13 +64,12 @@ def get_optim_policies(model):
     # return model.parameters()     # no policies
     return model.get_optim_policies()
 
-# If you need to extract features, use this. It can be defined in model_cfg too.
+# If you need to extract features, use this. It can be defined in exp_configs too.
 def feature_extract_model(model):
-    from torch.nn import Module
     class FeatureExtractModel(Module):
         def __init__(self, model):
             super().__init__()
-            self.model = model
+            self.model = model.model 
         def forward(self, x):
             batch_size = x.shape[0]
             imagenet_features = self.model.features(x)

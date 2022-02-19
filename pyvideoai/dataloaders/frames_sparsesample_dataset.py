@@ -61,7 +61,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
                                 #     Need to define flow_folder_x and flow_folder_y,
                                 #     and the path in CSV needs to have {flow_direction}
                                 #     which will be replaced to the definitions.
-            flow_neighbours = 5     # How many flow frames to stack.
+            flow_neighbours = 5,    # How many flow frames to stack.
             flow_folder_x = 'u',
             flow_folder_y = 'v',    # These are only needed for flow='RR'
             ):
@@ -278,7 +278,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             frame_paths_y = [self._path_to_frames[index].format(flow_direction=self.flow_folder_y, frame=frame_idx) for frame_idx in frame_indices]
             frames_x = utils.retry_load_images(frame_paths_x, retry=self._num_retries, backend='pytorch', bgr=False, greyscale=False)
             frames_y = utils.retry_load_images(frame_paths_y, retry=self._num_retries, backend='pytorch', bgr=False, greyscale=False)
-            frames = torch.cat((frames_x[...,0], frames_y[...,0]), dim=-1)
+            frames = torch.cat((frames_x[...,0:1], frames_y[...,0:1]), dim=-1)
         else:
             try:
                 # {frame:05d} format (new)
@@ -303,7 +303,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             _, H, W, _ = frames.shape
             # T*neighbours, H, W, C -> T*neighbours, C, H, W
             frames = frames.permute(0, 3, 1, 2)
-            frames = frames.view(self.num_frames, 2*self.num_neighbours, H, W)  # T, C=2*neighbours, H, W
+            frames = frames.reshape(self.num_frames, 2*self.flow_neighbours, H, W)  # T, C=2*neighbours, H, W
             # T, C, H, W -> C, T, H, W
             frames = frames.permute(1, 0, 2, 3)
         else:

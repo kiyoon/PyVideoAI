@@ -119,3 +119,9 @@ The experiment results (log, training stats, weights, tensorboard, plots, etc.) 
 
 Otherwise, you can change `pyvideoai/config.py`'s `DEFAULT_EXPERIMENT_ROOT` value. Or, you can also set `--experiment_root` argument manually when executing.  
 
+
+# TODO
+- ReduceLRonPlateau detection in training script fails with GradualWarmupLR
+- ExperimentUtils more intuitive version system with string argument ('last', 'new')
+- Dataloader CSV file json header. BEGIN CSV mark between header and csv. Write PyVideoAI_version, label_type single,multi,soft, multilabel_numclass, softlabel_pickle_path
+- exp_configs load_pretrained load before DDP. load_pretrained_postDDP method.
