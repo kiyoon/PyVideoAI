@@ -34,7 +34,7 @@ from .utils import misc
 from .utils.stdout_logger import OutputLogger
 from .utils.distributed import MultiprocessPrinter, check_random_seed_in_sync
 
-from .train_and_eval import train_epoch, eval_epoch
+from .train_and_eval import train_epoch, eval_epoch, get_scheduler_type
 
 from .visualisations.metric_plotter import DefaultMetricPlotter
 from .visualisations.telegram_reporter import DefaultTelegramReporter
@@ -283,11 +283,12 @@ def train(args):
 
         # Scheduling
         scheduler = cfg.scheduler(optimiser, iters_per_epoch)
-        if isinstance(scheduler, ReduceLROnPlateau):
+        scheduler_type = get_scheduler_type(scheduler)
+        if scheduler_type == 'plateau':
             logger.info("ReduceLROnPlateau scheduler is selected. The `scheduler.step(val_loss)` function will be called at the end of epoch (after validation), but not every iteration.")
-        if isinstance(scheduler, ReduceLROnPlateauMultiple):
+        elif scheduler_type == 'plateau_multiple':
             logger.info("ReduceLROnPlateauMultiple scheduler is selected. The `scheduler.step(val_loss, val_best_metric)` function will be called at the end of epoch (after validation), but not every iteration.")
-        if isinstance(scheduler, (ReduceLROnPlateau, ReduceLROnPlateauMultiple)):
+        if scheduler_type.startswith('plateau'):
             if args.load_epoch is not None:
                 if hasattr(cfg, 'load_scheduler_state'):
                     load_scheduler_state = cfg.load_scheduler_state
