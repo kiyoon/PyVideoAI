@@ -26,7 +26,7 @@ def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8):
 
     model = TSM(class_counts, segment_count, 'Flow',
             base_model = base_model,
-            pretrained=pretrained)
+            pretrained=pretrained, dropout=0.7)
 
     device = torch.cuda.current_device()
     checkpoint = torch.load(pretrained_path, map_location='cpu')
