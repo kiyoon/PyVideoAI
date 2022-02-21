@@ -229,8 +229,8 @@ how to calculate metrics
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 best_metric = ClipAccuracyMetric()
 metrics = {'train': [ClipAccuracyMetric()],
-#        'traindata_testmode': [ClipAccuracyMetric()],
-#        'trainpartialdata_testmode': [ClipAccuracyMetric()],
+        'traindata_testmode': [ClipAccuracyMetric()],
+        'trainpartialdata_testmode': [ClipAccuracyMetric()],
         'val': [best_metric],
         'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
         }
@@ -241,8 +241,8 @@ how to gather predictions when --save_predictions is set
 """
 from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
-#        'traindata_testmode': ClipPredictionsGatherer(last_activation),
-#        'trainpartialdata_testmode': ClipPredictionsGatherer(last_activation),
+        'traindata_testmode': ClipPredictionsGatherer(last_activation),
+        'trainpartialdata_testmode': ClipPredictionsGatherer(last_activation),
         'multicropval': VideoPredictionsGatherer(last_activation),
         }
 

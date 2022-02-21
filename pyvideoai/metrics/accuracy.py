@@ -121,7 +121,7 @@ class ClipAccuracyMetric(Metric):
         elif self.split == 'multicropval':
             return tuple([f'Multicrop validation clip accuracy top{topk}' if topk != 1 else 'Multicrop validation clip accuracy' for topk in self.topk])
         else:
-            raise ValueError(f'Unknown split: {self.split}')
+            return tuple([f'{self.split} accuracy top{topk}' if topk != 1 else f'{self.split} clip accuracy' for topk in self.topk])
 
 
     def plot_file_basenames(self):
@@ -216,7 +216,7 @@ class VideoAccuracyMetric(AverageMetric):
         elif self.split == 'multicropval':
             return tuple([f'Multicrop validation video accuracy top{topk}' if topk != 1 else 'Multicrop validation video accuracy' for topk in self.topk])
         else:
-            raise ValueError(f'Unknown split: {self.split}')
+            return tuple([f'{self.split} video accuracy top{topk}' if topk != 1 else f'{self.split} video accuracy' for topk in self.topk])
 
 
     def plot_file_basenames(self):

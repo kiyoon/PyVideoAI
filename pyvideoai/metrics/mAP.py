@@ -73,7 +73,7 @@ class Clip_mAPMetric(ClipMetric):
         elif self.split == 'multicropval':
             return 'Multicrop validation clip mAP'
         else:
-            raise ValueError(f'Unknown split: {self.split}')
+            return f'{self.split} clip mAP'
 
 
     def plot_file_basenames(self):
@@ -166,7 +166,7 @@ class Video_mAPMetric(AverageMetric):
         elif self.split == 'multicropval':
             return 'Multicrop validation video mAP'
         else:
-            raise ValueError(f'Unknown split: {self.split}')
+            return f'{self.split} video mAP'
 
 
     def plot_file_basenames(self):
