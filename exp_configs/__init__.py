@@ -11,17 +11,29 @@ from shutil import copy2
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
 
-def _get_module_name(dataset_name, model_name, experiment_name, channel = ''):
+def _get_module_name(dataset_name: str, model_name: str, experiment_name: str, channel: str = ''):
+    # If there is a . in the name, it is confused with python module.
+    # Use + instead.
+    dataset_name = dataset_name.replace('.', '+')
+    model_name = model_name.replace('.', '+')
+    assert experiment_name.find('.') == -1, f'Invalid experiment name {experiment_name}: Cannot contain dot (.).'
+
     if channel == '' or channel is None:
         return f'.{dataset_name}.{model_name}-{experiment_name}'
     else:
         return f'.ch_{channel}.{dataset_name}.{model_name}-{experiment_name}'
 
 
-def _get_file_name(dataset_name, model_name, experiment_name, channel=''):
+def _get_file_name(dataset_name: str, model_name: str, experiment_name: str, channel: str = ''):
     """
     Not a full path
     """
+    # If there is a . in the name, it is confused with python module.
+    # Use + instead.
+    dataset_name = dataset_name.replace('.', '+')
+    model_name = model_name.replace('.', '+')
+    assert experiment_name.find('.') == -1, f'Invalid experiment name {experiment_name}: Cannot contain dot (.).'
+
     if channel == '' or channel is None:
         return os.path.join(dataset_name, f'{model_name}-{experiment_name}.py')
     else:

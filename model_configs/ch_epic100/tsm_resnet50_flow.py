@@ -62,7 +62,7 @@ def model_input_shape_to_NTHWC(inputs, num_channels=3):
 
 def get_optim_policies(model):
     # return model.parameters()     # no policies
-    return model.get_optim_policies()
+    return model.model.get_optim_policies()
 
 # If you need to extract features, use this. It can be defined in exp_configs too.
 def feature_extract_model(model):

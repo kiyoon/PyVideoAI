@@ -103,9 +103,10 @@ def optimiser(params):
 
 from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple, GradualWarmupScheduler
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
-    after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+    #after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
 
-    return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
+    #return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
+    return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
 
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
@@ -228,8 +229,8 @@ how to calculate metrics
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 best_metric = ClipAccuracyMetric()
 metrics = {'train': [ClipAccuracyMetric()],
-        'traindata_testmode': [ClipAccuracyMetric()],
-        'trainpartialdata_testmode': [ClipAccuracyMetric()],
+#        'traindata_testmode': [ClipAccuracyMetric()],
+#        'trainpartialdata_testmode': [ClipAccuracyMetric()],
         'val': [best_metric],
         'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
         }
@@ -240,8 +241,8 @@ how to gather predictions when --save_predictions is set
 """
 from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
-        'traindata_testmode': ClipPredictionsGatherer(last_activation),
-        'trainpartialdata_testmode': ClipPredictionsGatherer(last_activation),
+#        'traindata_testmode': ClipPredictionsGatherer(last_activation),
+#        'trainpartialdata_testmode': ClipPredictionsGatherer(last_activation),
         'multicropval': VideoPredictionsGatherer(last_activation),
         }
 
