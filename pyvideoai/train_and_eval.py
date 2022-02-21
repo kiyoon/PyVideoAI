@@ -687,7 +687,12 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, one_clip 
                 extract_mode = "Multi-crop Feature Extraction"
                 split = 'multicropval'
 
-            feature_data = {}
+            feature_data = {'video_ids': [],
+                    'labels': [],
+                    'clip_features': [],
+                    'spatial_indices': [],
+                    'temporal_indices': [],
+                    }
 
         if world_size > 1:
             shard_size, num_iters, last_batch_size = count_true_samples(dataloader.sampler, dataloader.batch_size)
@@ -776,18 +781,11 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, one_clip 
                 curr_batch_size = curr_batch_size.item()
                 sample_seen += curr_batch_size
 
-                if 'video_ids' in feature_data.keys():
-                    feature_data['video_ids'] = np.concatenate((feature_data['video_ids'], uids.cpu()), axis=0)
-                    feature_data['labels'] = np.concatenate((feature_data['labels'], labels.cpu()), axis=0)
-                    feature_data['clip_features'] = np.concatenate((feature_data['clip_features'], outputs.cpu()), axis=0)
-                    feature_data['spatial_indices'] = np.concatenate((feature_data['spatial_indices'], spatial_idx.cpu()), axis=0)
-                    feature_data['temporal_indices'] = np.concatenate((feature_data['temporal_indices'], temporal_idx.cpu()), axis=0)
-                else:
-                    feature_data['video_ids'] = np.array(uids.cpu())
-                    feature_data['labels'] = np.array(labels.cpu())
-                    feature_data['clip_features'] = np.array(outputs.cpu())
-                    feature_data['spatial_indices'] = np.array(spatial_idx.cpu())
-                    feature_data['temporal_indices'] = np.array(temporal_idx.cpu())
+                feature_data['video_ids'].append(np.array(uids.cpu()))
+                feature_data['labels'].append(np.array(labels.cpu()))
+                feature_data['clip_features'].append(np.array(outputs.cpu()))
+                feature_data['spatial_indices'].append(np.array(spatial_idx.cpu()))
+                feature_data['temporal_indices'].append(np.array(temporal_idx.cpu()))
 
                 elapsed_time = time.time() - start_time
                 #eta = int((total_samples-sample_seen) * elapsed_time / sample_seen)
@@ -824,6 +822,9 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, one_clip 
 
         logger.info(eval_log_str)
 
+        # convert list[np.array] into huge numpy array
+        for key in feature_data.keys():
+            feature_data[key] = np.concatenate(feature_data[key], axis=0)
 
     if rank != 0:
         feature_data = None

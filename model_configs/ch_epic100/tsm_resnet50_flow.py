@@ -2,7 +2,7 @@ import torch
 from torch.nn import Module
 from torch import optim
 
-from pyvideoai.models.epic100.tsm import TSM
+from pyvideoai.models.epic.tsm import TSM
 from pyvideoai.config import PYVIDEOAI_DIR
 from pyvideoai.utils.loader import model_load_state_dict_nostrict
 import os
