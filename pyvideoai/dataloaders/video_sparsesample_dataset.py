@@ -59,6 +59,7 @@ class VideoSparsesampleDataset(torch.utils.data.Dataset):
             path_prefix = "",
             sample_index_code = 'pyvideoai',
             num_decord_threads=1,
+            video_id_to_label: dict = None,     # Pass a dictionary of mapping video ID to labels, and it will ignore the label in the CSV and get labels from here. Useful when using unsupported label types such as soft labels.
             ):
         """
         Construct the video loader with a given csv file. The format of
@@ -115,6 +116,10 @@ class VideoSparsesampleDataset(torch.utils.data.Dataset):
         self.bgr = bgr
         self.greyscale = greyscale 
 
+        self.video_id_to_label = video_id_to_label
+        if video_id_to_label is not None:
+            logger.info(f'video_id_to_label is provided. It will replace the labels in the CSV file.')
+
         # For training mode, one single clip is sampled from every
         # video. For testing, NUM_ENSEMBLE_VIEWS clips are sampled from every
         # video. For every clip, NUM_SPATIAL_CROPS is cropped spatially from
@@ -154,13 +159,16 @@ class VideoSparsesampleDataset(torch.utils.data.Dataset):
                 assert len(path_label.split()) == 7
                 path, video_id, label, start_frame, end_frame, width, height = path_label.split()
 
-                if self.num_classes > 0:
-                    label_list = label.split(",")
-                    label = np.zeros(self.num_classes, dtype=np.float32)
-                    for label_idx in label_list:
-                        label[int(label_idx)] = 1.0       # one hot encoding
+                if self.video_id_to_label is None:
+                    if self.num_classes > 0:
+                        label_list = label.split(",")
+                        label = np.zeros(self.num_classes, dtype=np.float32)
+                        for label_idx in label_list:
+                            label[int(label_idx)] = 1.0       # one hot encoding
+                    else:
+                        label = int(label)
                 else:
-                    label = int(label)
+                    label = self.video_id_to_label(int(video_id))
 
                 for idx in range(self._num_clips):
                     self._path_to_videos.append(

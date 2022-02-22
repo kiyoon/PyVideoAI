@@ -177,7 +177,7 @@ def feature_extraction(args):
         if rank == 0:
             exp.tg_send_text_with_expname(f'Starting to extract features..')
 
-        feature_data, _, _, _, eval_log_str = extract_features(model, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
+        feature_data, _, _, _, eval_log_str = extract_features(model, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
 
         if rank == 0:
             # save features

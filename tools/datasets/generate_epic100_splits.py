@@ -16,6 +16,7 @@ def get_parser():
     parser.add_argument("annotations_root_dir", type=str, help="Path to annotations root dir.")
     parser.add_argument("--mode", type=str, default='video', choices=['video', 'frames'], help="Dataset stored as videos or extracted frames?")
     parser.add_argument("--verify_num_frames", action='store_true', help="Verify if the number of frames is different from the actual extracted frames and the official annotation.")
+    parser.add_argument("--video_ids_pickle", type=str, help="Path to pickle of video IDs to subsample.")
     return parser
 
 parser = get_parser()
@@ -25,6 +26,10 @@ if __name__ == '__main__':
     os.makedirs(args.output_dir, exist_ok=True)
     narration_id_to_uid, _ = epic_narration_id_to_unique_id(args.annotations_root_dir)
 
+    if args.video_ids_pickle is not None:
+        with open(args.video_ids_pickle, 'rb') as f:
+            video_ids_to_include = pickle.load(f)
+
     for split in ['train', 'validation']:
         with open(os.path.join(args.annotations_root_dir, f'EPIC_100_{split}.pkl'), 'rb') as f:
             epic_action_labels = pickle.load(f)
@@ -33,7 +38,10 @@ if __name__ == '__main__':
         if split == 'validation':
             split = 'val'
         
-        split_file = open(os.path.join(args.output_dir, f'{split}.csv'), 'w')
+        if args.video_ids_pickle is None:
+            split_file = open(os.path.join(args.output_dir, f'{split}.csv'), 'w')
+        else:
+            split_file = open(os.path.join(args.output_dir, f'{split}_partial.csv'), 'w')
 
         split_file.write('0')
 
@@ -41,6 +49,10 @@ if __name__ == '__main__':
         for index in tqdm.tqdm(range(num_videos), desc="Generating splits"):
             narration_id = epic_action_labels.index[index]
             uid = narration_id_to_uid[narration_id]
+            if args.video_ids_pickle is not None:
+                if uid not in video_ids_to_include:
+                    continue
+
             verb_label = epic_action_labels.verb_class.iloc[index]
 
             if args.mode == 'video':

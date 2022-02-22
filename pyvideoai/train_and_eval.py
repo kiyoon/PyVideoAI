@@ -242,7 +242,7 @@ def train_epoch(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_
     return sample_seen, total_samples, loss, elapsed_time#}}}
 
 
-def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best_metric, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, refresh_period = 1, PAD_VALUE = -1):
+def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best_metric, num_classes, split = 'val', rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, refresh_period = 1, PAD_VALUE = -1):
     """Test for one epoch.
 
     Args:
@@ -250,7 +250,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
         criterion: PyTorch loss criterion (e.g. nn.CrossEntropyLoss())
         dataloader (iterator): Mini-batch data iterator. Requires self.epoch_size and self.num_iters variable.
         val_metrics (list of pyvideoai.metrics.Metric)
-        best_metric (pyvideoai.metrics.Metric): Has to be a part of val_metrics. Only required when one_clip=True and scheduler is ReduceLROnPlateauMultiple. Used for the scheduling.
+        best_metric (pyvideoai.metrics.Metric): Has to be a part of val_metrics. Only required when split='val' and scheduler is ReduceLROnPlateauMultiple. Used for the scheduling.
         rank (int): Rank of the process in distributed training.
         world_size (int): Total number of processes in distributed training.
         scheduler (torch scheduler): Only needed when the scheduler is ReduceLROnPlateau, and using one clip eval.
@@ -263,7 +263,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
     cur_device = torch.cuda.current_device()
 
     scheduler_type = get_scheduler_type(scheduler)
-    is_scheduler_plateau = one_clip and scheduler_type.startswith('plateau')
+    is_scheduler_plateau = scheduler_type.startswith('plateau')
 
     with torch.no_grad():#{{{
         model.eval()
@@ -285,12 +285,12 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
             start_time = time.time()
             max_log_length = 0
 
-            if one_clip:
+            if split == 'val':
                 eval_mode = "One-clip Eval"
-                split = 'val'
-            else:
+            elif split == 'multicropval':
                 eval_mode = "Multi-crop Eval"
-                split = 'multicropval'
+            else:
+                eval_mode = f"{split} Eval"
         """
         if world_size > 1:
             # Number of iterations can be different over processes. Some processes need to wait until others finish.
@@ -463,7 +463,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
 
 
     # Update ReduceLROnPlateau scheduling
-    if one_clip:
+    if split == 'val':
         if rank == 0:
             if best_metric is not None:
                 if best_metric.logging_msg_epoch() is None:
@@ -651,7 +651,7 @@ def test_epoch_DALI(model, criterion, dataloader, data_unpack_func, num_classes,
 
     return sample_seen, total_samples, loss, acc, vid_acc_top1, vid_acc_top5, elapsed_time, video_metrics#}}}
 
-def extract_features(model, dataloader, data_unpack_func, num_classes, one_clip = False, rank = 0, world_size = 1, input_reshape_func = None, refresh_period = 1, PAD_VALUE = -1):
+def extract_features(model, dataloader, data_unpack_func, num_classes, split = 'val', rank = 0, world_size = 1, input_reshape_func = None, refresh_period = 1, PAD_VALUE = -1):
     """Extract features for all samples in the dataset.
 
     Args:
@@ -680,12 +680,12 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, one_clip 
             start_time = time.time()
             max_log_length = 0
 
-            if one_clip:
+            if split == 'val':
                 extract_mode = "One-clip Feature Extraction"
-                split = 'val'
-            else:
+            elif split == 'multicropval':
                 extract_mode = "Multi-crop Feature Extraction"
-                split = 'multicropval'
+            else:
+                extract_mode = "Feature Extraction"
 
             feature_data = {'video_ids': [],
                     'labels': [],

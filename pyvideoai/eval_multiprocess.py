@@ -168,12 +168,10 @@ def evaluation(args):
 
         criterion = cfg.dataset_cfg.task.get_criterion(cfg, split)
 
-        oneclip = args.mode == 'oneclip'
-
         if rank == 0:
             exp.tg_send_text_with_expname(f'Starting evaluation..')
 
-        _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], None, cfg.dataset_cfg.num_classes, oneclip, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
+        _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], None, cfg.dataset_cfg.num_classes, split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
 
         if rank == 0:
             # Update summary.csv

@@ -169,7 +169,7 @@ def get_data_unpack_func(split):
 def _get_torch_dataset(csv_path, split):
     mode = dataset_cfg.split2mode[split]
 
-    if split == 'val':
+    if split in ['val', 'traindata_testmode', 'trainpartialdata_testmode']:
         _test_scale = val_scale
         _test_num_spatial_crops = val_num_spatial_crops
     else:
