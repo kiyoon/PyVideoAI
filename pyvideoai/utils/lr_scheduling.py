@@ -4,6 +4,9 @@ from typing import Iterable
 from torch._six import inf
 from torch.optim.optimizer import Optimizer
 
+import logging
+logger = logging.getLogger(__name__)
+
 def multistep_lr_nonlinear(optimiser, milestones: Iterable[int], factors: Iterable[float], last_epoch=-1):
     """Similar to torch.optim.lr_scheduler.MultiStepLR,
     but with this you can define the factors individually,
@@ -232,7 +235,9 @@ class ReduceLROnPlateauMultiple(object):
 """
 # https://github.com/ildoonet/pytorch-gradual-warmup-lr
 Modified by Kiyoon Kim:
+    Fix wrong behaviour with ReduceLROnPlateau and multiplier == 1
     Add support of ReduceLROnPlateauMultiple
+    Remove epoch in step function
 """
 
 from torch.optim.lr_scheduler import _LRScheduler
@@ -251,7 +256,7 @@ class GradualWarmupScheduler(_LRScheduler):
     def __init__(self, optimizer, multiplier, total_epoch, after_scheduler=None):
         self.multiplier = multiplier
         if self.multiplier < 1.:
-            raise ValueError('multiplier should be greater thant or equal to 1.')
+            raise ValueError('multiplier should be greater than or equal to 1.')
         self.total_epoch = total_epoch
         self.after_scheduler = after_scheduler
         self.finished = False
@@ -271,45 +276,40 @@ class GradualWarmupScheduler(_LRScheduler):
         else:
             return [base_lr * ((self.multiplier - 1.) * self.last_epoch / self.total_epoch + 1.) for base_lr in self.base_lrs]
 
-    def step_ReduceLROnPlateau(self, metrics, epoch=None):
-        if epoch is None:
-            epoch = self.last_epoch + 1
+    def step_ReduceLROnPlateau(self, metrics):
+        epoch = self.last_epoch + 1
         self.last_epoch = epoch if epoch != 0 else 1  # ReduceLROnPlateau is called at the end of epoch, whereas others are called at beginning
         if self.last_epoch <= self.total_epoch:
-            warmup_lr = [base_lr * ((self.multiplier - 1.) * self.last_epoch / self.total_epoch + 1.) for base_lr in self.base_lrs]
+            if self.multiplier == 1.0:
+                warmup_lr = [base_lr * (float(self.last_epoch) / self.total_epoch) for base_lr in self.base_lrs]
+            else:
+                warmup_lr = [base_lr * ((self.multiplier - 1.) * self.last_epoch / self.total_epoch + 1.) for base_lr in self.base_lrs]
             for param_group, lr in zip(self.optimizer.param_groups, warmup_lr):
                 param_group['lr'] = lr
         else:
-            if epoch is None:
-                self.after_scheduler.step(metrics, None)
-            else:
-                self.after_scheduler.step(metrics, epoch - self.total_epoch)
+            self.after_scheduler.step(metrics)
 
-    def step_ReduceLROnPlateauMultiple(self, metrics, metrics2, metrics2_is_better, epoch=None):
-        if epoch is None:
-            epoch = self.last_epoch + 1
+    def step_ReduceLROnPlateauMultiple(self, metrics, metrics2, metrics2_is_better):
+        epoch = self.last_epoch + 1
         self.last_epoch = epoch if epoch != 0 else 1  # ReduceLROnPlateauMultiple is called at the end of epoch, whereas others are called at beginning
         if self.last_epoch <= self.total_epoch:
-            warmup_lr = [base_lr * ((self.multiplier - 1.) * self.last_epoch / self.total_epoch + 1.) for base_lr in self.base_lrs]
+            if self.multiplier == 1.0:
+                warmup_lr = [base_lr * (float(self.last_epoch) / self.total_epoch) for base_lr in self.base_lrs]
+            else:
+                warmup_lr = [base_lr * ((self.multiplier - 1.) * self.last_epoch / self.total_epoch + 1.) for base_lr in self.base_lrs]
             for param_group, lr in zip(self.optimizer.param_groups, warmup_lr):
                 param_group['lr'] = lr
         else:
-            if epoch is None:
-                self.after_scheduler.step(metrics, metrics2, metrics2_is_better, None)
-            else:
-                self.after_scheduler.step(metrics, metrics2, metrics2_is_better, epoch - self.total_epoch)
+            self.after_scheduler.step(metrics, metrics2, metrics2_is_better)
 
-    def step(self, epoch=None, metrics=None, metrics2=None, metrics2_is_better = None):
+    def step(self, metrics=None, metrics2=None, metrics2_is_better = None):
         if type(self.after_scheduler) == ReduceLROnPlateau:
-            self.step_ReduceLROnPlateau(metrics, epoch)
+            self.step_ReduceLROnPlateau(metrics)
         elif type(self.after_scheduler) == ReduceLROnPlateauMultiple:
-            self.step_ReduceLROnPlateauMultiple(metrics, metrics2, metrics2_is_better, epoch)
+            self.step_ReduceLROnPlateauMultiple(metrics, metrics2, metrics2_is_better)
         else:
             if self.finished and self.after_scheduler:
-                if epoch is None:
-                    self.after_scheduler.step(None)
-                else:
-                    self.after_scheduler.step(epoch - self.total_epoch)
+                self.after_scheduler.step()
                 self._last_lr = self.after_scheduler.get_last_lr()
             else:
-                return super(GradualWarmupScheduler, self).step(epoch)
+                return super(GradualWarmupScheduler, self).step()

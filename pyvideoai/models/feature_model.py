@@ -6,9 +6,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-class feature_model(nn.Module):
-    def __init__(self, input_feature_dim, num_layers=2, num_units=64, num_classes = 36):
-        super(feature_model, self).__init__()
+class FeatureModel(nn.Module):
+    def __init__(self, input_feature_dim, num_layers=2, num_units=64, num_classes = 36, activation='relu'):
+        super(FeatureModel, self).__init__()
+
+        assert activation in ['relu', 'leakyrelu']
+        self.activation = activation
 
         self.input_feature_dim = input_feature_dim
         self.block_dict = nn.ModuleDict()
@@ -24,24 +27,24 @@ class feature_model(nn.Module):
         for idx_layer in range(self.num_layers):
             self.block_dict['g_fcc_{}'.format(idx_layer)] = nn.Linear(out.shape[1], out_features=self.num_units, bias=True)
             out = self.block_dict['g_fcc_{}'.format(idx_layer)].forward(out)
-            self.block_dict['LeakyReLU_{}'.format(idx_layer)] = nn.LeakyReLU()
-            out = self.block_dict['LeakyReLU_{}'.format(idx_layer)].forward(out)
+            self.block_dict['ReLU_{}'.format(idx_layer)] = nn.LeakyReLU() if self.activation == 'leakyrelu' else nn.ReLU()
+            out = self.block_dict['ReLU_{}'.format(idx_layer)].forward(out)
             self.block_dict['BN_{}'.format(idx_layer)] = nn.BatchNorm1d(out.shape[1])
             out = self.block_dict['BN_{}'.format(idx_layer)].forward(out)
 
         if self.num_classes > 0:
-            self.block_dict['classify_fc_{}'.format(idx_layer)] = nn.Linear(out.shape[1], out_features=self.num_classes, bias=True)
-            out = self.block_dict['classify_fc_{}'.format(idx_layer)].forward(out)
+            self.block_dict['classify_fc'] = nn.Linear(out.shape[1], out_features=self.num_classes, bias=True)
+            out = self.block_dict['classify_fc'].forward(out)
 
         logger.info('Block built with output volume shape: %s', out.shape)
 
     def forward(self, x):
         for idx_layer in range(self.num_layers):
             x = self.block_dict['g_fcc_{}'.format(idx_layer)].forward(x)
-            x = self.block_dict['LeakyReLU_{}'.format(idx_layer)].forward(x)
+            x = self.block_dict['ReLU_{}'.format(idx_layer)].forward(x)
             x = self.block_dict['BN_{}'.format(idx_layer)].forward(x)
 
         if self.num_classes > 0:
-            x = self.block_dict['classify_fc_{}'.format(idx_layer)].forward(x)
+            x = self.block_dict['classify_fc'].forward(x)
 
         return x

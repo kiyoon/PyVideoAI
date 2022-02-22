@@ -79,8 +79,8 @@ def train_iter(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_a
     if clip_grad_max_norm is not None:
         # Unscales the gradients of optimiser's assigned params in-place
         amp_scaler.unscale_(optimiser)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_max_norm)
-        #torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_max_norm, error_if_nonfinite=False)   # For PyTorch 1.9.0 and above
+        #torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_max_norm)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_max_norm, error_if_nonfinite=False)   # For PyTorch 1.9.0 and above
 
     # If gradient clipping happened, the optimiser's gradients are already unscaled, so amp_scaler.step does not unscale them
     amp_scaler.step(optimiser)
@@ -633,7 +633,7 @@ def test_epoch_DALI(model, criterion, dataloader, data_unpack_func, num_classes,
 
     if is_scheduler_plateau:
         with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
-            scheduler.step(loss)
+            scheduler.step(metrics=loss)
 
     if rank == 0:
         vid_acc_top1, vid_acc_top5 = video_metrics.accuracy(topk=(1,5))
