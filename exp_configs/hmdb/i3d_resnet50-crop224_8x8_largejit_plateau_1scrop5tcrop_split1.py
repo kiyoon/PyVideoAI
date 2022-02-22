@@ -146,7 +146,11 @@ def load_model():
 
 
 # optional
-def load_pretrained(model):
+#def load_pretrained(model):
+#   return
+# optional
+def load_pretrained_postDDP(model):
+    # The script expects the model to be DDP
     model_cfg.load_pretrained_kinetics400(model, model_cfg.kinetics400_pretrained_path_8x8)
 
 def _dataloader_shape_to_model_input_shape(inputs):

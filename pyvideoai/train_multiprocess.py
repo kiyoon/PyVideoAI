@@ -200,6 +200,11 @@ def train(args):
             policies = cfg.model_cfg.get_optim_policies(model)
         else:
             policies = model.parameters()
+
+        if hasattr(cfg, 'load_pretrained'):
+            logger.warning('The behaviour of load_pretrained has changed. Now it is called before DDP, and the model is on CPU. Use `load_pretrained_postDDP` if your loading script expects the model to be DDP')
+            cfg.load_pretrained(model)
+
         # Determine the GPU used by the current process
         cur_device = torch.cuda.current_device()
         # Transfer the model to the current GPU device
@@ -253,8 +258,8 @@ def train(args):
             if rank == 0:
                 exp.init_summary()
 
-            if hasattr(cfg, 'load_pretrained'):
-                cfg.load_pretrained(model)
+            if hasattr(cfg, 'load_pretrained_postDDP'):
+                cfg.load_pretrained_postDDP(model)
 
         criterions = cfg.dataset_cfg.task.get_criterions(cfg, splits)
 

@@ -64,6 +64,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             flow_neighbours = 5,    # How many flow frames to stack.
             flow_folder_x = 'u',
             flow_folder_y = 'v',    # These are only needed for flow='RR'
+            video_id_to_label: dict = None,     # Pass a dictionary of mapping video ID to labels, and it will ignore the label in the CSV and get labels from here. Useful when using unsupported label types such as soft labels.
             ):
         """
         Construct the video loader with a given csv file. The format of
@@ -141,6 +142,9 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         else:
             raise ValueError(f'Not recognised flow format: {self.flow}. Choose one of RG (use red and green channels), RR (two greyscale images representing x and y directions)')
 
+        self.video_id_to_label = video_id_to_label
+        if video_id_to_label is not None:
+            logger.info(f'video_id_to_label is provided. It will replace the labels in the CSV file.')
 
         # For training mode, one single clip is sampled from every
         # video. For testing, NUM_ENSEMBLE_VIEWS clips are sampled from every
@@ -177,13 +181,16 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
                 assert len(path_label.split()) == 5
                 path, video_id, label, start_frame, end_frame = path_label.split()
 
-                if self.num_classes > 0:
-                    label_list = label.split(",")
-                    label = np.zeros(self.num_classes, dtype=np.float32)
-                    for label_idx in label_list:
-                        label[int(label_idx)] = 1.0       # one hot encoding
+                if self.video_id_to_label is None:
+                    if self.num_classes > 0:
+                        label_list = label.split(",")
+                        label = np.zeros(self.num_classes, dtype=np.float32)
+                        for label_idx in label_list:
+                            label[int(label_idx)] = 1.0       # one hot encoding
+                    else:
+                        label = int(label)
                 else:
-                    label = int(label)
+                    label = self.video_id_to_label(int(video_id))
 
                 for idx in range(self._num_clips):
                     self._path_to_frames.append(

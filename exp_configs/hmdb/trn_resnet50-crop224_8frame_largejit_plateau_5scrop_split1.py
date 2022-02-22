@@ -120,6 +120,8 @@ def load_model():
 # optional
 #def load_pretrained(model):
 #    return
+#def load_pretrained_postDDP(model):
+#    return
 
 def _dataloader_shape_to_model_input_shape(inputs):
     return model_cfg.NCTHW_to_model_input_shape(inputs)
