@@ -13,4 +13,4 @@ class SoftlabelRegressionLoss(nn.Module):
 
         loss = (targets * torch.log(preds)) + ((1 - targets) * torch.log(1-preds))
 
-        return -loss.sum(dim=-1))
+        return -loss.sum(dim=-1)
