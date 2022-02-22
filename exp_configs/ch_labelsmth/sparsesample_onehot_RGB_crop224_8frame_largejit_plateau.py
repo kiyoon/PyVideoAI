@@ -3,6 +3,7 @@ import os
 from pyvideoai.dataloaders.video_sparsesample_dataset import VideoSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
+from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
 from pyvideoai.utils import loader
 
 import torch
@@ -38,7 +39,7 @@ sample_index_code = 'pyvideoai'
 
 base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
 
-label_mode = 'onehot'  # onehot, instable_onehot, labelsmooth, proselflc
+label_mode = 'onehot'  # onehot, instable_onehot, labelsmooth, proselflc, soft_regression
 labelsmooth_factor = 0.1
 #proselflc_total_time = 2639 * 60 # 60 epochs
 proselflc_total_time = 263 * 40 # 60 epochs
@@ -56,6 +57,8 @@ def get_criterion(split):
             return torch.nn.CrossEntropyLoss()
     elif label_mode == 'instable_onehot':
         return InstableCrossEntropy()
+    elif label_mode == 'soft_regression':
+        return SoftlabelRegressionLoss()
     else:
         return torch.nn.CrossEntropyLoss()
 #
@@ -169,12 +172,12 @@ def get_data_unpack_func(split):
 def _get_torch_dataset(csv_path, split):
     mode = dataset_cfg.split2mode[split]
 
-    if split == 'val':
-        _test_scale = val_scale
-        _test_num_spatial_crops = val_num_spatial_crops
-    else:
+    if split.startswith('multicrop'):
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
+    else:
+        _test_scale = val_scale
+        _test_num_spatial_crops = val_num_spatial_crops
 
     return VideoSparsesampleDataset(csv_path, mode, 
             input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 

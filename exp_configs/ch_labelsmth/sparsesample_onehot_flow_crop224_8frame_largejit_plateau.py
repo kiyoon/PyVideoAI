@@ -169,12 +169,12 @@ def get_data_unpack_func(split):
 def _get_torch_dataset(csv_path, split):
     mode = dataset_cfg.split2mode[split]
 
-    if split in ['val', 'traindata_testmode', 'trainpartialdata_testmode']:
-        _test_scale = val_scale
-        _test_num_spatial_crops = val_num_spatial_crops
-    else:
+    if split.startswith('multicrop'):
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
+    else:
+        _test_scale = val_scale
+        _test_num_spatial_crops = val_num_spatial_crops
 
     return FramesSparsesampleDataset(csv_path, mode, 
             input_frame_length, 

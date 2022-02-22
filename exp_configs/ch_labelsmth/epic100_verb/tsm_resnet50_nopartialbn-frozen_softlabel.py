@@ -3,6 +3,7 @@ _exec_relative_('../tsm_resnet50_nopartialbn_base.py')
 
 base_learning_rate = 5e-6
 
+label_mode = 'soft_regression'
 
 pretrained_path = '/home/kiyoon/storage/experiments_ais2/experiments_labelsmooth/epic100_verb/tsm_resnet50_nopartialbn/onehot/version_008/weights/best.pth'
 import torch
@@ -20,12 +21,12 @@ import pickle
 def _get_torch_dataset(csv_path, split):
     mode = dataset_cfg.split2mode[split]
 
-    if split == 'val':
-        _test_scale = val_scale
-        _test_num_spatial_crops = val_num_spatial_crops
-    else:
+    if split.startswith('multicrop'):
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
+    else:
+        _test_scale = val_scale
+        _test_num_spatial_crops = val_num_spatial_crops
 
     if split == 'train':
         pickle_path = '/home/kiyoon/storage/5-neighbours-from-features_epoch_0020_traindata_testmode_oneclip.pkl'
@@ -35,7 +36,6 @@ def _get_torch_dataset(csv_path, split):
         video_id_to_label = {}
         for video_id, soft_label in zip(video_ids, soft_labels):
             video_id_to_label[video_id] = soft_label
-
     else:
         video_id_to_label = None    # single label
 

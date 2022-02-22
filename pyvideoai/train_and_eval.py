@@ -290,7 +290,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
             elif split == 'multicropval':
                 eval_mode = "Multi-crop Eval"
             else:
-                eval_mode = f"{split} Eval"
+                eval_mode = "Eval"
         """
         if world_size > 1:
             # Number of iterations can be different over processes. Some processes need to wait until others finish.
