@@ -5,8 +5,9 @@ class SoftlabelRegressionLoss(nn.Module):
     """Similar to negative log likelihood,
     but we use sigmoid instead of softmax and we have soft labels
     """
-    def __init__(self):
+    def __init__(self, eps=1e-6):
         super().__init__()
+        self.eps = eps
 
 
     def forward(self, inputs: torch.Tensor, targets: torch.Tensor):
@@ -15,6 +16,6 @@ class SoftlabelRegressionLoss(nn.Module):
 
         preds = torch.sigmoid(inputs)
 
-        loss = (targets * torch.log(preds)) + ((1 - targets) * torch.log(1-preds))
+        loss = (targets * torch.log(preds+self.eps)) + ((1 - targets) * torch.log(1-preds+self.eps))
 
         return -loss.sum(dim=-1).mean(dim=0)
