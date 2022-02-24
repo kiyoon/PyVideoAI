@@ -3,18 +3,21 @@ import pickle
 import numpy as np
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
 import torch
+import os
 
 #batch_size = 8  # per process (per GPU)
 def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
-    devices=list(range(torch.cuda.device_count()))
-    vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
-    if vram > 20e+9:
-        return 2048
-    elif vram > 10e+9:
-        return 1024
-    return 64
+    def default():
+        devices=list(range(torch.cuda.device_count()))
+        vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
+        if vram > 20e+9:
+            return 2048
+        elif vram > 10e+9:
+            return 1024
+        return 64
+    return int(os.getenv('PYVIDEOAI_BATCHSIZE', default()))
 
 def val_batch_size():
     return batch_size() if callable(batch_size) else batch_size
@@ -23,7 +26,7 @@ train_label_type = '5neighbours'    # epic100_original, 5neighbours
 loss_type = 'soft_regression'   # soft_regression, crossentropy
 
 #clip_grad_max_norm = 20
-base_learning_rate = 5e-6      # when batch_size == 1 and #GPUs == 1
+learning_rate = float(os.getenv('PYVIDEOAI_LR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
 #### OPTIONAL
 def get_criterion(split):
@@ -67,22 +70,20 @@ def optimiser(params):
     Thus, LR = base_LR * batch_size_per_proc * (num_GPUs**2)
     """
 
-    batchsize = batch_size() if callable(batch_size) else batch_size
-    world_size = get_world_size()
+    #return torch.optim.SGD(params, lr = learning_rate, momentum = 0.9, weight_decay = 5e-4)
+    return torch.optim.Adam(params, lr = learning_rate)
 
-    max_lr = base_learning_rate * 16 * (4**2)
-    learning_rate = min(base_learning_rate * batchsize * (world_size**2), max_lr)
-
-    return torch.optim.SGD(params, lr = learning_rate, momentum = 0.9, weight_decay = 5e-4)
-
-from pyvideoai.utils.lr_scheduling import GradualWarmupScheduler
+#from pyvideoai.utils.lr_scheduling import GradualWarmupScheduler
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
-    after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+    return None
+#    after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
 
-    return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
+#    return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
 
 def load_model():
-    return model_cfg.load_model(dataset_cfg.num_classes, 2048, num_layers=2, num_units=1024)
+    num_layers = int(os.getenv('PYVIDEOAI_NUMLAYERS', 2))
+    num_units = int(os.getenv('PYVIDEOAI_NUMUNITS', 1024))
+    return model_cfg.load_model(dataset_cfg.num_classes, 2048, num_layers=num_layers, num_units=num_units)
 
 # If you need to extract features, use this. It can be defined in model_cfg too.
 #def feature_extract_model(model):
@@ -228,5 +229,5 @@ predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
 """How will you plot"""
 #from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
 #metric_plotter = DefaultMetricPlotter()
-#from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter
-#telegram_reporter = DefaultTelegramReporter()
+from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter
+telegram_reporter = DefaultTelegramReporter(include_exp_rootdir = True, ignore_figures = True)
