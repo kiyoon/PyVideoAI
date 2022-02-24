@@ -11,18 +11,10 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         super().__init__(activation=activation)
 
 
-    def clean_data(self, num_classes: int = None):
+    def clean_data(self):
         super().clean_data()
-        if num_classes is None:
-            self.num_classes = None
-            self.num_seen_samples = None
-            self.num_true_positives = None 
-            self.last_calculated_metrics = None
-        else:
-            self.num_classes = num_classes
-            self.num_seen_samples = [0] * num_classes
-            self.num_true_positives = [0] * num_classes
-            self.last_calculated_metrics = 0.
+        self.num_seen_samples = None
+        self.num_true_positives = None 
 
 
 
@@ -33,19 +25,16 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         if labels.dim() == 2:
             # Convert 2D one-hot label to 1D label
             labels = labels.argmax(dim=1)
-        batch_size = labels.size(0)
 
-        num_classes = clip_predictions.size(1)
-        if self.num_classes is None:
-            self.clean_data(num_classes)
-        else:
-            assert num_classes == self.num_classes, f'Different number of classes used. Previously it was {self.num_classes} but got {num_classes}.'
+        if self.num_seen_samples is None:
+            self.num_seen_samples = [0] * self.num_classes
+            self.num_true_positives = [0] * self.num_classes
 
         pred_labels = torch.argmax(clip_predictions, dim=1)
         for pred, label in zip(pred_labels, labels):
             self.num_seen_samples[label] += 1
             if pred == label:
-                self.num_true_positives += 1
+                self.num_true_positives[label] += 1
 
 
     def calculate_metrics(self):

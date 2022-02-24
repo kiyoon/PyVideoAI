@@ -1,8 +1,10 @@
 import os
+import pickle
 
 from pyvideoai.dataloaders import FramesSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
+from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
 from pyvideoai.utils import loader
 
 import torch
@@ -37,7 +39,9 @@ sample_index_code = 'pyvideoai'
 
 base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
 
-label_mode = 'onehot'  # onehot, instable_onehot, labelsmooth, proselflc
+train_label_type = 'epic100_original'    # epic100_original, 5neighbours
+loss_type = 'crossentropy'   # soft_regression, crossentropy, labelsmooth, proselflc
+
 labelsmooth_factor = 0.1
 #proselflc_total_time = 2639 * 60 # 60 epochs
 proselflc_total_time = 263 * 40 # 60 epochs
@@ -46,15 +50,15 @@ proselflc_exp_base = 1.
 
 #### OPTIONAL
 def get_criterion(split):
-    if label_mode == 'labelsmooth':
+    if loss_type == 'labelsmooth':
         return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
-    elif label_mode == 'proselflc':
+    elif loss_type == 'proselflc':
         if split == 'train':
             return ProSelfLC(proselflc_total_time, proselflc_exp_base)
         else:
             return torch.nn.CrossEntropyLoss()
-    elif label_mode == 'instable_onehot':
-        return InstableCrossEntropy()
+    elif loss_type == 'soft_regression':
+        return SoftlabelRegressionLoss()
     else:
         return torch.nn.CrossEntropyLoss()
 #
@@ -176,6 +180,19 @@ def _get_torch_dataset(csv_path, split):
         _test_scale = val_scale
         _test_num_spatial_crops = val_num_spatial_crops
 
+    video_id_to_label = None
+    if split == 'train':
+        if train_label_type == '5neighbours':
+            video_id_to_label = {}
+            softlabel_pickle_path = '/home/kiyoon/storage/tsm_flow_neigh/5-neighbours-from-features_epoch_0009_traindata_testmode_oneclip.pkl'
+            with open(softlabel_pickle_path, 'rb') as f:
+                d = pickle.load(f)
+            video_ids, soft_labels = d['query_ids'], d['soft_labels']
+
+            for video_id, soft_label in zip(video_ids, soft_labels):
+                video_id_to_label[video_id] = soft_label
+
+
     return FramesSparsesampleDataset(csv_path, mode, 
             input_frame_length, 
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
@@ -192,6 +209,7 @@ def _get_torch_dataset(csv_path, split):
             flow_neighbours = 5,
             flow_folder_x = 'u',
             flow_folder_y = 'v',
+            video_id_to_label = video_id_to_label,
             )
 
 def get_torch_dataset(split):
@@ -227,11 +245,12 @@ last_activation = 'softmax'   # or, you can pass a callable function like `torch
 how to calculate metrics
 """
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
 best_metric = ClipAccuracyMetric()
-metrics = {'train': [ClipAccuracyMetric()],
+metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric()],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
-        'val': [best_metric],
+        'val': [best_metric, ClipMeanPerclassAccuracyMetric()],
         'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
         }
 

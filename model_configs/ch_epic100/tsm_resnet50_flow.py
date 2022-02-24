@@ -39,14 +39,17 @@ def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8):
     model_load_state_dict_nostrict(model, new_state_dict, partial=True)
 
     del checkpoint, new_state_dict
-    class VerbModel(Module):
-        def __init__(self, model):
-            super().__init__()
-            self.model = model
-        def forward(self, x):
-            return self.model(x)[:num_classes]
 
-    return VerbModel(model)
+    model.new_fc = torch.nn.Linear(2048, num_classes)
+    return model
+#    class VerbModel(Module):
+#        def __init__(self, model):
+#            super().__init__()
+#            self.model = model
+#        def forward(self, x):
+#            return self.model(x)[:num_classes]
+#
+#    return VerbModel(model)
 
 
 def NCTHW_to_model_input_shape(inputs):
@@ -62,14 +65,14 @@ def model_input_shape_to_NTHWC(inputs, num_channels=3):
 
 def get_optim_policies(model):
     # return model.parameters()     # no policies
-    return model.model.get_optim_policies()
+    return model.get_optim_policies()
 
 # If you need to extract features, use this. It can be defined in exp_configs too.
 def feature_extract_model(model):
     class FeatureExtractModel(Module):
         def __init__(self, model):
             super().__init__()
-            self.model = model.model 
+            self.model = model
         def forward(self, x):
             batch_size = x.shape[0]
             imagenet_features = self.model.features(x)

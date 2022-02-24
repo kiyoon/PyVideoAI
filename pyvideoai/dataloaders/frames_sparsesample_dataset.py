@@ -190,7 +190,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
                     else:
                         label = int(label)
                 else:
-                    label = self.video_id_to_label(int(video_id))
+                    label = self.video_id_to_label[int(video_id)]
 
                 for idx in range(self._num_clips):
                     self._path_to_frames.append(
