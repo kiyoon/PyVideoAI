@@ -21,8 +21,12 @@ class Metric(ABC):
         self.label_size = None      # either num_classes (multi-label) or 1 (one-label)
         self.last_calculated_metrics = 0.
 
-    def __init__(self, activation=None):
+    def __init__(self, activation=None, video_id_to_label: dict[np.array] = None):
+        """
+        video_id_to_label: If given, completely ignore the original label and find labels from this dictionary. Useful when sometimes using different labels to evaluate.
+        """
         self.activation = activation
+        self.video_id_to_label = None
         self.split = None           # Note that these are permanent after initialisation and shouldn't change with self.clean_data()
         self.clean_data()
 
@@ -70,6 +74,9 @@ class Metric(ABC):
         """By default, we will average the clip predictions with the same video_ids.
         If averaging does not fit your needs, override and redefine this function as you'd like.
         """ 
+        if self.video_id_to_label is not None:
+            labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids]), dtype=video_ids.dtype, device=video_ids.device)
+
         video_ids, clip_predictions, labels = self._check_data_shape(video_ids, clip_predictions, labels)
 
         with torch.no_grad():

@@ -7,8 +7,8 @@ from .metric import Metric, AverageMetric
 class ClipMeanPerclassAccuracyMetric(Metric):
     """Don't need activation softmax for clip accuracy calculation.
     """
-    def __init__(self, activation=None):
-        super().__init__(activation=activation)
+    def __init__(self, activation=None, video_id_to_label: dict[np.array] = None):
+        super().__init__(activation=activation, video_id_to_label=video_id_to_label)
 
 
     def clean_data(self):

@@ -29,7 +29,7 @@ def accuracy(output:torch.Tensor, target:torch.Tensor, topk=(1,)):
 class ClipAccuracyMetric(Metric):
     """Don't need activation softmax for clip accuracy calculation.
     """
-    def __init__(self, topk=(1,), activation=None):
+    def __init__(self, topk=(1,), activation=None, video_id_to_label: dict[np.array] = None):
         if isinstance(topk, tuple):
             self.topk = topk
         elif isinstance(topk, int):
@@ -37,7 +37,7 @@ class ClipAccuracyMetric(Metric):
         else:
             raise ValueError(f'topk {topk} not recognised. It must be a tuple or integer.')
 
-        super().__init__(activation=activation)
+        super().__init__(activation=activation, video_id_to_label = video_id_to_label)
 
 
     def clean_data(self):
@@ -149,7 +149,7 @@ class ClipAccuracyMetric(Metric):
         return self.num_seen_samples
 
 class VideoAccuracyMetric(AverageMetric):
-    def __init__(self, topk=(1,), activation='softmax'):
+    def __init__(self, topk=(1,), activation='softmax', video_id_to_label: dict[np.array] = None):
         if isinstance(topk, tuple):
             self.topk = topk
         elif isinstance(topk, int):
@@ -157,7 +157,7 @@ class VideoAccuracyMetric(AverageMetric):
         else:
             raise ValueError(f'topk {topk} not recognised. It must be a tuple or integer.')
 
-        super().__init__(activation=activation)
+        super().__init__(activation=activation, video_id_to_label = video_id_to_label)
 
     def clean_data(self):
         super().clean_data()
