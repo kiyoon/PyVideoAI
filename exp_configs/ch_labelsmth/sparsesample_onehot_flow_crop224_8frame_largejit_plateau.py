@@ -246,11 +246,12 @@ how to calculate metrics
 """
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
+from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
 best_metric = ClipAccuracyMetric()
 metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric()],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
-        'val': [best_metric, ClipMeanPerclassAccuracyMetric()],
+        'val': [best_metric, ClipMeanPerclassAccuracyMetric(), ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'])],
         'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
         }
 
