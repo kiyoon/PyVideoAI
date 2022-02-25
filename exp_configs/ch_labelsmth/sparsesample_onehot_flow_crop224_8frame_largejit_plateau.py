@@ -37,7 +37,7 @@ greyscale=False
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
-base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
+base_learning_rate = 5e-6      # when batch_size == 1 and #GPUs == 1
 
 train_label_type = 'epic100_original'    # epic100_original, 5neighbours
 loss_type = 'crossentropy'   # soft_regression, crossentropy, labelsmooth, proselflc
