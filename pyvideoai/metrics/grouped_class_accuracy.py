@@ -1,3 +1,4 @@
+from typing import List
 import torch
 import numpy as np
 from .metric import Metric
@@ -9,18 +10,18 @@ class ClipGroupedClassAccuracyMetric(Metric):
     Compute accuracy for each group of classes. For example, head and tail classes.
     
     """
-    def __init__(self, class_groups: list[list[int]], group_names: list[str], **kwargs):
+    def __init__(self, class_groups: List[List[int]], group_names: List[str], **kwargs):
         """
         Params:
             class_groups: list of list of class indices. For example, if 0,2 is a head class group and 1,3 is a tail group, [[0,2], [1,3]].
             group_names: name of each group. For example, ['head', 'tail']
         """
-        super().__init__(**kwargs)
-
-        assert len(class_groups) == len(group_names), f'Length of class_groups ({len(class_groups)}) and group_names ({len(group_names)}) does not match.'
         self.num_groups = len(class_groups)
         self.class_groups = class_groups
         self.group_names = group_names
+        assert len(class_groups) == len(group_names), f'Length of class_groups ({len(class_groups)}) and group_names ({len(group_names)}) does not match.'
+
+        super().__init__(**kwargs)
 
         self.label_to_group_idx = {}
         for idx, class_group in enumerate(class_groups):
@@ -30,14 +31,18 @@ class ClipGroupedClassAccuracyMetric(Metric):
 
 
     def clean_data(self):
+        """
+        Note that this doesn't change the group definitions.
+        """
         super().clean_data()
         self.num_seen_samples = [0] * self.num_groups
         self.num_true_positives = [0] * self.num_groups 
+        self.last_calculated_metrics = (0.,) * self.num_groups
 
 
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
-        result = super().add_clip_predictions(video_ids, clip_predictions, labels)
-        if result is None:
+        video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
+        if video_ids is None:
             return      # sometimes, after filtering the samples, there can be no samples to do anything.
 
         assert labels.dim() in [1,2], f'target has to be 1D or 2D tensor but got {target.dim()}-D.'
@@ -47,7 +52,7 @@ class ClipGroupedClassAccuracyMetric(Metric):
 
         pred_labels = torch.argmax(clip_predictions, dim=1)
         for pred, label in zip(pred_labels, labels):
-            group_idx = self.label_to_group_idx[label]
+            group_idx = self.label_to_group_idx[label.item()]
             self.num_seen_samples[group_idx] += 1
             if pred == label:
                 self.num_true_positives[group_idx] += 1
@@ -80,7 +85,7 @@ class ClipGroupedClassAccuracyMetric(Metric):
             prefix = f'{self.split}_'
 
         messages = [f'{prefix}{name}acc: {value:.4f}' for name, value in zip(self.group_names, self.last_calculated_metrics)]
-        message = messages.join(' - ')
+        message = ' - '.join(messages)
         return message
 
 

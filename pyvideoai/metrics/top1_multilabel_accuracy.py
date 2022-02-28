@@ -24,11 +24,11 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
         if video_ids is None:
             return      # sometimes, after filtering the samples, there can be no samples to do anything.
 
-        assert labels.dim() == 2, f'target has to be a 2D tensor with ones and zeros but got {target.dim()}-D.'
+        assert labels.dim() == 2, f'labels has to be a 2D tensor with ones and zeros but got {labels.dim()}-D.'
 
         pred_labels = torch.argmax(clip_predictions, dim=1)
         for pred, label in zip(pred_labels, labels):
-            assert label[pred] in [1., 0.], f'Label in Top1 Multilabel Accuracy metric has to be ones and zeros but got {label[pred]}'.
+            assert label[pred] in [1., 0.], f'Label in Top1 Multilabel Accuracy metric has to be ones and zeros but got {label[pred]}.'
 
             self.num_seen_samples += 1
             if label[pred] == 1.:
@@ -36,7 +36,7 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
 
 
     def calculate_metrics(self):
-        self.last_calculated_metrics = self.num_true_positives / self.num_seen_samples 
+        self.last_calculated_metrics = self.num_true_positives / self.num_seen_samples if self.num_seen_samples > 0 else 0.
 
     def types_of_metrics(self):
         return float

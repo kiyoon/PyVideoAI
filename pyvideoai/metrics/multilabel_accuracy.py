@@ -26,7 +26,7 @@ class ClipMultilabelAccuracyMetric(Metric):
         if video_ids is None:
             return      # sometimes, after filtering the samples, there can be no samples to do anything.
 
-        assert labels.dim() == 2, f'target has to be a 2D tensor with ones and zeros but got {target.dim()}-D.'
+        assert labels.dim() == 2, f'labels has to be a 2D tensor with ones and zeros but got {labels.dim()}-D.'
 
 
         for pred, label in zip(clip_predictions, labels):
@@ -44,7 +44,7 @@ class ClipMultilabelAccuracyMetric(Metric):
         self.num_seen_samples += video_ids.size(0)
 
     def calculate_metrics(self):
-        self.last_calculated_metrics = sum(self.accuracy_per_clip) / self.num_seen_samples 
+        self.last_calculated_metrics = sum(self.accuracy_per_clip) / self.num_seen_samples  if self.num_seen_samples > 0 else 0.
 
     def types_of_metrics(self):
         return float

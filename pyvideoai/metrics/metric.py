@@ -1,4 +1,5 @@
 from abc import *
+from typing import Dict
 
 import logging
 logger = logging.getLogger(__name__)
@@ -7,7 +8,6 @@ import torch
 import numpy as np
 def is_numpy(instance):
     return type(instance).__module__ == np.__name__
-
 
 
 class Metric(ABC):
@@ -21,14 +21,14 @@ class Metric(ABC):
         self.label_size = None      # either num_classes (multi-label) or 1 (one-label)
         self.last_calculated_metrics = 0.
 
-    def __init__(self, activation=None, video_id_to_label: dict[np.array] = None, video_id_to_label_missing_action: str = 'error'):
+    def __init__(self, activation=None, video_id_to_label: Dict[int, np.array] = None, video_id_to_label_missing_action: str = 'error'):
         """
         video_id_to_label: If given, completely ignore the original label and find labels from this dictionary. Useful when sometimes using different labels to evaluate.
         video_id_to_label_missing_action: If video_id_to_label is given, choose what to do when you can't find the label, in 'error', 'skip', and 'original_label'.
                                         'skip' will ignore the samples. Make sure your metrics support inputs with zero-length tensors.
         """
         self.activation = activation
-        self.video_id_to_label = None
+        self.video_id_to_label = video_id_to_label
         assert video_id_to_label_missing_action in ['error', 'skip', 'noupdate'], f'You chose wrong mode: {video_id_to_label_missing_action}'
         self.video_id_to_label_missing_action = video_id_to_label_missing_action
         self.split = None           # Note that these are permanent after initialisation and shouldn't change with self.clean_data()
@@ -85,21 +85,23 @@ class Metric(ABC):
             return          # sometimes, after filtering out samples of interest, there will be no samples to do anything.
         ```
         """ 
-        if self.video_id_to_label is not None:
-            if self.video_id_to_label_missing_action == 'error':
-                labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids]), dtype=video_ids.dtype, device=video_ids.device)
-            elif self.video_id_to_label_missing_action == 'original_label':
-                labels = torch.tensor(np.array([self.video_id_to_label[vid] if vid in self.video_id_to_label.keys() else labels[idx] for idx, vid in enumerate(video_ids)]), dtype=video_ids.dtype, device=video_ids.device)
-            else:   # skip
-                labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids if vid in self.video_id_to_label.keys()]), dtype=video_ids.dtype, device=video_ids.device)
-                if len(labels) == 0:
-                    return None, None, None
-                video_ids = torch.tensor(np.array([video_ids[idx] for idx, vid in enumerate(video_ids) if vid in self.video_id_to_label.keys()]), dtype=video_ids.dtype, device=video_ids.device)
-                clip_predictions = torch.tensor(np.array([clip_predictions[idx] for idx, vid in enumerate(video_ids) if vid in self.video_id_to_label.keys()]), dtype=video_ids.dtype, device=video_ids.device)
-
         video_ids, clip_predictions, labels = self._check_data_shape(video_ids, clip_predictions, labels)
 
         with torch.no_grad():
+            if self.video_id_to_label is not None:
+                if self.video_id_to_label_missing_action == 'error':
+                    labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids]), dtype=video_ids.dtype, device=video_ids.device)
+                elif self.video_id_to_label_missing_action == 'original_label':
+                    labels = torch.tensor(np.array([self.video_id_to_label[vid] if vid in self.video_id_to_label.keys() else labels[idx] for idx, vid in enumerate(video_ids)]), dtype=video_ids.dtype, device=video_ids.device)
+                else:   # skip
+                    video_ids_numpy = video_ids.cpu().numpy().astype(int)
+                    labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids_numpy if vid in self.video_id_to_label.keys()]), dtype=video_ids.dtype, device=video_ids.device)
+                    if len(labels) == 0:
+                        return None, None, None
+                    video_ids = torch.stack([video_ids[idx] for idx, vid in enumerate(video_ids_numpy) if vid in self.video_id_to_label.keys()])
+                    clip_predictions = torch.stack([clip_predictions[idx] for idx, vid in enumerate(video_ids_numpy) if vid in self.video_id_to_label.keys()])
+
+
             self._check_num_classes(clip_predictions, labels)
             clip_predictions = self._apply_activation(clip_predictions)
 
@@ -275,7 +277,7 @@ class AverageMetric(Metric):
         video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
         with torch.no_grad():
             for video_id, clip_prediction, label in zip(video_ids, clip_predictions, labels):
-                video_id = video_id.item()
+                video_id = round(video_id.item())
                 #label = label.item()
                 if video_id in self.data.keys():
                     assert torch.equal(self.data[video_id]['label'], label), "Label not consistent between clips from the same video. Video id: %d, label: %s and %s" % (video_id, str(self.data[video_id]['label']), str(label))
