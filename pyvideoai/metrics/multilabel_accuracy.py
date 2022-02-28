@@ -17,7 +17,6 @@ class ClipMultilabelAccuracyMetric(Metric):
 
     def clean_data(self):
         super().clean_data()
-        self.num_seen_samples = 0
         self.accuracy_per_clip = []
 
 
@@ -32,7 +31,7 @@ class ClipMultilabelAccuracyMetric(Metric):
         for pred, label in zip(clip_predictions, labels):
             label_indices = (label == 1.).nonzero(as_tuple=False)
             num_labels = len(label_indices)
-            _, pred_top_indices = torch.topk(clip_predictions, num_labels, largest=True)
+            _, pred_top_indices = torch.topk(pred, num_labels, largest=True)
             num_true_preds = 0
             for pred_index in pred_top_indices:
                 if pred_index in label_indices:
@@ -41,10 +40,9 @@ class ClipMultilabelAccuracyMetric(Metric):
             accuracy_this_clip = num_true_preds / num_labels
             self.accuracy_per_clip.append(accuracy_this_clip)
 
-        self.num_seen_samples += video_ids.size(0)
 
     def calculate_metrics(self):
-        self.last_calculated_metrics = sum(self.accuracy_per_clip) / self.num_seen_samples  if self.num_seen_samples > 0 else 0.
+        self.last_calculated_metrics = sum(self.accuracy_per_clip) / len(self) if len(self) > 0 else 0.
 
     def types_of_metrics(self):
         return float
@@ -119,5 +117,5 @@ class ClipMultilabelAccuracyMetric(Metric):
         return value_1 > value_2 
 
     def __len__(self):
-        return self.num_seen_samples
+        return len(self.accuracy_per_clip)
 
