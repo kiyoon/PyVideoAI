@@ -10,8 +10,8 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
 
     Don't need activation softmax for clip accuracy calculation.
     """
-    def __init__(self, , activation=None, video_id_to_label: dict[np.array] = None):
-        super().__init__(activation=activation, video_id_to_label=video_id_to_label)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def clean_data(self):
         super().clean_data()
@@ -20,7 +20,9 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
 
 
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
-        super().add_clip_predictions(video_ids, clip_predictions, labels)
+        video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
+        if video_ids is None:
+            return      # sometimes, after filtering the samples, there can be no samples to do anything.
 
         assert labels.dim() == 2, f'target has to be a 2D tensor with ones and zeros but got {target.dim()}-D.'
 

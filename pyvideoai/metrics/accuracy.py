@@ -29,7 +29,7 @@ def accuracy(output:torch.Tensor, target:torch.Tensor, topk=(1,)):
 class ClipAccuracyMetric(Metric):
     """Don't need activation softmax for clip accuracy calculation.
     """
-    def __init__(self, topk=(1,), activation=None, video_id_to_label: dict[np.array] = None):
+    def __init__(self, topk=(1,), **kwargs):
         if isinstance(topk, tuple):
             self.topk = topk
         elif isinstance(topk, int):
@@ -37,7 +37,7 @@ class ClipAccuracyMetric(Metric):
         else:
             raise ValueError(f'topk {topk} not recognised. It must be a tuple or integer.')
 
-        super().__init__(activation=activation, video_id_to_label = video_id_to_label)
+        super().__init__(**kwargs)
 
 
     def clean_data(self):
@@ -48,7 +48,9 @@ class ClipAccuracyMetric(Metric):
 
 
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
-        super().add_clip_predictions(video_ids, clip_predictions, labels)
+        video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
+        if video_ids is None:
+            return      # sometimes, after filtering the samples, there can be no samples to do anything.
 
         maxk = max(self.topk)
         assert labels.dim() in [1,2], f'target has to be 1D or 2D tensor but got {target.dim()}-D.'
@@ -149,7 +151,7 @@ class ClipAccuracyMetric(Metric):
         return self.num_seen_samples
 
 class VideoAccuracyMetric(AverageMetric):
-    def __init__(self, topk=(1,), activation='softmax', video_id_to_label: dict[np.array] = None):
+    def __init__(self, topk=(1,), **kwargs):
         if isinstance(topk, tuple):
             self.topk = topk
         elif isinstance(topk, int):
@@ -157,7 +159,7 @@ class VideoAccuracyMetric(AverageMetric):
         else:
             raise ValueError(f'topk {topk} not recognised. It must be a tuple or integer.')
 
-        super().__init__(activation=activation, video_id_to_label = video_id_to_label)
+        super().__init__(**kwargs)
 
     def clean_data(self):
         super().clean_data()

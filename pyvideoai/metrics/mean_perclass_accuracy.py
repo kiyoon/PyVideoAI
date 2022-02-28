@@ -7,8 +7,8 @@ from .metric import Metric, AverageMetric
 class ClipMeanPerclassAccuracyMetric(Metric):
     """Don't need activation softmax for clip accuracy calculation.
     """
-    def __init__(self, activation=None, video_id_to_label: dict[np.array] = None):
-        super().__init__(activation=activation, video_id_to_label=video_id_to_label)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
     def clean_data(self):
@@ -19,7 +19,9 @@ class ClipMeanPerclassAccuracyMetric(Metric):
 
 
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
-        super().add_clip_predictions(video_ids, clip_predictions, labels)
+        video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
+        if video_ids is None:
+            return      # sometimes, after filtering the samples, there can be no samples to do anything.
 
         assert labels.dim() in [1,2], f'target has to be 1D or 2D tensor but got {target.dim()}-D.'
         if labels.dim() == 2:

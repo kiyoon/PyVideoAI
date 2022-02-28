@@ -9,13 +9,13 @@ class ClipGroupedClassAccuracyMetric(Metric):
     Compute accuracy for each group of classes. For example, head and tail classes.
     
     """
-    def __init__(self, class_groups: list[list[int]], group_names: list[str], activation=None, video_id_to_label: dict[np.array] = None):
+    def __init__(self, class_groups: list[list[int]], group_names: list[str], **kwargs):
         """
         Params:
             class_groups: list of list of class indices. For example, if 0,2 is a head class group and 1,3 is a tail group, [[0,2], [1,3]].
             group_names: name of each group. For example, ['head', 'tail']
         """
-        super().__init__(activation=activation, video_id_to_label=video_id_to_label)
+        super().__init__(**kwargs)
 
         assert len(class_groups) == len(group_names), f'Length of class_groups ({len(class_groups)}) and group_names ({len(group_names)}) does not match.'
         self.num_groups = len(class_groups)
@@ -36,7 +36,9 @@ class ClipGroupedClassAccuracyMetric(Metric):
 
 
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
-        super().add_clip_predictions(video_ids, clip_predictions, labels)
+        result = super().add_clip_predictions(video_ids, clip_predictions, labels)
+        if result is None:
+            return      # sometimes, after filtering the samples, there can be no samples to do anything.
 
         assert labels.dim() in [1,2], f'target has to be 1D or 2D tensor but got {target.dim()}-D.'
         if labels.dim() == 2:

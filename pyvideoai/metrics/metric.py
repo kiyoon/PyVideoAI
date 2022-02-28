@@ -21,12 +21,16 @@ class Metric(ABC):
         self.label_size = None      # either num_classes (multi-label) or 1 (one-label)
         self.last_calculated_metrics = 0.
 
-    def __init__(self, activation=None, video_id_to_label: dict[np.array] = None):
+    def __init__(self, activation=None, video_id_to_label: dict[np.array] = None, video_id_to_label_missing_action: str = 'error'):
         """
         video_id_to_label: If given, completely ignore the original label and find labels from this dictionary. Useful when sometimes using different labels to evaluate.
+        video_id_to_label_missing_action: If video_id_to_label is given, choose what to do when you can't find the label, in 'error', 'skip', and 'original_label'.
+                                        'skip' will ignore the samples. Make sure your metrics support inputs with zero-length tensors.
         """
         self.activation = activation
         self.video_id_to_label = None
+        assert video_id_to_label_missing_action in ['error', 'skip', 'noupdate'], f'You chose wrong mode: {video_id_to_label_missing_action}'
+        self.video_id_to_label_missing_action = video_id_to_label_missing_action
         self.split = None           # Note that these are permanent after initialisation and shouldn't change with self.clean_data()
         self.clean_data()
 
@@ -73,9 +77,25 @@ class Metric(ABC):
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
         """By default, we will average the clip predictions with the same video_ids.
         If averaging does not fit your needs, override and redefine this function as you'd like.
+
+        Using this function in a child class:
+        ```
+        video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
+        if video_ids is None:
+            return          # sometimes, after filtering out samples of interest, there will be no samples to do anything.
+        ```
         """ 
         if self.video_id_to_label is not None:
-            labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids]), dtype=video_ids.dtype, device=video_ids.device)
+            if self.video_id_to_label_missing_action == 'error':
+                labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids]), dtype=video_ids.dtype, device=video_ids.device)
+            elif self.video_id_to_label_missing_action == 'original_label':
+                labels = torch.tensor(np.array([self.video_id_to_label[vid] if vid in self.video_id_to_label.keys() else labels[idx] for idx, vid in enumerate(video_ids)]), dtype=video_ids.dtype, device=video_ids.device)
+            else:   # skip
+                labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids if vid in self.video_id_to_label.keys()]), dtype=video_ids.dtype, device=video_ids.device)
+                if len(labels) == 0:
+                    return None, None, None
+                video_ids = torch.tensor(np.array([video_ids[idx] for idx, vid in enumerate(video_ids) if vid in self.video_id_to_label.keys()]), dtype=video_ids.dtype, device=video_ids.device)
+                clip_predictions = torch.tensor(np.array([clip_predictions[idx] for idx, vid in enumerate(video_ids) if vid in self.video_id_to_label.keys()]), dtype=video_ids.dtype, device=video_ids.device)
 
         video_ids, clip_predictions, labels = self._check_data_shape(video_ids, clip_predictions, labels)
 

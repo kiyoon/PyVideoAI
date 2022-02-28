@@ -6,8 +6,8 @@ from .AP import mAP
 from sklearn.metrics import average_precision_score
 
 class Clip_mAPMetric(ClipMetric):
-    def __init__(self, activation='sigmoid', video_id_to_label: dict[np.array] = None, backend='CATER'):
-        super().__init__(activation=activation, video_id_to_label = video_id_to_label)
+    def __init__(self, activation='sigmoid', backend='CATER', **kwargs):
+        super().__init__(activation=activation, **kwargs)
 
         assert backend in ['CATER', 'sklearn'], f'Backend not identified: {backend}'
         self.backend = backend
@@ -99,8 +99,8 @@ class Clip_mAPMetric(ClipMetric):
 
 
 class Video_mAPMetric(AverageMetric):
-    def __init__(self, activation='sigmoid', video_id_to_label: dict[np.array] = None, backend='CATER'):
-        super().__init__(activation=activation, video_id_to_label = video_id_to_label)
+    def __init__(self, activation='sigmoid', backend='CATER', **kwargs):
+        super().__init__(activation=activation, **kwargs)
 
         assert backend in ['CATER', 'sklearn'], f'Backend not identified: {backend}'
         self.backend = backend
