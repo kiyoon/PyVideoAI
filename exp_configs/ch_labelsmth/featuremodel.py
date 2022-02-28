@@ -211,9 +211,18 @@ last_activation = 'softmax'   # or, you can pass a callable function like `torch
 how to calculate metrics
 """
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
+from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
+from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
+from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric
+from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel
+video_id_to_multilabel = read_multilabel()
 best_metric = ClipAccuracyMetric(topk=(1,5))
-metrics = {'train': [ClipAccuracyMetric()],
-        'val': [best_metric],
+metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(), ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'])],
+        'val': [best_metric, ClipMeanPerclassAccuracyMetric(), ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail']),
+            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip'),
+            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip'),
+            ],
         'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
         }
 
