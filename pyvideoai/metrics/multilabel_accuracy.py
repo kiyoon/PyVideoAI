@@ -4,9 +4,11 @@ from .metric import Metric
 
 
 
-class ClipTop1MultilabelAccuracyMetric(Metric):
+class ClipMultilabelAccuracyMetric(Metric):
     """
-    Count as true positive when the top-1 prediction is in one of the multiple ground truth labels.
+    Multi-label accuracy as defined in Learning Visual Actions Using Multiple Verb-Only Labels (Wray et al. 2019).
+    For each sample, if there are k labels, get top-k predictions and see how many of them are in the ground truth.
+    Then average all the accuracies per clip.
 
     Don't need activation softmax for clip accuracy calculation.
     """
@@ -16,36 +18,42 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
     def clean_data(self):
         super().clean_data()
         self.num_seen_samples = 0
-        self.num_true_positives = 0
+        self.accuracy_per_clip = []
 
 
-    def add_clip_predictions(self, video_ids, clip_predictions, labels):
+    def add_clip_predictions(self, video_ids, clip_predictions, labels: torch.Tensor):
         super().add_clip_predictions(video_ids, clip_predictions, labels)
 
         assert labels.dim() == 2, f'target has to be a 2D tensor with ones and zeros but got {target.dim()}-D.'
 
-        pred_labels = torch.argmax(clip_predictions, dim=1)
-        for pred, label in zip(pred_labels, labels):
-            assert label[pred] in [1., 0.], f'Label in Top1 Multilabel Accuracy metric has to be ones and zeros but got {label[pred]}'.
 
-            self.num_seen_samples += 1
-            if label[pred] == 1.:
-                self.num_true_positives += 1
+        for pred, label in zip(clip_predictions, labels):
+            label_indices = (label == 1.).nonzero(as_tuple=False)
+            num_labels = len(label_indices)
+            _, pred_top_indices = torch.topk(clip_predictions, num_labels, largest=True)
+            num_true_preds = 0
+            for pred_index in pred_top_indices:
+                if pred_index in label_indices:
+                    num_true_preds += 1
 
+            accuracy_this_clip = num_true_preds / num_labels
+            self.accuracy_per_clip.append(accuracy_this_clip)
+
+        self.num_seen_samples += video_ids.size(0)
 
     def calculate_metrics(self):
-        self.last_calculated_metrics = self.num_true_positives / self.num_seen_samples 
+        self.last_calculated_metrics = sum(self.accuracy_per_clip) / self.num_seen_samples 
 
     def types_of_metrics(self):
         return float
 
 
     def tensorboard_tags(self):
-        return 'Top1 multilabel accuracy'
+        return 'Multilabel accuracy'
 
 
     def get_csv_fieldnames(self):
-        return f'{self.split}_top1_multilabel_accuracy'
+        return f'{self.split}_multilabel_accuracy'
 
 
     def logging_msg_iter(self):
@@ -59,7 +67,7 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
         else:
             prefix = f'{self.split}_'
 
-        message = f'{prefix}top1multiacc: {self.last_calculated_metrics:.4f}'
+        message = f'{prefix}multiacc: {self.last_calculated_metrics:.4f}'
         return message
 
 
@@ -78,13 +86,13 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
             either tuple or a single str 
         """
         if self.split == 'train':
-            return f'Training top1 multilabel accuracy'
+            return f'Training multilabel accuracy'
         elif self.split == 'val':
-            return f'Validation top1 multilabel accuracy'
+            return f'Validation multilabel accuracy'
         elif self.split == 'multicropval':
-            return f'Multicrop validation top1 multilabel accuracy'
+            return f'Multicrop validation multilabel accuracy'
         else:
-            return f'{self.split} top1 multilabel accuracy'
+            return f'{self.split} multilabel accuracy'
 
 
     def plot_file_basenames(self):
@@ -93,7 +101,7 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
             either tuple or a single str 
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
-        return 'top1_multilabel_accuracy'
+        return 'multilabel_accuracy'
 
     
     @staticmethod
