@@ -1,2 +1,4 @@
-_exec_relative_('../flow_neighbour_multilabel.py')
+_exec_relative_('../neighbour_multilabel.py')
+
+input_type = 'flow'
 

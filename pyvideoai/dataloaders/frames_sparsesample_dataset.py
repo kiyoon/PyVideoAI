@@ -127,20 +127,21 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             # string
             self.flow = flow.lower()
             self.flow_neighbours = flow_neighbours
-        if self.flow == 'rg':
-            assert len(mean) in [1, 2]
-            assert len(std)  in [1, 2]
-            assert not greyscale, 'For optical flow RG data, it is impossible to use greyscale.'
-            assert not bgr, 'For optical flow RG data, it is impossible to use BGR channel ordering.'
-        elif self.flow == 'rr':
-            assert len(mean) in [1, 2]
-            assert len(std)  in [1, 2]
-            assert not greyscale, 'For optical flow RR data, it is impossible to use greyscale. It actually just uses R channels and ignore the rest.'
-            assert not bgr, 'For optical flow RR data, it is impossible to use BGR channel ordering.'
-            self.flow_folder_x = flow_folder_x
-            self.flow_folder_y = flow_folder_y
-        else:
-            raise ValueError(f'Not recognised flow format: {self.flow}. Choose one of RG (use red and green channels), RR (two greyscale images representing x and y directions)')
+
+            if self.flow == 'rg':
+                assert len(mean) in [1, 2]
+                assert len(std)  in [1, 2]
+                assert not greyscale, 'For optical flow RG data, it is impossible to use greyscale.'
+                assert not bgr, 'For optical flow RG data, it is impossible to use BGR channel ordering.'
+            elif self.flow == 'rr':
+                assert len(mean) in [1, 2]
+                assert len(std)  in [1, 2]
+                assert not greyscale, 'For optical flow RR data, it is impossible to use greyscale. It actually just uses R channels and ignore the rest.'
+                assert not bgr, 'For optical flow RR data, it is impossible to use BGR channel ordering.'
+                self.flow_folder_x = flow_folder_x
+                self.flow_folder_y = flow_folder_y
+            else:
+                raise ValueError(f'Not recognised flow format: {self.flow}. Choose one of RG (use red and green channels), RR (two greyscale images representing x and y directions)')
 
         self.video_id_to_label = video_id_to_label
         if video_id_to_label is not None:

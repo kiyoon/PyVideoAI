@@ -2,6 +2,7 @@ import os
 import pickle
 
 from pyvideoai.dataloaders import FramesSparsesampleDataset
+from pyvideoai.dataloaders.video_sparsesample_dataset import VideoSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
@@ -36,11 +37,13 @@ val_num_spatial_crops = 1
 test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 
-greyscale=False
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
 base_learning_rate = 5e-6      # when batch_size == 1 and #GPUs == 1
+
+input_type = 'RGB_video' # RGB_video / flow
+
 
 #### OPTIONAL
 def get_criterion(split):
@@ -187,7 +190,7 @@ def load_model():
 
 # optional
 #def load_pretrained(model):
-#    loader.model_load_weights_GPU(model, pretrained_path)
+#    loader.model_load_weights(model, pretrained_path)
 
 def _dataloader_shape_to_model_input_shape(inputs):
     return model_cfg.NCTHW_to_model_input_shape(inputs)
@@ -231,6 +234,8 @@ def get_data_unpack_func(split):
 def _get_torch_dataset(csv_path, split):
     mode = dataset_cfg.split2mode[split]
 
+
+
     if split.startswith('multicrop'):
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
@@ -242,27 +247,60 @@ def _get_torch_dataset(csv_path, split):
         global video_id_to_label
     else:
         video_id_to_label = None
-    return FramesSparsesampleDataset(csv_path, mode, 
-            input_frame_length, 
-            train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
-            train_horizontal_flip=dataset_cfg.horizontal_flip,
-            test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
-            crop_size=crop_size,
-            mean = [model_cfg.input_mean[0]] if greyscale else model_cfg.input_mean,
-            std = [model_cfg.input_std[0]] if greyscale else model_cfg.input_std,
-            normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
-            greyscale=greyscale,
-            path_prefix=dataset_cfg.flowframes_dir,
-            sample_index_code=sample_index_code,
-            flow = 'RR',
-            flow_neighbours = 5,
-            flow_folder_x = 'u',
-            flow_folder_y = 'v',
-            video_id_to_label = video_id_to_label,
-            )
+
+    if input_type == 'RGB_video':
+        path_prefix = dataset_cfg.video_dir
+        return VideoSparsesampleDataset(csv_path, mode,
+                input_frame_length,
+                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+                train_horizontal_flip=dataset_cfg.horizontal_flip,
+                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+                crop_size=crop_size,
+                mean = model_cfg.input_mean,
+                std = model_cfg.input_std,
+                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+                greyscale=False,
+                path_prefix=path_prefix,
+                sample_index_code=sample_index_code,
+                video_id_to_label = video_id_to_label,
+                )
+
+    elif input_type == 'flow':
+        path_prefix=dataset_cfg.flowframes_dir
+        flow = 'RR'
+        flow_neighbours = 5
+        flow_folder_x = 'u'
+        flow_folder_y = 'v'
+        return FramesSparsesampleDataset(csv_path, mode, 
+                input_frame_length, 
+                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+                train_horizontal_flip=dataset_cfg.horizontal_flip,
+                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+                crop_size=crop_size,
+                mean = model_cfg.input_mean,
+                std = model_cfg.input_std,
+                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+                greyscale=False,
+                path_prefix=path_prefix,
+                sample_index_code=sample_index_code,
+                flow = flow,
+                flow_neighbours = flow_neighbours,
+                flow_folder_x = flow_folder_x,
+                flow_folder_y = flow_folder_y,
+                video_id_to_label = video_id_to_label,
+                )
+    else:
+        raise ValueError(f'Wrong input_type {input_type}')
+
 
 def get_torch_dataset(split):
-    csv_path = os.path.join(dataset_cfg.flowframes_split_file_dir, dataset_cfg.split_file_basename[split])
+    if input_type == 'RGB_video':
+        split_dir = dataset_cfg.video_split_file_dir
+    elif input_type == 'flow':
+        split_dir = dataset_cfg.flowframes_split_file_dir
+    else:
+        raise ValueError(f'Wrong input_type {input_type}')
+    csv_path = os.path.join(split_dir, dataset_cfg.split_file_basename[split])
 
     return _get_torch_dataset(csv_path, split)
 
