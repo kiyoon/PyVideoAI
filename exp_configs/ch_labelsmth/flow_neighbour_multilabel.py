@@ -58,10 +58,10 @@ import exp_configs
 train_testmode_dataloader = None
 video_id_to_label = None
 def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
-    if epoch % 5 == 0:
+    global train_testmode_dataloader
+    if train_testmode_dataloader is None or epoch % 5 == 0:
         feature_extract_split = 'trainpartialdata_testmode'
 
-        global train_testmode_dataloader
         if train_testmode_dataloader is None:
             train_testmode_dataset = get_torch_dataset(feature_extract_split)
             sampler = DistributedSampler(train_testmode_dataset, shuffle=False) if world_size > 1 else None
