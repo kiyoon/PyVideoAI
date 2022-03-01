@@ -1,6 +1,8 @@
 import os
+import pickle
 
-from pyvideoai.dataloaders.video_sparsesample_dataset import VideoSparsesampleDataset
+from pyvideoai.dataloaders import FramesSparsesampleDataset
+from pyvideoai.dataloaders import VideoSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
@@ -32,14 +34,16 @@ val_num_spatial_crops = 1
 test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 
-greyscale=False
-sampling_mode = 'RGB'   # RGB, TC, GreyST
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
-base_learning_rate = 5e-5      # when batch_size == 1 and #GPUs == 1
+input_type = 'RGB_video' # RGB_video / flow
 
-label_mode = 'onehot'  # onehot, instable_onehot, labelsmooth, proselflc, soft_regression
+base_learning_rate = 5e-6      # when batch_size == 1 and #GPUs == 1
+
+train_label_type = 'epic100_original'    # epic100_original, 5neighbours
+loss_type = 'crossentropy'   # soft_regression, crossentropy, labelsmooth, proselflc
+
 labelsmooth_factor = 0.1
 #proselflc_total_time = 2639 * 60 # 60 epochs
 proselflc_total_time = 263 * 40 # 60 epochs
@@ -48,16 +52,14 @@ proselflc_exp_base = 1.
 
 #### OPTIONAL
 def get_criterion(split):
-    if label_mode == 'labelsmooth':
+    if loss_type == 'labelsmooth':
         return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
-    elif label_mode == 'proselflc':
+    elif loss_type == 'proselflc':
         if split == 'train':
             return ProSelfLC(proselflc_total_time, proselflc_exp_base)
         else:
             return torch.nn.CrossEntropyLoss()
-    elif label_mode == 'instable_onehot':
-        return InstableCrossEntropy()
-    elif label_mode == 'soft_regression':
+    elif loss_type == 'soft_regression':
         return SoftlabelRegressionLoss()
     else:
         return torch.nn.CrossEntropyLoss()
@@ -107,9 +109,10 @@ def optimiser(params):
 
 from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple, GradualWarmupScheduler
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
-    after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
+    #after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
 
-    return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
+    #return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
+    return torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
 
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
@@ -179,22 +182,70 @@ def _get_torch_dataset(csv_path, split):
         _test_scale = val_scale
         _test_num_spatial_crops = val_num_spatial_crops
 
-    return VideoSparsesampleDataset(csv_path, mode, 
-            input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
-            train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
-            train_horizontal_flip=dataset_cfg.horizontal_flip,
-            test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
-            crop_size=crop_size,
-            mean = [model_cfg.input_mean[0]] if greyscale else model_cfg.input_mean,
-            std = [model_cfg.input_std[0]] if greyscale else model_cfg.input_std,
-            normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
-            greyscale=greyscale,
-            path_prefix=dataset_cfg.video_dir,
-            sample_index_code=sample_index_code,
-            )
+    video_id_to_label = None
+    if split == 'train':
+        if train_label_type == '5neighbours':
+            video_id_to_label = {}
+            softlabel_pickle_path = '/home/kiyoon/storage/tsm_flow_neigh/5-neighbours-from-features_epoch_0009_traindata_testmode_oneclip.pkl'
+            with open(softlabel_pickle_path, 'rb') as f:
+                d = pickle.load(f)
+            video_ids, soft_labels = d['query_ids'], d['soft_labels']
+
+            for video_id, soft_label in zip(video_ids, soft_labels):
+                video_id_to_label[video_id] = soft_label
+
+    if input_type == 'RGB_video':
+        path_prefix = dataset_cfg.video_dir
+        return VideoSparsesampleDataset(csv_path, mode,
+                input_frame_length,
+                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+                train_horizontal_flip=dataset_cfg.horizontal_flip,
+                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+                crop_size=crop_size,
+                mean = model_cfg.input_mean,
+                std = model_cfg.input_std,
+                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+                greyscale=False,
+                path_prefix=path_prefix,
+                sample_index_code=sample_index_code,
+                video_id_to_label = video_id_to_label,
+                )
+    elif input_type == 'flow':
+        path_prefix=dataset_cfg.flowframes_dir
+        flow = 'RR'
+        flow_neighbours = 5
+        flow_folder_x = 'u'
+        flow_folder_y = 'v'
+        return FramesSparsesampleDataset(csv_path, mode, 
+                input_frame_length, 
+                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+                train_horizontal_flip=dataset_cfg.horizontal_flip,
+                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+                crop_size=crop_size,
+                mean = model_cfg.input_mean,
+                std = model_cfg.input_std,
+                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+                greyscale=False,
+                path_prefix=path_prefix,
+                sample_index_code=sample_index_code,
+                flow = flow,
+                flow_neighbours = flow_neighbours,
+                flow_folder_x = flow_folder_x,
+                flow_folder_y = flow_folder_y,
+                video_id_to_label = video_id_to_label,
+                )
+    else:
+        raise ValueError(f'Wrong input_type {input_type}')
+
 
 def get_torch_dataset(split):
-    csv_path = os.path.join(dataset_cfg.video_split_file_dir, dataset_cfg.split_file_basename[split])
+    if input_type == 'RGB_video':
+        split_dir = dataset_cfg.video_split_file_dir
+    elif input_type == 'flow':
+        split_dir = dataset_cfg.flowframes_split_file_dir
+    else:
+        raise ValueError(f'Wrong input_type {input_type}')
+    csv_path = os.path.join(split_dir, dataset_cfg.split_file_basename[split])
 
     return _get_torch_dataset(csv_path, split)
 
@@ -226,11 +277,20 @@ last_activation = 'softmax'   # or, you can pass a callable function like `torch
 how to calculate metrics
 """
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
+from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
+from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
+from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric
+from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel
+video_id_to_multilabel = read_multilabel()
 best_metric = ClipAccuracyMetric()
-metrics = {'train': [ClipAccuracyMetric()],
+metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(), ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'])],
+        'val': [best_metric, ClipMeanPerclassAccuracyMetric(), ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail']),
+            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip'),
+            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip'),
+            ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
-        'val': [best_metric],
         'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
         }
 

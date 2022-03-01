@@ -2,7 +2,7 @@ import os
 import pickle
 
 from pyvideoai.dataloaders import FramesSparsesampleDataset
-from pyvideoai.dataloaders.video_sparsesample_dataset import VideoSparsesampleDataset
+from pyvideoai.dataloaders import VideoSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
