@@ -72,10 +72,11 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
 
         data_unpack_func = get_data_unpack_func(feature_extract_split)
         input_reshape_func = get_input_reshape_func(feature_extract_split)
-        feature_data, _, _, _, eval_log_str = extract_features(train_kit["model"], train_testmode_dataloader, data_unpack_func, dataset_cfg.num_classes, feature_extract_split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
+        feature_data, _, _, _, eval_log_str = extract_features(model_cfg.feature_extract_model(train_kit["model"]), train_testmode_dataloader, data_unpack_func, dataset_cfg.num_classes, feature_extract_split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
         # feature_data['video_ids'] feature_data['labels'] feature_data['clip_features']
 
         if rank == 0:
+            assert feature_data['clip_features'].shape[1] == 2048
             kn = 10
             thr = 0.2
             with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
@@ -96,25 +97,35 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
             soft_labels = np.array(soft_labels)
 
             multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
-        else:
-            multilabels = np.array([])
-            source_ids = np.array([])
 
+        logger.info("Syncing multilabels over processes.")
         # If distributed, sync data
         if world_size > 1:
             cur_device = torch.cuda.current_device()
+            if rank == 0:
+                num_samples = torch.LongTensor([multilabels.shape[0]]).to(device=cur_device, non_blocking=True)
+            else:
+                num_samples = torch.LongTensor([0]).to(device=cur_device, non_blocking=True)
+            dist.broadcast(num_samples, 0)
+            num_samples = num_samples.item()
+
+            if rank != 0:
+                multilabels = np.zeros((num_samples,dataset_cfg.num_classes), dtype=int)
+                source_ids = np.zeros((num_samples), dtype=int)
 
             multilabels_dist = torch.from_numpy(multilabels).to(cur_device, non_blocking=True)
             dist.broadcast(multilabels_dist, 0)
-            multilabels = multilabels_dist.cpu().numpy()
 
             video_ids_dist = torch.from_numpy(source_ids).to(cur_device, non_blocking=True)
             dist.broadcast(video_ids_dist, 0)
-            source_ids = video_ids_dist.cpu().numpy()
 
             du.synchronize()
+            multilabels = multilabels_dist.cpu().numpy()
+            source_ids = video_ids_dist.cpu().numpy()
 
         # Update video_id_to_label
+        logger.info(f'New {multilabels = }')
+        logger.info(f'For video IDs = {source_ids}')
         global video_id_to_label
         video_id_to_label = {}
         for video_id, label in zip(source_ids, multilabels):

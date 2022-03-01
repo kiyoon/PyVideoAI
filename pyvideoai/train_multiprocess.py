@@ -52,6 +52,8 @@ import configparser
 from . import __version__
 import socket
 
+import traceback
+
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
 
@@ -652,6 +654,6 @@ def train(args):
         # This can make your Telegram report filled with many duplicates,
         # but at the same time it ensures that you receive a message when anything wrong happens.
 #        if rank == 0:
-        exp.tg_send_text_with_expname('Exception occurred whilst training\n\n' + repr(e))
+        exp.tg_send_text_with_expname('Exception occurred whilst training\n\n' + traceback.format_exc())
 
 
