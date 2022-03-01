@@ -8,6 +8,7 @@ from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
 from pyvideoai.utils import loader
 from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss
+from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
 from pyvideoai.utils.stdout_logger import OutputLogger
 
 import torch
@@ -43,12 +44,16 @@ sample_index_code = 'pyvideoai'
 base_learning_rate = 5e-6      # when batch_size == 1 and #GPUs == 1
 
 input_type = 'RGB_video' # RGB_video / flow
+loss_type = 'mince'     # mince / maskce
 
 
 #### OPTIONAL
 def get_criterion(split):
     if split == 'train':
-        return MinCEMultilabelLoss()
+        if loss_type == 'mince':
+            return MinCEMultilabelLoss()
+        elif loss_type == 'maskce':
+            return MaskedCrossEntropy()
     else:
         return torch.nn.CrossEntropyLoss()
 
@@ -97,6 +102,10 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
             soft_labels = np.array(soft_labels)
 
             multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
+            if loss_type == 'maskce':
+                multilabels = -multilabels      # negative numbers mean masks. Mask out the relevant verbs.
+                for idx, label in enumerate(feature_data['labels']):
+                    multilabels[idx, label] = 1     # Make the actual single label GT the only label.
 
         logger.info("Syncing multilabels over processes.")
         # If distributed, sync data
