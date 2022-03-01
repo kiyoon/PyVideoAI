@@ -1,6 +1,7 @@
+import numpy as np
 import torch
 from torch import nn
-from torch.nn.functional import cross_entropy
+from torch.nn.functional import nll_loss
 
 class MinCEMultilabelLoss(nn.Module):
     def __init__(self):
@@ -15,8 +16,23 @@ class MinCEMultilabelLoss(nn.Module):
         for soft_label, singlelabel in zip(soft_labels, singlelabels):
             multilabel = (soft_label > thr).float()
             multilabel[singlelabel] = 1.
+            multilabels.append(multilabel)
 
         multilabels = torch.stack(multilabels)
+        return multilabels
+
+    @staticmethod
+    def generate_multilabels_numpy(soft_labels, thr, singlelabels):
+        """
+        New label would be everything with soft label > thr, and singlelabels
+        """
+        multilabels = []
+        for soft_label, singlelabel in zip(soft_labels, singlelabels):
+            multilabel = (soft_label > thr).astype(int)
+            multilabel[singlelabel] = 1
+            multilabels.append(multilabel)
+
+        multilabels = np.stack(multilabels)
         return multilabels
             
 
@@ -33,7 +49,7 @@ class MinCEMultilabelLoss(nn.Module):
             losses = []
 
             for t in targets:
-                l = cross_entropy(vid_o.view(1,-1), t.view(-1))
+                l = nll_loss(vid_o.view(1,-1), t.view(-1))
                 losses.append(l)
 
             video_loss = min(losses)

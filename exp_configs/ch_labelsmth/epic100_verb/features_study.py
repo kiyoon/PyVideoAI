@@ -8,7 +8,7 @@ from sklearn.neighbors import NearestNeighbors
 from sklearn.preprocessing import normalize
 from tqdm import tqdm
 
-import .utils
+from . import utils
 #from dataset import TrainDataset
 from .utils import get_participant_video_id_from_vid
 
