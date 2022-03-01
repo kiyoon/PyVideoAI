@@ -119,7 +119,7 @@ class ClipGroupedClassAccuracyMetric(Metric):
             either tuple or a single str 
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
-        return 'mean_perclass_accuracy'
+        return tuple(f'group_{name}_accuracy' for name in self.group_names)
 
     
     @staticmethod
