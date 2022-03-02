@@ -11,6 +11,7 @@ class MaskedCrossEntropy(nn.Module):
     Edit by Kiyoon from ProSelfLC:
         Implemented class masking.
         target_probs < 0 will be masked out and will not contribute to the loss.
+        Also, they don't take part in when calculating softmax.
 
     Inputs: two tensors for predictions and target.
         1. predicted probability distributions of shape (N, C)
