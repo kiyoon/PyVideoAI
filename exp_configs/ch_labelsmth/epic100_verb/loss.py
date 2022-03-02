@@ -58,3 +58,34 @@ class MinCEMultilabelLoss(nn.Module):
         assert len(batch_losses) > 0, f'No loss calculated for this batch, adjust threshold which was {thr}'
         batch_loss = sum(batch_losses) / len(batch_losses)
         return batch_loss
+
+class MinRegressionCombinationLoss(nn.Module):
+    """
+    Given multi-labels, get loss for all possible combinations of the targets and take the minimum loss.
+    """
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, output, multilabels):
+
+        o = torch.sigmoid(output)
+        for i, (vid_o, vid_l) in enumerate(zip(o, multilabels)):
+            targets = torch.where(vid_l == 1.)[0]
+
+            all_labels_combinations = subsets(targets.tolist())
+            vid_losses = []
+
+            for g in all_labels_combinations:
+                g = list(g)  # g is a tuple
+                pseudo_y = torch.zeros_like(vid_l, device=vid_l.device)
+                pseudo_y[g] = 1
+                loss = (pseudo_y * torch.log(vid_o + eps)) + ((1 - pseudo_y) * torch.log(1 - vid_o + eps))
+                loss = -loss.sum()
+                vid_losses.append(loss)
+
+            vid_loss = min(vid_losses)
+            batch_losses.append(vid_loss)
+
+        assert len(batch_losses) > 0, f'No loss calculated for this batch, adjust threshold which was {thr}'
+        batch_loss = sum(batch_losses) / len(batch_losses)
+        return batch_loss

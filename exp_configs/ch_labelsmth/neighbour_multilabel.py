@@ -7,7 +7,7 @@ from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
 from pyvideoai.utils import loader
-from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss
+from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss, MinRegressionCombinationLoss
 from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
 from pyvideoai.utils.stdout_logger import OutputLogger
 
@@ -44,7 +44,7 @@ sample_index_code = 'pyvideoai'
 base_learning_rate = float(os.getenv('PYVIDEOAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
 input_type = 'RGB_video' # RGB_video / flow
-loss_type = 'mince'     # mince / maskce
+loss_type = 'mince'     # mince / maskce / minregcomb
 
 save_features = True
 
@@ -56,6 +56,10 @@ def get_criterion(split):
             return MinCEMultilabelLoss()
         elif loss_type == 'maskce':
             return MaskedCrossEntropy()
+        elif loss_type == 'minregcomb':
+            return MinRegressionCombinationLoss()
+        else:
+            raise ValueError(f'{loss_type=} not recognised.')
     else:
         return torch.nn.CrossEntropyLoss()
 
