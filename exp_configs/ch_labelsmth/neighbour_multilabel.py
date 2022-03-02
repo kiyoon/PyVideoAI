@@ -46,6 +46,8 @@ base_learning_rate = 5e-6      # when batch_size == 1 and #GPUs == 1
 input_type = 'RGB_video' # RGB_video / flow
 loss_type = 'mince'     # mince / maskce
 
+save_features = True
+
 
 #### OPTIONAL
 def get_criterion(split):
@@ -68,7 +70,10 @@ video_id_to_label = None
 def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
     global train_testmode_dataloader
     if train_testmode_dataloader is None or epoch % 5 == 0:
-        feature_extract_split = 'trainpartialdata_testmode'
+        if 'partial' in dataset_cfg.__name__:
+            feature_extract_split = 'trainpartialdata_testmode'
+        else:
+            feature_extract_split = 'traindata_testmode'
 
         if train_testmode_dataloader is None:
             train_testmode_dataset = get_torch_dataset(feature_extract_split)
@@ -106,6 +111,17 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
                 multilabels = -multilabels      # negative numbers mean masks. Mask out the relevant verbs.
                 for idx, label in enumerate(feature_data['labels']):
                     multilabels[idx, label] = 1     # Make the actual single label GT the only label.
+
+            if save_features:
+                logger.info(f"Saving features, neighbours, and multilabels to {os.path.join(exp.predictions_dir, 'features_neighbours')}")
+                os.makedirs(os.path.join(exp.predictions_dir, 'features_neighbours'), exist_ok = True)
+
+                feature_data['kn'] = kn
+                feature_data['thr'] = thr
+                feature_data['nc_freq'] = nc_freq
+                feature_data['multilabels'] = multilabels
+                with open(os.path.join(exp.predictions_dir, 'features_neighbours', f'feature_neighbours_epoch_{epoch:04d}.pkl'), 'wb') as f:
+                    pickle.dump(feature_data, f)
 
         logger.info("Syncing multilabels over processes.")
         # If distributed, sync data
