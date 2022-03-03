@@ -67,8 +67,9 @@ class MinRegressionCombinationLoss(nn.Module):
     """
     Given multi-labels, get loss for all possible combinations of the targets and take the minimum loss.
     """
-    def __init__(self):
+    def __init__(self, eps=1e-6):
         super().__init__()
+        self.eps = eps
         
     def forward(self, output, multilabels):
 
@@ -83,7 +84,7 @@ class MinRegressionCombinationLoss(nn.Module):
                 g = list(g)  # g is a tuple
                 pseudo_y = torch.zeros_like(vid_l, device=vid_l.device)
                 pseudo_y[g] = 1
-                loss = (pseudo_y * torch.log(vid_o + eps)) + ((1 - pseudo_y) * torch.log(1 - vid_o + eps))
+                loss = (pseudo_y * torch.log(vid_o + self.eps)) + ((1 - pseudo_y) * torch.log(1 - vid_o + self.eps))
                 loss = -loss.sum()
                 vid_losses.append(loss)
 
