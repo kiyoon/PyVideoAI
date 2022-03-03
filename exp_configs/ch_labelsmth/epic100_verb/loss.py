@@ -60,6 +60,7 @@ class MinCEMultilabelLoss(nn.Module):
         return batch_loss
 
 
+from itertools import chain, combinations
 def subsets(arr):
     return list(chain(*[combinations(arr, i + 1) for i, a in enumerate(arr)]))
 class MinRegressionCombinationLoss(nn.Module):
