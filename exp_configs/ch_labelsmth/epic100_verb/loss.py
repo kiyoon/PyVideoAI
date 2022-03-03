@@ -74,6 +74,7 @@ class MinRegressionCombinationLoss(nn.Module):
     def forward(self, output, multilabels):
 
         o = torch.sigmoid(output)
+        batch_losses = []
         for i, (vid_o, vid_l) in enumerate(zip(o, multilabels)):
             targets = torch.where(vid_l == 1.)[0]
 
