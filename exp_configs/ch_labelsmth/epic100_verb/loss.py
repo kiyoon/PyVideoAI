@@ -59,6 +59,9 @@ class MinCEMultilabelLoss(nn.Module):
         batch_loss = sum(batch_losses) / len(batch_losses)
         return batch_loss
 
+
+def subsets(arr):
+    return list(chain(*[combinations(arr, i + 1) for i, a in enumerate(arr)]))
 class MinRegressionCombinationLoss(nn.Module):
     """
     Given multi-labels, get loss for all possible combinations of the targets and take the minimum loss.
