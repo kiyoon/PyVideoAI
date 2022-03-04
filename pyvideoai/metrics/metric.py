@@ -21,7 +21,7 @@ class Metric(ABC):
         self.label_size = None      # either num_classes (multi-label) or 1 (one-label)
         self.last_calculated_metrics = 0.
 
-    def __init__(self, activation=None, video_id_to_label: Dict[int, np.array] = None, video_id_to_label_missing_action: str = 'error'):
+    def __init__(self, activation=None, video_id_to_label: Dict[int, np.array] = None, video_id_to_label_missing_action: str = 'error', split: str = None):
         """
         video_id_to_label: If given, completely ignore the original label and find labels from this dictionary. Useful when sometimes using different labels to evaluate.
         video_id_to_label_missing_action: If video_id_to_label is given, choose what to do when you can't find the label, in 'error', 'skip', and 'original_label'.
@@ -31,7 +31,7 @@ class Metric(ABC):
         self.video_id_to_label = video_id_to_label
         assert video_id_to_label_missing_action in ['error', 'skip', 'noupdate'], f'You chose wrong mode: {video_id_to_label_missing_action}'
         self.video_id_to_label_missing_action = video_id_to_label_missing_action
-        self.split = None           # Note that these are permanent after initialisation and shouldn't change with self.clean_data()
+        self.split = split           # Note that these are permanent after initialisation and shouldn't change with self.clean_data()
         self.clean_data()
 
     def _apply_activation(self, predictions):
@@ -415,7 +415,8 @@ class Metrics(dict):
         if metric.split is None:
             metric.split = split
         else:
-            raise ValueError(f'The split of the metric is already specified ({metric.split}), but trying to add the same metric to another split ({split}), which should never happen.')
+#            raise ValueError(f'The split of the metric is already specified ({metric.split}), but trying to add the same metric to another split ({split}), which should never happen.')
+            logger.info(f'The split name of the metric {type(metric).__name__} is set to ({metric.split}), although actually it will use "{split}" split to evaluate.')
 
         if split in self.keys():
             self[split].append(metric)

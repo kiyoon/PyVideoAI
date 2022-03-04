@@ -15,3 +15,10 @@ def read_multilabel():
         video_id_to_label[video_id] = label_array
 
     return video_id_to_label
+
+def get_val_holdout_set(video_id_to_label:dict, video_id_to_multilabel: dict):
+    """
+    Remove video ids from multilabel set.
+    """
+    return {k: v for k, v in video_id_to_label.items() if k not in video_id_to_multilabel.keys()}
+
