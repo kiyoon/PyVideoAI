@@ -73,10 +73,14 @@ def load_cfg(dataset_name, model_name, experiment_name, dataset_channel='', mode
     4. Exec module (exp_config)
         a. Note that `_exec_relative_` can be called. It'll recursively find correct config and exec' them.
             
-    Therefore, in the cfg object, you can access `dataset_cfg`, `model_cfg`, `_exec_relative(python_path)`.
+    Therefore, in the cfg object, you can access `dataset_cfg`, `model_cfg`, `_exec_relative_(python_path)`.
     """
     # Create an empty module
-    spec = importlib.util.find_spec(_get_module_name(dataset_name, model_name, experiment_name, exp_channel), package=__name__)
+    exp_config_module_name = _get_module_name(dataset_name, model_name, experiment_name, exp_channel)
+    spec = importlib.util.find_spec(exp_config_module_name, package=__name__)
+    if spec is None:
+        raise FileNotFoundError((f'Cannot load the experiment config module: {__name__}{exp_config_module_name}\n'
+                f'Maybe the file is missing: {config_path(dataset_name, model_name, experiment_name, exp_channel)}'))
     cfg = importlib.util.module_from_spec(spec)
 
     # Add dataset_cfg, model_cfg to the module
@@ -110,6 +114,10 @@ def copy_cfg_files(cfg, dest_dir):
 
 
 def config_path(dataset_name, model_name, experiment_name, channel=''):
+    # If there is a . in the name, it is confused with python module.
+    # Use + instead.
+    dataset_name = dataset_name.replace('.', '+')
+    model_name = model_name.replace('.', '+')
     return os.path.join(_SCRIPT_DIR, _get_file_name(dataset_name, model_name, experiment_name, channel))
 
 #available_configs = [os.path.splitext(os.path.basename(fn))[0] for fn in glob.glob(os.path.join(_SCRIPT_DIR, '*.py'))

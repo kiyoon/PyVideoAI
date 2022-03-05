@@ -34,9 +34,15 @@ def load_cfg(model_name, channel=''):
     """
     # Create an empty module
     if channel == '' or channel is None:
-        spec = importlib.util.find_spec('.' + model_name, package=__name__)
+        package = __name__
     else:
-        spec = importlib.util.find_spec('.' + model_name, package=f'{__name__}.ch_{channel}')
+        package = f'{__name__}.ch_{channel}'
+    spec = importlib.util.find_spec('.' + model_name, package=package)
+
+    if spec is None:
+        raise FileNotFoundError((f'Cannot load the model config module: {package}.{model_name}\n'
+                f'Maybe the file is missing: {config_path(model_name, channel)}'))
+
     cfg = importlib.util.module_from_spec(spec)
 
     # Add _exec_relative_() to the module
