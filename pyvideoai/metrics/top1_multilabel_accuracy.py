@@ -138,10 +138,10 @@ class ClipTopkMultilabelAccuracyMetric(Metric):
 
         for pred, label in zip(clip_predictions, labels):
             labels_cur_sample = torch.where(labels==1.)[0]
-            num_labels = label_cur_sample.size(0)
+            num_labels = labels_cur_sample.size(0)
             num_nonlabels = torch.where(labels==0.)[0].size(0)
             if num_labels + num_nonlabels != self.num_classes:
-                raise ValueError(f'Label in Top-K Multilabel Accuracy metric has to be ones and zeros but got something else.'
+                raise ValueError(f'Label in Top-K Multilabel Accuracy metric has to be ones and zeros but got something else.')
             
             self.num_seen_samples += 1
             _, top_classes = torch.topk(pred, num_labels)
