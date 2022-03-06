@@ -55,9 +55,13 @@ Refer to [DATASET.md](docs/DATASET.md).
 
 ## Training command
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_train.py -D {dataset_config_name} -M {model_config_name} -E {exp_config_name} --local_world_size {num_GPUs} -e {num_epochs}
+# Single GPU
+CUDA_VISIBLE_DEVICES=0 python tools/run_train.py -D {dataset_config_name} -M {model_config_name} -E {exp_config_name} -e {num_epochs}
+# Multi GPUs, single node
+CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_singlenode.sh train {num_gpus} -D {dataset_config_name} -M {model_config_name} -E {exp_config_name} -e {num_epochs}
+# Multi GPU, multi node (run on every node)
+CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_singlenode.sh train {num_gpus_per_node} {num_nodes} {node_rank} {master_address} {master_port} -D {dataset_config_name} -M {model_config_name} -E {exp_config_name} -e {num_epochs}
 ```
-`--local_world_size` denotes the number of GPUs per computing node.
 
 ## Telegram Bot
 You can preview experiment results using Telegram bots!  
@@ -117,11 +121,9 @@ pip install -e .
 
 The experiment results (log, training stats, weights, tensorboard, plots, etc.) are saved to `data/experiments` by default. This can be huge, so make sure you **make a softlink of a directory you really want to use. (recommended)**  
 
-Otherwise, you can change `pyvideoai/config.py`'s `DEFAULT_EXPERIMENT_ROOT` value. Or, you can also set `--experiment_root` argument manually when executing.  
+Otherwise, you can change `pyvideoai/config.py`'s `DEFAULT_EXPERIMENT_ROOT` value. Or, you can also set `--experiment_root`/`-R` argument manually when executing.  
 
 
 # TODO
-- ReduceLRonPlateau detection in training script fails with GradualWarmupLR
 - ExperimentUtils more intuitive version system with string argument ('last', 'new')
 - Dataloader CSV file json header. BEGIN CSV mark between header and csv. Write PyVideoAI_version, label_type single,multi,soft, multilabel_numclass, softlabel_pickle_path
-- exp_configs load_pretrained load before DDP. load_pretrained_postDDP method.

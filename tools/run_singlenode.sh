@@ -1,7 +1,7 @@
 #!/bin/bash
 
 function help_print {
-	echo "Usage: $0 [train/eval] [NUM_GPUS] [train/eval_dist.py args...]"
+	echo "Usage: $0 [train/eval/feature] [NUM_GPUS] [train/eval_dist.py args...]"
 	exit 1
 }
 
