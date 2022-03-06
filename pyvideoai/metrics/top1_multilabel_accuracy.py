@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from .metric import Metric
 
+EPS = 1e-6
 
 
 class ClipTop1MultilabelAccuracyMetric(Metric):
@@ -31,7 +32,7 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
             assert label[pred] in [1., 0.], f'Label in Top1 Multilabel Accuracy metric has to be ones and zeros but got {label[pred]}.'
 
             self.num_seen_samples += 1
-            if label[pred] == 1.:
+            if label[pred] >= 1.-EPS:
                 self.num_true_positives += 1
 
 
@@ -137,11 +138,12 @@ class ClipTopkMultilabelAccuracyMetric(Metric):
         assert labels.dim() == 2, f'labels has to be a 2D tensor with ones and zeros but got {labels.dim()}-D.'
 
         for pred, label in zip(clip_predictions, labels):
-            labels_cur_sample = torch.where(labels==1.)[0]
+            labels_cur_sample = torch.where(label>=1.-EPS)[0]
             num_labels = labels_cur_sample.size(0)
-            num_nonlabels = torch.where(labels==0.)[0].size(0)
+            num_nonlabels = torch.where(label<0.+EPS)[0].size(0)
             if num_labels + num_nonlabels != self.num_classes:
-                raise ValueError(f'Label in Top-K Multilabel Accuracy metric has to be ones and zeros but got something else.')
+                raise ValueError(('Label in Top-K Multilabel Accuracy metric has to be ones and zeros but got something else.\n'
+                f'Num_ones = {num_labels}, num_zeros = {num_nonlabels}, num_classes = {self.num_classes}'))
             
             self.num_seen_samples += 1
             _, top_classes = torch.topk(pred, num_labels)
