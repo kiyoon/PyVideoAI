@@ -41,7 +41,7 @@ test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
-base_learning_rate = float(os.getenv('PYVIDEOAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
+base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
 input_type = 'RGB_video' # RGB_video / flow
 loss_type = 'mince'     # mince / maskce / minregcomb
