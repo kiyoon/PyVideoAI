@@ -1,13 +1,8 @@
-import numpy as np
-import random
 import torch
 import torch.distributed as dist
-from torch import nn, optim
+from torch import nn
 
-import pickle
 import os
-import sys
-from shutil import copy2
 
 import matplotlib.pyplot as plt
 
@@ -17,44 +12,38 @@ import dataset_configs, model_configs
 import exp_configs
 from . import config
 
-import argparse
 import copy
 
 from .utils import loader
 from torch.utils.data.distributed import DistributedSampler
 import time
 
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from .utils.lr_scheduling import ReduceLROnPlateauMultiple
 
 #import slowfast.utils.checkpoint as cu
 from .utils import distributed as du
 import json
 from .utils import misc
 from .utils.stdout_logger import OutputLogger
-from .utils.distributed import MultiprocessPrinter, check_random_seed_in_sync
+from .utils.distributed import check_random_seed_in_sync
 
 from .train_and_eval import train_epoch, eval_epoch, get_scheduler_type
 
 from .visualisations.metric_plotter import DefaultMetricPlotter
 from .visualisations.telegram_reporter import DefaultTelegramReporter
 
-import coloredlogs, logging, verboselogs
-logger = verboselogs.VerboseLogger(__name__)    # add logger.success
-
 from ssl import SSLCertVerificationError
 from urllib3.exceptions import NewConnectionError, MaxRetryError
 from requests import ConnectionError
-
-import configparser
 
 # Version checking
 from . import __version__
 import socket
 
 import traceback
+import coloredlogs, logging, verboselogs
+logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 
@@ -100,7 +89,7 @@ def train(args):
     exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
             summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
             version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
-    du.synchronize() # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
+    du.synchronize()  # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
     if rank == 0:
         exp._check_old_structure_and_move()
 
@@ -110,7 +99,7 @@ def train(args):
         load_exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
                 summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
                 version = load_version, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
-        du.synchronize() # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
+        du.synchronize()  # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
 
         load_exp.load_summary()
         exp.copy_from(load_exp, copy_dirs = rank == 0, exclude_weights=True)
@@ -133,6 +122,15 @@ def train(args):
             logger.info(f"PyTorch=={torch.__version__}")
             logger.info(f"PyVideoAI=={__version__}")
             logger.info(f"Experiment folder: {exp.experiment_dir} on host {socket.gethostname()}")
+            
+            # Enable Weights & Biases visualisation service.
+            if args.wandb_project is not None:
+                with OutputLogger('wandb'):
+                    import wandb
+                    wandb_dir = os.path.join(exp.experiment_dir, 'wandb')
+                    wandb_config = args.__dict__
+                    wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project,
+                            name=f'{exp.dataset} {exp.model_name} {exp.experiment_name} v{exp.version}')
 
             # save configs
             exp.dump_args(args)
@@ -156,7 +154,7 @@ def train(args):
 
         torch_datasets = {split: cfg.get_torch_dataset(split) for split in splits}
         data_unpack_funcs = {split: cfg.get_data_unpack_func(split) for split in splits}
-        input_reshape_funcs= {split: cfg.get_input_reshape_func(split) for split in splits}
+        input_reshape_funcs = {split: cfg.get_input_reshape_func(split) for split in splits}
         batch_size = cfg.batch_size() if callable(cfg.batch_size) else cfg.batch_size
         if hasattr(cfg, 'val_batch_size'):
             val_batch_size = cfg.val_batch_size() if callable(cfg.val_batch_size) else cfg.val_batch_size
@@ -255,7 +253,7 @@ def train(args):
 
             # All processes have to check if exp.summary_file exists, before rank0 will create the file.
             # Otherwise, rank1 can see the empty file and throw an error after rank0 creates it.
-            du.synchronize() # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
+            du.synchronize()  # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
 
             if rank == 0:
                 exp.init_summary()
@@ -263,7 +261,12 @@ def train(args):
             if hasattr(cfg, 'load_pretrained_postDDP'):
                 cfg.load_pretrained_postDDP(model)
 
+
         criterions = cfg.dataset_cfg.task.get_criterions(cfg, splits)
+
+        if rank == 0 and args.wandb_project is not None:
+            with OutputLogger('wandb'):
+                wandb.watch(model, criterion=criterions['train'], log='all')
 
         optimiser = cfg.optimiser(policies)
         if args.load_epoch is not None:
@@ -304,7 +307,7 @@ def train(args):
                     load_scheduler_state = True
                 if load_scheduler_state:
                     if checkpoint["scheduler_state"] is None:
-                        logger.warning(f"Scheduler appears to have changed. Initialise using training stats (summary.csv) instead of the checkpoint.")
+                        logger.warning("Scheduler appears to have changed. Initialise using training stats (summary.csv) instead of the checkpoint.")
                         for i in range(start_epoch):
                             with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
                                 scheduler.step(exp.summary['val_loss'][i])
@@ -313,7 +316,7 @@ def train(args):
                             logger.info("Loading scheduler state from the checkpoint.")
                             scheduler.load_state_dict(checkpoint["scheduler_state"])
                         except Exception:
-                            logger.warning(f"Scheduler appears to have changed. Initialise using training stats (summary.csv) instead of the checkpoint.")
+                            logger.warning("Scheduler appears to have changed. Initialise using training stats (summary.csv) instead of the checkpoint.")
                             for i in range(start_epoch):
                                 with OutputLogger(scheduler.__module__, "INFO"):   # redirect stdout print() to logging (for verbose=True)
                                     scheduler.step(exp.summary['val_loss'][i])
@@ -334,7 +337,7 @@ def train(args):
 
                     if load_scheduler_state:
                         if checkpoint["scheduler_state"] is None:
-                            logger.warning(f"Scheduler appears to have changed. Initialising using param last_epoch instead of using checkpoint scheduler state.")
+                            logger.warning("Scheduler appears to have changed. Initialising using param last_epoch instead of using checkpoint scheduler state.")
                             scheduler = cfg.scheduler(optimiser, iters_per_epoch, last_epoch=last_iter_num-1)   # the last_epoch always has to be {the number of step() called} - 1
                         elif checkpoint["scheduler_state"]["last_epoch"] != last_iter_num:
                             logger.warning(f"Scheduler's last_epoch {checkpoint['scheduler_state']['last_epoch']} doesn't match with the epoch you're loading ({last_iter_num}). Possibly using different number of GPUs, batch size, or dataset size. Initialising using param last_epoch instead.")
@@ -344,7 +347,7 @@ def train(args):
                                 logger.info("Loading scheduler state from the checkpoint.")
                                 scheduler.load_state_dict(checkpoint["scheduler_state"])
                             except Exception:
-                                logger.warning(f"Scheduler appears to have changed. Initialising using param last_epoch instead of using checkpoint scheduler state.")
+                                logger.warning("Scheduler appears to have changed. Initialising using param last_epoch instead of using checkpoint scheduler state.")
                                 scheduler = cfg.scheduler(optimiser, iters_per_epoch, last_epoch=last_iter_num-1)   # the last_epoch always has to be {the number of step() called} - 1
                     else:
                         logger.info("Initialising scheduler using param last_epoch. NOT loading scheduler state from the checkpoint.")
@@ -379,7 +382,7 @@ def train(args):
             train_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'train'), comment='train')
             val_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'val'), comment='val')
             if perform_multicropval:
-                multicropval_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'multi_crop_val'), comment='multi_crop_val')
+                multicropval_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'multicropval'), comment='multicropval')
             else:
                 multicropval_writer = None
 
@@ -415,7 +418,7 @@ def train(args):
                             'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric.is_better}
                     early_stopping = cfg.early_stopping_condition(exp, metric_info)
                 else:
-                    early_stopping=-1   #dummy
+                    early_stopping = -1   # dummy
 
                 if world_size > 1:
                     # Broadcast the early stopping flag to the entire process.
@@ -467,11 +470,6 @@ def train(args):
                 if rank == 0:#{{{
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
                     
-                    train_writer.add_scalar('Loss', loss, epoch)
-                    train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
-                    train_writer.add_scalar('Sample_seen', sample_seen, epoch)
-                    train_writer.add_scalar('Total_samples', total_samples, epoch)
-
                     for metric in metrics['train']:
                         tensorboard_tags = metric.tensorboard_tags()
                         if not isinstance(tensorboard_tags, (list, tuple)):
@@ -486,18 +484,28 @@ def train(args):
                         for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                             if tensorboard_tag is not None:
                                 train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                                if args.wandb_project is not None:
+                                    with OutputLogger('wandb'):
+                                        wandb.log({tensorboard_tag: last_calculated_metric},
+                                                step=epoch, commit=False)
                             if csv_fieldname is not None:
                                 curr_stat[csv_fieldname] = last_calculated_metric
+
+                    train_writer.add_scalar('Loss', loss, epoch)
+                    train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
+                    train_writer.add_scalar('Sample_seen', sample_seen, epoch)
+                    train_writer.add_scalar('Total_samples', total_samples, epoch)
+
+                    if args.wandb_project is not None:
+                        with OutputLogger('wandb'):
+                            wandb.log({'Loss': loss, 'Runtime_sec': elapsed_time, 'Sample_seen': sample_seen, 'Total_samples': total_samples},
+                                step=epoch, commit=True)
                     #}}}
          
                 val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterions['val'], val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, 'val', rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler, refresh_period=args.refresh_period)
                 if rank == 0:#{{{
                     curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
 
-                    val_writer.add_scalar('Loss', val_loss, epoch)
-                    val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
-                    val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
-                    val_writer.add_scalar('Total_samples', val_total_samples, epoch)
 
                     for metric in metrics['val']:
                         tensorboard_tags = metric.tensorboard_tags()
@@ -513,18 +521,28 @@ def train(args):
                         for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                             if tensorboard_tag is not None:
                                 val_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                                if args.wandb_project is not None:
+                                    with OutputLogger('wandb'):
+                                        wandb.log({f'val/{tensorboard_tag}': last_calculated_metric},
+                                            step=epoch, commit=False)
                             if csv_fieldname is not None:
                                 curr_stat[csv_fieldname] = last_calculated_metric
+
+                    val_writer.add_scalar('Loss', val_loss, epoch)
+                    val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
+                    val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
+                    val_writer.add_scalar('Total_samples', val_total_samples, epoch)
+
+                    if args.wandb_project is not None:
+                        with OutputLogger('wandb'):
+                            wandb.log({'val/Loss': val_loss, 'val/Runtime_sec': val_elapsed_time, 'val/Sample_seen': val_sample_seen, 'val/Total_samples': val_total_samples},
+                                step=epoch, commit=True)
                     #}}}
 
                 if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
                     multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterions['multicropval'], multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, 'multicropval', rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None, refresh_period=args.refresh_period)  # No scheduler needed for multicropval
                     if rank == 0:#{{{
                         curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
-                        multicropval_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
-                        multicropval_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
-                        multicropval_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
-                        multicropval_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
 
                         for metric in metrics['multicropval']:
                             tensorboard_tags = metric.tensorboard_tags()
@@ -540,8 +558,22 @@ def train(args):
                             for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                                 if tensorboard_tag is not None:
                                     multicropval_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                                    if args.wandb_project is not None:
+                                        with OutputLogger('wandb'):
+                                            wandb.log({f'multicropval/{tensorboard_tag}': last_calculated_metric},
+                                                step=epoch, commit=False)
                                 if csv_fieldname is not None:
                                     curr_stat[csv_fieldname] = last_calculated_metric
+
+                        multicropval_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
+                        multicropval_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
+                        multicropval_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
+                        multicropval_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
+
+                        if args.wandb_project is not None:
+                            with OutputLogger('wandb'):
+                                wandb.log({'multicropval/Loss': val_loss, 'multicropval/Runtime_sec': val_elapsed_time, 'multicropval/Sample_seen': val_sample_seen, 'multicropval/Total_samples': val_total_samples},
+                                    step=epoch, commit=True)
                         #}}}
 
 
@@ -562,7 +594,7 @@ def train(args):
                             logger.info('Sending plots to Telegram.')
                             start_time_plot = time.time()
                             telegram_reporter.report(metrics, exp, figs)
-                        except (SSLCertVerificationError, OSError, NewConnectionError, MaxRetryError, ConnectionError) as e:
+                        except (SSLCertVerificationError, OSError, NewConnectionError, MaxRetryError, ConnectionError):
                             """Usually, max-retries exceeds when you run it for a while.
                             Therefore, even if it fails to send the plots, don't crash the programme and keep it running.
                             """
@@ -586,6 +618,11 @@ def train(args):
                     if is_better:
                         max_val_metric = val_metric
                         max_val_epoch = epoch
+                        if args.wandb_project is not None:
+                            with OutputLogger('wandb'):
+                                wandb.run.summary['best_val_metric_fieldname'] = best_metric_fieldname
+                                wandb.run.summary['best_val_metric_value'] = val_metric
+                                wandb.run.summary['best_val_epoch'] = max_val_epoch
 
                     if is_better or args.save_mode in ["all", "last_and_peaks"]:
                         # all, last_and_peaks: save always
@@ -605,7 +642,7 @@ def train(args):
                                     }
                                 torch.save(checkpoint, model_path)
                                 io_error = False
-                            except IOError as e:
+                            except IOError:
                                 logger.exception("IOError whilst saving the model.")
                                 input("Press Enter to retry: ")
 
@@ -616,7 +653,7 @@ def train(args):
                             try:
                                 logger.info(f"Removing previous model: {model_path}")
                                 os.remove(model_path)
-                            except IOError as e:
+                            except IOError:
                                 logger.exception("IOError whilst removing the model. Skipping..")
                     
                     # Whatever the save mode is, make the best model symlink (keep it up-to-date)
@@ -648,7 +685,7 @@ def train(args):
             if rank == 0:
                 exp.tg_send_text_with_expname('Finished training')
 
-    except Exception as e:
+    except Exception:
         logger.exception("Exception occurred whilst training")
         # Every process is going to send exception.
         # This can make your Telegram report filled with many duplicates,
