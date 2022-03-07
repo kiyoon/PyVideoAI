@@ -286,7 +286,7 @@ from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccurac
 from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set
 from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict
 video_id_to_multilabel = read_multilabel()
-epic_video_id_to_label, _ = get_verb_uid2label_dict(dataset_cfg.annotations_root)
+_, epic_video_id_to_label = get_verb_uid2label_dict(dataset_cfg.annotations_root)
 holdout_video_id_to_label = get_val_holdout_set(epic_video_id_to_label, video_id_to_multilabel)
 
 best_metric = ClipAccuracyMetric(topk=(1,5), video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval')
