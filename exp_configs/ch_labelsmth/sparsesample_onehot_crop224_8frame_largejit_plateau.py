@@ -10,22 +10,32 @@ from pyvideoai.utils import loader
 
 import torch
 
+input_frame_length = 8
+input_type = 'RGB_video' # RGB_video / flow
+
 #batch_size = 8  # per process (per GPU)
 def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
+    if input_type == 'RGB_video':
+        divide_batch_size = 1
+    elif input_type == 'flow':
+        divide_batch_size = 4       # For optical flow, you read 5 times as many frames, so it will be a bottleneck if you use too big batch size.
+    else:
+        raise ValueError(f'Wrong input_type {input_type}')
+
     devices=list(range(torch.cuda.device_count()))
     vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
+
     if vram > 20e+9:
-        return 32
+        return input_frame_length * 4 // divide_batch_size
     elif vram > 10e+9:
-        return 16
-    return 8
+        return input_frame_length * 2 // divide_batch_size
+    return input_frame_length // divide_batch_size
 
 def val_batch_size():
     return batch_size() if callable(batch_size) else batch_size
 
-input_frame_length = 8
 crop_size = 224
 train_jitter_min = 224
 train_jitter_max = 336
@@ -37,7 +47,6 @@ test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
-input_type = 'RGB_video' # RGB_video / flow
 
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
