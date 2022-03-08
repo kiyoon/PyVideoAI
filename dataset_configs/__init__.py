@@ -72,6 +72,21 @@ def copy_cfg_files(cfg, dest_dir):
         copy2(cfg_path, dest_path, follow_symlinks=True)
 
 
+def wandb_log_cfg_files(cfg):
+    """
+    Using Weights & Biases (wandb.ai), backup the config file and its base config files exec'ed using _exec_relative_().
+    We don't use `log_code()` because it doesn't support symlinks.
+    """
+    import wandb
+    code_artifact = wandb.Artifact(__name__, type='configs')
+    src_dir = _SCRIPT_DIR
+
+    for cfg_path in [os.path.realpath(cfg.__file__)] + cfg._exec_paths_:
+        rel_path = os.path.relpath(cfg_path, src_dir)
+        code_artifact.add_file(cfg_path, name=rel_path)
+    wandb.log_artifact(code_artifact)
+
+
 def config_path(dataset_name, channel=''):
     if channel == '' or channel is None:
         return os.path.join(_SCRIPT_DIR, dataset_name + '.py')

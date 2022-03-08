@@ -131,6 +131,7 @@ def train(args):
                     wandb_config = args.__dict__
                     wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project,
                             name=f'{exp.dataset} {exp.model_name} {exp.experiment_name} v{exp.version}')
+                    
 
             # save configs
             exp.dump_args(args)
@@ -144,6 +145,11 @@ def train(args):
 
             exp_config_dir = os.path.join(exp.configs_dir, 'exp_configs')
             exp_configs.copy_cfg_files(cfg, exp_config_dir)
+
+            if args.wandb_project is not None:
+                dataset_configs.wandb_log_cfg_files(cfg.dataset_cfg)
+                model_configs.wandb_log_cfg_files(cfg.model_cfg)
+                exp_configs.wandb_log_cfg_files(cfg)
 
 
         # Dataset
