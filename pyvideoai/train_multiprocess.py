@@ -507,7 +507,6 @@ def train(args):
                 if rank == 0:#{{{
                     curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
                     wandb_stat.update({'Loss/val': val_loss, 'Runtime_sec/val': val_elapsed_time, 'Sample_seen/val': val_sample_seen, 'Total_samples/val': val_total_samples})
-get_tensorboard_writer('val')
                     get_tensorboard_writer('val').add_scalar('Loss', val_loss, epoch)
                     get_tensorboard_writer('val').add_scalar('Runtime_sec', val_elapsed_time, epoch)
                     get_tensorboard_writer('val').add_scalar('Sample_seen', val_sample_seen, epoch)
