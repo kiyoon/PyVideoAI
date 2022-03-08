@@ -379,12 +379,11 @@ def train(args):
         best_metric, best_metric_fieldname = metrics.get_best_metric_and_fieldname()
 
         if rank == 0:
-            train_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'train'), comment='train')
-            val_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'val'), comment='val')
-            if perform_multicropval:
-                multicropval_writer = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, 'multicropval'), comment='multicropval')
-            else:
-                multicropval_writer = None
+            tensorboard_writers = {}    # key: split
+            def get_tensorboard_writer(split: str):
+                if split not in tensorboard_writers.keys():
+                    tensorboard_writers[split] = SummaryWriter(os.path.join(exp.tensorboard_runs_dir, split), comment=split)
+                return tensorboard_writers[split]
 
 
             max_val_metric = None 
@@ -470,10 +469,10 @@ def train(args):
                 if rank == 0:#{{{
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
                     wandb_stat = {'Loss/train': loss, 'Runtime_sec/train': elapsed_time, 'Sample_seen/train': sample_seen, 'Total_samples/train': total_samples}
-                    train_writer.add_scalar('Loss', loss, epoch)
-                    train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
-                    train_writer.add_scalar('Sample_seen', sample_seen, epoch)
-                    train_writer.add_scalar('Total_samples', total_samples, epoch)
+                    get_tensorboard_writer('train').add_scalar('Loss', loss, epoch)
+                    get_tensorboard_writer('train').add_scalar('Runtime_sec', elapsed_time, epoch)
+                    get_tensorboard_writer('train').add_scalar('Sample_seen', sample_seen, epoch)
+                    get_tensorboard_writer('train').add_scalar('Total_samples', total_samples, epoch)
                     
                     for metric in metrics['train']:
                         tensorboard_tags = metric.tensorboard_tags()
@@ -488,8 +487,10 @@ def train(args):
 
                         for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                             if tensorboard_tag is not None:
-                                train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                                wandb_stat[f'{tensorboard_tag}/train'] = last_calculated_metric
+                                # You can't assume that metrics in 'train' split are always called 'train'.
+                                # Users can set custom name if they want to.
+                                get_tensorboard_writer(metric.split).add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                                wandb_stat[f'{tensorboard_tag}/{metric.split}'] = last_calculated_metric
                             if csv_fieldname is not None:
                                 curr_stat[csv_fieldname] = last_calculated_metric
 
@@ -500,10 +501,11 @@ def train(args):
                 if rank == 0:#{{{
                     curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
                     wandb_stat.update({'Loss/val': val_loss, 'Runtime_sec/val': val_elapsed_time, 'Sample_seen/val': val_sample_seen, 'Total_samples/val': val_total_samples})
-                    val_writer.add_scalar('Loss', val_loss, epoch)
-                    val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
-                    val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
-                    val_writer.add_scalar('Total_samples', val_total_samples, epoch)
+get_tensorboard_writer('val')
+                    get_tensorboard_writer('val').add_scalar('Loss', val_loss, epoch)
+                    get_tensorboard_writer('val').add_scalar('Runtime_sec', val_elapsed_time, epoch)
+                    get_tensorboard_writer('val').add_scalar('Sample_seen', val_sample_seen, epoch)
+                    get_tensorboard_writer('val').add_scalar('Total_samples', val_total_samples, epoch)
 
 
                     for metric in metrics['val']:
@@ -519,8 +521,8 @@ def train(args):
 
                         for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                             if tensorboard_tag is not None:
-                                val_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                                wandb_stat[f'{tensorboard_tag}/val'] = last_calculated_metric
+                                get_tensorboard_writer(metric.split).add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                                wandb_stat[f'{tensorboard_tag}/{metric.split}'] = last_calculated_metric
                             if csv_fieldname is not None:
                                 curr_stat[csv_fieldname] = last_calculated_metric
 
@@ -532,10 +534,10 @@ def train(args):
                         curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
                         wandb_stat.update({'Loss/multicropval': multi_crop_val_loss, 'Runtime_sec/multicropval': multi_crop_val_elapsed_time,
                             'Sample_seen/multicropval': multi_crop_val_sample_seen, 'Total_samples/multicropval': multi_crop_val_total_samples})
-                        multicropval_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
-                        multicropval_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
-                        multicropval_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
-                        multicropval_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
+                        get_tensorboard_writer('multicropval').add_scalar('Loss', multi_crop_val_loss, epoch)
+                        get_tensorboard_writer('multicropval').add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
+                        get_tensorboard_writer('multicropval').add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
+                        get_tensorboard_writer('multicropval').add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
 
                         for metric in metrics['multicropval']:
                             tensorboard_tags = metric.tensorboard_tags()
@@ -550,8 +552,8 @@ def train(args):
 
                             for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                                 if tensorboard_tag is not None:
-                                    multicropval_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                                    wandb_stat[f'{tensorboard_tag}/multicropval'] = last_calculated_metric
+                                    get_tensorboard_writer(metric.split).add_scalar(tensorboard_tag, last_calculated_metric, epoch)
+                                    wandb_stat[f'{tensorboard_tag}/{metric.split}'] = last_calculated_metric
                                 if csv_fieldname is not None:
                                     curr_stat[csv_fieldname] = last_calculated_metric
 
