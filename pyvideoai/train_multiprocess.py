@@ -125,9 +125,9 @@ def train(args):
             
             # Enable Weights & Biases visualisation service.
             if args.wandb_project is not None:
-                with OutputLogger('wandb'):
+                with OutputLogger('wandb', input='stderr'):
                     import wandb
-                    wandb_dir = os.path.join(exp.experiment_dir, 'wandb')
+                    wandb_dir = os.path.join(exp.experiment_dir)
                     wandb_config = args.__dict__
                     wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project,
                             name=f'{exp.dataset} {exp.model_name} {exp.experiment_name} v{exp.version}')
@@ -265,7 +265,7 @@ def train(args):
         criterions = cfg.dataset_cfg.task.get_criterions(cfg, splits)
 
         if rank == 0 and args.wandb_project is not None:
-            with OutputLogger('wandb'):
+            with OutputLogger('wandb', input='stderr'):
                 wandb.watch(model, criterion=criterions['train'], log='all')
 
         optimiser = cfg.optimiser(policies)
@@ -469,6 +469,11 @@ def train(args):
                 sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterions['train'], clip_grad_max_norm, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
                 if rank == 0:#{{{
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
+                    wandb_stat = {'Loss/train': loss, 'Runtime_sec/train': elapsed_time, 'Sample_seen/train': sample_seen, 'Total_samples/train': total_samples}
+                    train_writer.add_scalar('Loss', loss, epoch)
+                    train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
+                    train_writer.add_scalar('Sample_seen', sample_seen, epoch)
+                    train_writer.add_scalar('Total_samples', total_samples, epoch)
                     
                     for metric in metrics['train']:
                         tensorboard_tags = metric.tensorboard_tags()
@@ -484,27 +489,21 @@ def train(args):
                         for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                             if tensorboard_tag is not None:
                                 train_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                                if args.wandb_project is not None:
-                                    with OutputLogger('wandb'):
-                                        wandb.log({tensorboard_tag: last_calculated_metric},
-                                                step=epoch, commit=False)
+                                wandb_stat[f'{tensorboard_tag}/train'] = last_calculated_metric
                             if csv_fieldname is not None:
                                 curr_stat[csv_fieldname] = last_calculated_metric
 
-                    train_writer.add_scalar('Loss', loss, epoch)
-                    train_writer.add_scalar('Runtime_sec', elapsed_time, epoch)
-                    train_writer.add_scalar('Sample_seen', sample_seen, epoch)
-                    train_writer.add_scalar('Total_samples', total_samples, epoch)
 
-                    if args.wandb_project is not None:
-                        with OutputLogger('wandb'):
-                            wandb.log({'Loss': loss, 'Runtime_sec': elapsed_time, 'Sample_seen': sample_seen, 'Total_samples': total_samples},
-                                step=epoch, commit=True)
                     #}}}
          
                 val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterions['val'], val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, 'val', rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler, refresh_period=args.refresh_period)
                 if rank == 0:#{{{
                     curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
+                    wandb_stat.update({'Loss/val': val_loss, 'Runtime_sec/val': val_elapsed_time, 'Sample_seen/val': val_sample_seen, 'Total_samples/val': val_total_samples})
+                    val_writer.add_scalar('Loss', val_loss, epoch)
+                    val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
+                    val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
+                    val_writer.add_scalar('Total_samples', val_total_samples, epoch)
 
 
                     for metric in metrics['val']:
@@ -521,28 +520,22 @@ def train(args):
                         for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                             if tensorboard_tag is not None:
                                 val_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                                if args.wandb_project is not None:
-                                    with OutputLogger('wandb'):
-                                        wandb.log({f'val/{tensorboard_tag}': last_calculated_metric},
-                                            step=epoch, commit=False)
+                                wandb_stat[f'{tensorboard_tag}/val'] = last_calculated_metric
                             if csv_fieldname is not None:
                                 curr_stat[csv_fieldname] = last_calculated_metric
 
-                    val_writer.add_scalar('Loss', val_loss, epoch)
-                    val_writer.add_scalar('Runtime_sec', val_elapsed_time, epoch)
-                    val_writer.add_scalar('Sample_seen', val_sample_seen, epoch)
-                    val_writer.add_scalar('Total_samples', val_total_samples, epoch)
-
-                    if args.wandb_project is not None:
-                        with OutputLogger('wandb'):
-                            wandb.log({'val/Loss': val_loss, 'val/Runtime_sec': val_elapsed_time, 'val/Sample_seen': val_sample_seen, 'val/Total_samples': val_total_samples},
-                                step=epoch, commit=True)
                     #}}}
 
                 if perform_multicropval and epoch % args.multi_crop_val_period == args.multi_crop_val_period -1:
                     multi_crop_val_sample_seen, multi_crop_val_total_samples, multi_crop_val_loss, multi_crop_val_elapsed_time, _ = eval_epoch(model, criterions['multicropval'], multi_crop_val_dataloader, data_unpack_funcs['multicropval'], metrics['multicropval'], None, cfg.dataset_cfg.num_classes, 'multicropval', rank, world_size, input_reshape_func=input_reshape_funcs['multicropval'], scheduler=None, refresh_period=args.refresh_period)  # No scheduler needed for multicropval
                     if rank == 0:#{{{
                         curr_stat.update({'multicropval_runtime_sec': multi_crop_val_elapsed_time, 'multicropval_loss': multi_crop_val_loss})
+                        wandb_stat.update({'Loss/multicropval': multi_crop_val_loss, 'Runtime_sec/multicropval': multi_crop_val_elapsed_time,
+                            'Sample_seen/multicropval': multi_crop_val_sample_seen, 'Total_samples/multicropval': multi_crop_val_total_samples})
+                        multicropval_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
+                        multicropval_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
+                        multicropval_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
+                        multicropval_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
 
                         for metric in metrics['multicropval']:
                             tensorboard_tags = metric.tensorboard_tags()
@@ -558,22 +551,11 @@ def train(args):
                             for tensorboard_tag, csv_fieldname, last_calculated_metric in zip(tensorboard_tags, csv_fieldnames, last_calculated_metrics):
                                 if tensorboard_tag is not None:
                                     multicropval_writer.add_scalar(tensorboard_tag, last_calculated_metric, epoch)
-                                    if args.wandb_project is not None:
-                                        with OutputLogger('wandb'):
-                                            wandb.log({f'multicropval/{tensorboard_tag}': last_calculated_metric},
-                                                step=epoch, commit=False)
+                                    wandb_stat[f'{tensorboard_tag}/multicropval'] = last_calculated_metric
                                 if csv_fieldname is not None:
                                     curr_stat[csv_fieldname] = last_calculated_metric
 
-                        multicropval_writer.add_scalar('Loss', multi_crop_val_loss, epoch)
-                        multicropval_writer.add_scalar('Runtime_sec', multi_crop_val_elapsed_time, epoch)
-                        multicropval_writer.add_scalar('Sample_seen', multi_crop_val_sample_seen, epoch)
-                        multicropval_writer.add_scalar('Total_samples', multi_crop_val_total_samples, epoch)
 
-                        if args.wandb_project is not None:
-                            with OutputLogger('wandb'):
-                                wandb.log({'multicropval/Loss': val_loss, 'multicropval/Runtime_sec': val_elapsed_time, 'multicropval/Sample_seen': val_sample_seen, 'multicropval/Total_samples': val_total_samples},
-                                    step=epoch, commit=True)
                         #}}}
 
 
@@ -581,6 +563,9 @@ def train(args):
 
                 if rank == 0:
                     exp.add_summary_line(curr_stat)
+                    if args.wandb_project is not None:
+                        wandb.log(wandb_stat, step=epoch)
+
                     figs = metric_plotter.plot(exp)
 
                     if hasattr(cfg, 'early_stopping_condition'):
@@ -619,7 +604,7 @@ def train(args):
                         max_val_metric = val_metric
                         max_val_epoch = epoch
                         if args.wandb_project is not None:
-                            with OutputLogger('wandb'):
+                            with OutputLogger('wandb', input='stderr'):
                                 wandb.run.summary['best_val_metric_fieldname'] = best_metric_fieldname
                                 wandb.run.summary['best_val_metric_value'] = val_metric
                                 wandb.run.summary['best_val_epoch'] = max_val_epoch
