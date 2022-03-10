@@ -6,6 +6,7 @@ import os
 import random
 import torch
 import torch.utils.data
+from gulpio2 import GulpDirectory
 
 #import slowfast.utils.logging as logging
 import logging
@@ -35,8 +36,11 @@ def count_class_frequency(csv_file):
     class_frequency = np.bincount(labels, minlength=labels.max())
     return class_frequency
 
-class FramesSparsesampleDataset(torch.utils.data.Dataset):
+class GulpSparsesampleDataset(torch.utils.data.Dataset):
     """
+    It uses GulpIO2 instead of reading directly from jpg frames to speed up the IO!
+    It will ignore the gulp meta data, and read meta from the CSV instead.
+
     Video loader. Construct the video loader, then sample
     clips from the videos. For training, a single clip is
     randomly sampled from every video with random cropping, scaling, and
@@ -45,7 +49,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
     and four corners.
     """
 
-    def __init__(self, csv_file, mode, num_frames, 
+    def __init__(self, csv_file, mode, num_frames, gulp_dir_path: str,
             train_jitter_min=256, train_jitter_max=320,
             train_horizontal_flip = True,
             test_scale=256, test_num_spatial_crops=10, 
@@ -53,17 +57,17 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             normalise = True,           # divide pixels by 255
             bgr = False,
             greyscale = False,
-            path_prefix = "",
-            num_retries = 10,
             sample_index_code = 'pyvideoai',
-            flow = None,        # If 'RG', treat R and G channels as u and v. Discard B.
-                                # If 'RR', load two greyscale images and use R channel only.
-                                #     Need to define flow_folder_x and flow_folder_y,
-                                #     and the path in CSV needs to have {flow_direction}
-                                #     which will be replaced to the definitions.
+            flow = None,        # If "grey", each image is a 2D array of shape (H, W).
+                                #           Optical flow has to be saved like
+                                #           (u1, v1, u2, v2, u3, v3, u4, v4, ...)
+                                #           So when indexing the frame dimension,
+                                #           it should read [frame*2, frame*2+1] for each frame. 
+                                #           Also, the CSV file has to have the actual number of frames,
+                                #           instead of doubled number of frames because of the two channels.
+                                # If "RG", each image is an 3D array of shape (H, W, 3),
+                                #           and we're using R and G channels for the u and v optical flow channels.
             flow_neighbours = 5,    # How many flow frames to stack.
-            flow_folder_x = 'u',
-            flow_folder_y = 'v',    # These are only needed for flow='RR'
             video_id_to_label: dict = None,     # Pass a dictionary of mapping video ID to labels, and it will ignore the label in the CSV and get labels from here. Useful when using unsupported label types such as soft labels.
             ):
         """
@@ -71,13 +75,20 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         the csv file is:
         ```
         num_classes     # set it to zero for single label. Only needed for multilabel.
-        path_to_frames_dir_1/{frame:05d}.jpg video_id_1 label_1 start_frame_1 end_frame_1
-        path_to_frames_dir_2/{frame:05d}.jpg video_id_2 label_2 start_frame_2 end_frame_2
+        gulp_key_1 video_id_1 label_1 start_frame_1 end_frame_1
+        gulp_key_2 video_id_2 label_2 start_frame_2 end_frame_2
         ...
-        path_to_frames_dir_N/{frame:05d}.jpg video_id_N label_N start_frame_N end_frame_N
+        gulp_key_N video_id_N label_N start_frame_N end_frame_N
         ```
 
-        Note that the video_id must be an integer.
+        `gulp_key` are the gulp dictionary key to access the video segment. Must be string.
+        It will access something like this.
+        ```
+        gulpdata = GulpDirectory(gulp_dir_path)
+        frames = gulpdata[gulp_key, [0, 1, 2]][0]   # It will ignore the meta data.
+        ```
+
+        Note that the `video_id` must be an integer.
 
         Args:
             mode (str): Options includes `train`, or `test` mode.
@@ -95,8 +106,8 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             "test",
         ], "Split '{}' not supported".format(mode)
         self._csv_file = csv_file
-        self._path_prefix = path_prefix
-        self._num_retries = num_retries
+        self._gulp_dir_path = gulp_dir_path
+        self.gulp_dir = GulpDirectory(gulp_dir_path)
         self.mode = mode
         self.sample_index_code = sample_index_code.lower()
 
@@ -124,27 +135,18 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         self.bgr = bgr
         self.greyscale = greyscale 
 
-        if flow is None:
-            self.flow = None
-        else:
-            # string
+        if flow is not None:
             self.flow = flow.lower()
+            assert self.flow in ['grey', 'rg'], f'Optical flow mode must be either grey or RG but got {flow}'
+
             self.flow_neighbours = flow_neighbours
 
-            if self.flow == 'rg':
-                assert len(mean) in [1, 2]
-                assert len(std)  in [1, 2]
-                assert not greyscale, 'For optical flow RG data, it is impossible to use greyscale.'
-                assert not bgr, 'For optical flow RG data, it is impossible to use BGR channel ordering.'
-            elif self.flow == 'rr':
-                assert len(mean) in [1, 2]
-                assert len(std)  in [1, 2]
-                assert not greyscale, 'For optical flow RR data, it is impossible to use greyscale. It actually just uses R channels and ignore the rest.'
-                assert not bgr, 'For optical flow RR data, it is impossible to use BGR channel ordering.'
-                self.flow_folder_x = flow_folder_x
-                self.flow_folder_y = flow_folder_y
-            else:
-                raise ValueError(f'Not recognised flow format: {self.flow}. Choose one of RG (use red and green channels), RR (two greyscale images representing x and y directions)')
+            assert len(mean) in [1, 2]
+            assert len(std)  in [1, 2]
+            assert not greyscale, 'For optical flow data, it is impossible to use greyscale.'
+            assert not bgr, 'For optical flow data, it is impossible to use BGR channel ordering.'
+        else:
+            self.flow = None
 
         self.video_id_to_label = video_id_to_label
         if video_id_to_label is not None:
@@ -162,7 +164,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         assert test_num_spatial_crops in [1, 5, 10], "1 for centre, 5 for centre and four corners, 10 for their horizontal flips"
         self.test_num_spatial_crops = test_num_spatial_crops
 
-        logger.info("Constructing video dataset {}...".format(mode))
+        logger.info(f"Constructing gulp video dataset mode {mode}...")
         self._construct_loader()
 
     def _construct_loader(self):#{{{
@@ -173,7 +175,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             self._csv_file
         )
 
-        self._path_to_frames = []
+        self._gulp_keys = []
         self._video_ids = []
         self._labels = []
         self._start_frames = []    # number of sample video frames
@@ -181,9 +183,9 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         self._spatial_temporal_idx = []
         with open(self._csv_file, "r") as f:
             self.num_classes = int(f.readline())
-            for clip_idx, path_label in enumerate(f.read().splitlines()):
-                assert len(path_label.split()) == 5
-                path, video_id, label, start_frame, end_frame = path_label.split()
+            for clip_idx, key_label in enumerate(f.read().splitlines()):
+                assert len(key_label.split()) == 5
+                gulp_key, video_id, label, start_frame, end_frame = key_label.split()
 
                 if self.video_id_to_label is None:
                     if self.num_classes > 0:
@@ -197,21 +199,19 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
                     label = self.video_id_to_label[int(video_id)]
 
                 for idx in range(self._num_clips):
-                    self._path_to_frames.append(
-                        os.path.join(self._path_prefix, path)
-                    )
+                    self._gulp_keys.append(gulp_key)
                     self._video_ids.append(int(video_id))
                     self._labels.append(label)
                     self._start_frames.append(int(start_frame))
                     self._end_frames.append(int(end_frame))
                     self._spatial_temporal_idx.append(idx)
         assert (
-            len(self._path_to_frames) > 0
+            len(self._gulp_keys) > 0
         ), f"Failed to load video loader from {self._csv_file}"
         
         logger.info(
             "Constructing video dataloader (size: {}) from {}".format(
-                len(self._path_to_frames), self._csv_file
+                len(self), self._csv_file
             )
         )#}}}
 
@@ -221,7 +221,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         """
         indices_of_video_ids = [x for x, v in enumerate(self._video_ids) if v in video_ids]
 
-        self._path_to_frames = [self._path_to_frames[x] for x in indices_of_video_ids]
+        self._gulp_keys = [self._gulp_keys[x] for x in indices_of_video_ids]
         self._video_ids = [self._video_ids[x] for x in indices_of_video_ids]
         self._labels = [self._labels[x] for x in indices_of_video_ids]
         self._start_frames = [self._start_frames[x] for x in indices_of_video_ids]
@@ -282,27 +282,35 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             frame_indices = utils.TDN_sample_indices(num_video_frames, self.num_frames, mode = self.mode, new_length=15)
         else:
             raise ValueError(f'Wrong self.sample_index_code: {self.sample_index_code}. Should be pyvideoai, TSN, TDN')
+
         frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
 
-        if self.flow == 'rr':
-            frame_paths_x = [self._path_to_frames[index].format(flow_direction=self.flow_folder_x, frame=frame_idx) for frame_idx in frame_indices]
-            frame_paths_y = [self._path_to_frames[index].format(flow_direction=self.flow_folder_y, frame=frame_idx) for frame_idx in frame_indices]
-            frames_x = utils.retry_load_images(frame_paths_x, retry=self._num_retries, backend='pytorch', bgr=False, greyscale=False)
-            frames_y = utils.retry_load_images(frame_paths_y, retry=self._num_retries, backend='pytorch', bgr=False, greyscale=False)
-            frames = torch.cat((frames_x[...,0:1], frames_y[...,0:1]), dim=-1)
+        if self.flow == 'grey':
+            # Frames are saved as (u0, v0, u1, v1, ...)
+            # Read pairs of greyscale images.
+            frame_indices = [idx*2+uv for idx in frame_indices for uv in range(2)]
+            frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices])     # (T*2, H, W)
+            TC, H, W = frames.shape
+            frames = np.reshape(frames, (TC//2, 2, H, W))    # (T, C=2, H, W)
+            frames = np.transpose(frames, (0,2,3,1))         # (T, H, W, C=2) 
         else:
-            try:
-                # {frame:05d} format (new)
-                frame_paths = [self._path_to_frames[index].format(frame=frame_idx) for frame_idx in frame_indices]
-            except IndexError:
-                # {:05d} format (old)
-                frame_paths = [self._path_to_frames[index].format(frame_idx) for frame_idx in frame_indices]
+            frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices])     # (T, H, W, C=3)
+                                                                                        # or if greyscale images, (T, H, W)
+            if frames.ndim == 3:
+                # Greyscale images. (T, H, W) -> (T, H, W, 1)
+                frames = np.expand_dims(frames, axis=-1)
 
-            frames = utils.retry_load_images(frame_paths, retry=self._num_retries, backend='pytorch', bgr=self.bgr, greyscale=self.greyscale)
             if self.flow == 'rg':
                 frames = frames[..., 0:2]   # Use R and G as u and v (x,y). Discard B channel.
 
 
+        if self.bgr:
+            frames = frames[..., ::-1]
+
+        if self.greyscale:
+            raise NotImplementedError()
+
+        frames = torch.from_numpy(frames)
 
         # Perform color normalization.
         frames = utils.tensor_normalize(
@@ -341,5 +349,5 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         Returns:
             (int): the number of videos in the dataset.
         """
-        return len(self._path_to_frames)
+        return len(self._gulp_keys)
 
