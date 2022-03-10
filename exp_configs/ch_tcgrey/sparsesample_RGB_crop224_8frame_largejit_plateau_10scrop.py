@@ -147,8 +147,17 @@ def _get_torch_dataset(csv_path, split):
     else:
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
+
+    if sampling_mode == 'GreyST':
+        sample_frame_length = input_frame_length * 3
+    elif sampling_mode == 'TCPlus2':
+        sample_frame_length = input_frame_length + 2
+    elif sampling_mode in ['TC', 'RGB']:
+        sample_frame_length = input_frame_length
+    else:
+        raise ValueError(f'Unknown {sampling_mode = }. Should be RGB, TC, TCPlus2, or GreyST')
     return FramesSparsesampleDataset(csv_path, mode,
-            input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
+            sample_frame_length,
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
             train_horizontal_flip=dataset_cfg.horizontal_flip,
             test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
