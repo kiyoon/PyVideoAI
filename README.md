@@ -97,11 +97,11 @@ Refer to [INSTALL.md](docs/INSTALL.md).
 TL;DR,
 
 ```bash
-conda create -n videoai python=3.8
+conda create -n videoai python=3.10
 conda activate videoai
-conda install pytorch==1.9.1 torchvision==0.10.1 cudatoolkit=10.2 -c pytorch
+conda install pytorch==1.11.0 torchvision==0.12.0 cudatoolkit=10.2 -c pytorch
 ### For RTX 30xx GPUs,
-#conda install pytorch==1.9.1 torchvision==0.10.1 cudatoolkit=11.1 -c pytorch -c nvidia
+#conda install pytorch==1.11.0 torchvision==0.12.0 cudatoolkit=11.3 -c pytorch
  
 
 git clone --recurse-submodules https://github.com/kiyoon/PyVideoAI.git

@@ -3,7 +3,7 @@
 
 ## Python dependencies
 
-Python >= 3.8  
+Python >= 3.9  
 PyTorch >= 1.9.0
 
 ## Installation
@@ -18,9 +18,7 @@ Or, clone submodules and checkout to master after you clone this repository.
 ```bash
 git clone https://github.com/kiyoon/PyVideoAI.git
 cd PyVideoAI 
-git submodule init
-git submodule update
-git submodule foreach git checkout master
+git submodule update --init --remote --merge --recursive
 ```
 
 Preferrably, checkout to a stable release.
@@ -34,9 +32,9 @@ Then, install each submodule.
 
 ```bash
 cd submodules/video_datasets_api
-python setup.py develop
+pip install -e .
 cd ../experiment_utils
-python setup.py develop
+pip install -e .
 ```
 
 
@@ -44,7 +42,7 @@ Finally, install the PyVideoAI.
 
 ```bash
 cd ../..
-python setup.py develop
+pip install -e .
 ```
 
 
@@ -53,5 +51,5 @@ python setup.py develop
 
 ```bash
 git pull
-git submodule update --remote --merge
+git submodule update
 ```
