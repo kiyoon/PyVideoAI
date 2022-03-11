@@ -1,5 +1,4 @@
-import torch
-import torch.distributed as dist
+import torch import torch.distributed as dist
 from torch import nn
 
 import os
@@ -131,6 +130,9 @@ def train(args):
                     wandb_config = args.__dict__
                     wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project,
                             name=f'{exp.dataset} {exp.model_name} {exp.experiment_name} v{exp.version}')
+                    logger.info((f'Weights & Biases initialised.\n'
+                        f'View project at {wandb.run.get_project_url()}\n'
+                        f'View run at {wandb.run.get_url()}'))
                     
 
             # save configs
@@ -440,7 +442,12 @@ def train(args):
                 exp.tg_send_text_with_expname(f'Early stopping triggered.')
         else:
             if rank == 0:
-                exp.tg_send_text_with_expname(f'Starting experiment..')
+                if args.wandb_project is not None:
+                    exp.tg_send_text_with_expname((f'Starting experiment..\n'
+                        f'View W&B project at {wandb.run.get_project_url()}\n'
+                        f'View W&B run at {wandb.run.get_url()}'))
+                else:
+                    exp.tg_send_text_with_expname(f'Starting experiment..')
 
             for epoch in range(start_epoch, args.num_epochs):
                 if hasattr(cfg, "epoch_start_script"):
@@ -675,7 +682,12 @@ def train(args):
 
             logger.success('Finished training')
             if rank == 0:
-                exp.tg_send_text_with_expname('Finished training')
+                if args.wandb_project is not None:
+                    exp.tg_send_text_with_expname((f'Finished training.\n'
+                        f'View W&B project at {wandb.run.get_project_url()}\n'
+                        f'View W&B run at {wandb.run.get_url()}'))
+                else:
+                    exp.tg_send_text_with_expname('Finished training.')
 
     except Exception:
         logger.exception("Exception occurred whilst training")
