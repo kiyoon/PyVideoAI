@@ -1,4 +1,5 @@
-import torch import torch.distributed as dist
+import torch
+import torch.distributed as dist
 from torch import nn
 
 import os
