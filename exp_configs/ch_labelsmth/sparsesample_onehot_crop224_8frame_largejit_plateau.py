@@ -3,7 +3,7 @@ import pickle
 
 from pyvideoai.dataloaders import FramesSparsesampleDataset, VideoSparsesampleDataset, GulpSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
-from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
+#from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
 from pyvideoai.utils import loader
 
@@ -21,7 +21,7 @@ def batch_size():
     elif input_type == 'flow':
         divide_batch_size = 4       # For optical flow, you read 5 times as many frames, so it will be a bottleneck if you use too big batch size.
     elif input_type in ['gulp_rgb', 'gulp_flow']:
-        divide_batch_size = 1
+        divide_batch_size = 2
     else:
         raise ValueError(f'Wrong input_type {input_type}')
 
@@ -63,7 +63,8 @@ proselflc_exp_base = 1.
 #### OPTIONAL
 def get_criterion(split):
     if loss_type == 'labelsmooth':
-        return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
+        return torch.nn.CrossEntropyLoss(label_smoothing=labelsmooth_factor)
+        #return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
     elif loss_type == 'proselflc':
         if split == 'train':
             return ProSelfLC(proselflc_total_time, proselflc_exp_base)
@@ -248,6 +249,7 @@ def _get_torch_dataset(csv_path, split):
                 )
     elif input_type == 'gulp_flow':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_flow_dirname[split])
+        flow_neighbours = 5
 
         return GulpSparsesampleDataset(csv_path, mode,
                 input_frame_length, gulp_dir_path,
@@ -324,7 +326,7 @@ holdout_video_id_to_label = get_val_holdout_set(epic_video_id_to_label, video_id
 best_metric = ClipAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval')
 metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(), ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'])],
         'val': [best_metric,
-            ClipAccuracyMetric(topk=(5,), video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval')
+            ClipAccuracyMetric(topk=(5,), video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
             ClipMeanPerclassAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
             ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
             ClipAccuracyMetric(topk=(1,5)),

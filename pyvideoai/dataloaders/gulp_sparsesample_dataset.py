@@ -287,12 +287,12 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
             # Frames are saved as (u0, v0, u1, v1, ...)
             # Read pairs of greyscale images.
             frame_indices = [idx*2+uv for idx in frame_indices for uv in range(2)]
-            frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices])     # (T*2, H, W)
+            frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices][0])     # (T*2, H, W)
             TC, H, W = frames.shape
             frames = np.reshape(frames, (TC//2, 2, H, W))    # (T, C=2, H, W)
             frames = np.transpose(frames, (0,2,3,1))         # (T, H, W, C=2) 
         else:
-            frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices])     # (T, H, W, C=3)
+            frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices][0])     # (T, H, W, C=3)
                                                                                         # or if greyscale images, (T, H, W)
             if frames.ndim == 3:
                 # Greyscale images. (T, H, W) -> (T, H, W, 1)
