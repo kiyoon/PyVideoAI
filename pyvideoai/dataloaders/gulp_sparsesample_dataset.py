@@ -3,7 +3,6 @@
 
 import numpy as np
 import os
-import random
 import torch
 import torch.utils.data
 from gulpio2 import GulpDirectory
@@ -11,7 +10,6 @@ from gulpio2 import GulpDirectory
 #import slowfast.utils.logging as logging
 import logging
 
-from . import transform as transform
 from . import utils as utils
 
 logger = logging.getLogger(__name__)
