@@ -19,6 +19,8 @@ task = SingleLabelClassificationTask()
 dataset_root = os.path.join(DATA_DIR, 'EPIC_KITCHENS_100')
 video_dir = os.path.join(dataset_root, 'segments324_15fps')
 flowframes_dir = os.path.join(dataset_root, 'flow_frames')
+gulp_rgb_dirname = {'train': 'gulp_train_rgb', 'val': 'gulp_val_rgb', 'multicropval': 'gulp_val_rgb'}
+gulp_flow_dirname = {'train': 'gulp_train_flow', 'val': 'gulp_val_flow', 'multicropval': 'gulp_val_flow'}
 annotations_root = os.path.join(dataset_root, 'epic-kitchens-100-annotations')
 
 narration_id_to_video_id, narration_id_sorted = epic_narration_id_to_unique_id(annotations_root)
@@ -29,41 +31,10 @@ head_classes, tail_classes = get_head_tail_classes(annotations_root, 'verb')
 video_split_file_dir = os.path.join(dataset_root, "splits_video")
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 flowframes_split_file_dir = os.path.join(dataset_root, "splits_flowframes")
+gulp_rgb_split_file_dir = os.path.join(dataset_root, 'splits_gulp_rgb')
+gulp_flow_split_file_dir = os.path.join(dataset_root, 'splits_gulp_flow')
 split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv', 'traindata_testmode': 'train.csv', 'trainpartialdata_testmode': 'train_partial.csv'}
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test', 'traindata_testmode': 'test', 'trainpartialdata_testmode': 'test'}
-#import pandas as pd
-import pickle
-import numpy as np
-
-from video_datasets_api.epic_kitchens_100.definitions import NUM_VERB_CLASSES as num_classes
-from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict, epic_narration_id_to_unique_id
-from video_datasets_api.epic_kitchens_100.get_class_keys import EPIC100_get_class_keys
-from video_datasets_api.epic_kitchens_100.get_head_tail_classes import get_head_tail_classes
-
-from pyvideoai.config import DATA_DIR
-
-from pyvideoai.tasks import SingleLabelClassificationTask
-task = SingleLabelClassificationTask()
-
-
-# Paths
-dataset_root = os.path.join(DATA_DIR, 'EPIC_KITCHENS_100')
-video_dir = os.path.join(dataset_root, 'segments324_15fps')
-flowframes_dir = os.path.join(dataset_root, 'flow_frames')
-annotations_root = os.path.join(dataset_root, 'epic-kitchens-100-annotations')
-
-narration_id_to_video_id, narration_id_sorted = epic_narration_id_to_unique_id(annotations_root)
-uid2label = get_verb_uid2label_dict(annotations_root, narration_id_to_video_id)
-class_keys = EPIC100_get_class_keys(annotations_root, 'verb')
-head_classes, tail_classes = get_head_tail_classes(annotations_root, 'verb')
-
-video_split_file_dir = os.path.join(dataset_root, "splits_video")
-frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
-flowframes_split_file_dir = os.path.join(dataset_root, "splits_flowframes")
-split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv', 'traindata_testmode': 'train.csv', 'trainpartialdata_testmode': 'train_partial.csv'}
-split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test', 'traindata_testmode': 'test', 'trainpartialdata_testmode': 'test'}
-
-# Training settings
 horizontal_flip = True 
 
 
