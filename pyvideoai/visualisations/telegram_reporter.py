@@ -6,6 +6,9 @@ import torch
 
 from .. import __version__
 
+import logging
+logger = logging.getLogger(__name__)
+
 class DefaultTelegramReporter:
     def __init__(self, include_wandb_url: bool = True, include_version: bool = True, include_exp_rootdir: bool = False, ignore_figures: bool = False):
         self.include_wandb_url = include_wandb_url
@@ -22,8 +25,10 @@ class DefaultTelegramReporter:
                 if wandb.run is not None:
                     telegram_report_msgs.append(f'W&B Project: {wandb.run.get_project_url()}')
                     telegram_report_msgs.append(f'W&B Run: {wandb.run.get_url()}')
+                else:
+                    logger.debug(f'`wandb.run` does not exist. Forgot to call `wandb.init()`? Skipping reporting W&B URLs to Telegram.')
             except ImportError:
-                pass
+                logger.debug(f'Package `wandb` not installed. Skipping reporting W&B URLs to Telegram.')
         if self.include_version:
             telegram_report_msgs.append(f'PyTorch={torch.__version__}, PyVideoAI={__version__}')
         if self.include_exp_rootdir:
