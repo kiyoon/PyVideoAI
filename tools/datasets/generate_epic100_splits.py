@@ -88,9 +88,11 @@ if __name__ == '__main__':
 
                 write_str = f'\n{split}/{narration_id} {uid} {verb_label} 0 {num_frames-1}'
             elif args.mode == 'gulp':
+                # Note that in official EPIC-Kitchens gulp adapter, "stop_frame" is not inclusive.
+                # We assume that num_frames = stop_frame - start_frame
                 start_frame = epic_action_labels.start_frame.iloc[index]
                 stop_frame = epic_action_labels.stop_frame.iloc[index]
-                num_frames_annotated = stop_frame - start_frame + 1
+                num_frames_annotated = stop_frame - start_frame
 
                 if args.verify_num_frames:
                     num_frames = len(gulp_dir[narration_id])

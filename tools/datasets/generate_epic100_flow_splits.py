@@ -87,7 +87,9 @@ if __name__ == '__main__':
 
                 write_str = f'\n{participant_id}/{epicvideo_id}/{{flow_direction}}/frame_{{frame:010d}}.jpg {uid} {verb_label} {start_frame} {stop_frame}'
             elif args.mode == 'gulp':
-                num_frames_annotated = stop_frame - start_frame + 1
+                # Note that in official EPIC-Kitchens gulp adapter, "stop_frame" is not inclusive.
+                # We assume that num_frames = stop_frame - start_frame
+                num_frames_annotated = stop_frame - start_frame
                 if args.verify_num_frames:
                     num_frames = len(gulp_dir[narration_id])
                     if num_frames != num_frames_annotated:
