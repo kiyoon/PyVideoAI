@@ -12,6 +12,11 @@ import logging
 
 from . import utils as utils
 
+from .transforms import GroupScale, GroupNDarrayToPILImage, GroupRandomCrop, ToTorchFormatTensor, GroupRandomHorizontalFlip, Stack, GroupPILImageToNDarray
+from .transforms import GroupOneOfFiveCrops
+from .transforms import GroupGrayscale, IdentityTransform
+from torchvision.transforms import Compose
+
 logger = logging.getLogger(__name__)
 
 def count_class_frequency(csv_file):
@@ -56,6 +61,9 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
             bgr = False,
             greyscale = False,
             sample_index_code = 'pyvideoai',
+            processing_backend = 'torch',       # torch, pil
+                                                # Note that they will produce different result as pillow performs LPF before downsampling.
+                                                # https://stackoverflow.com/questions/60949936/why-bilinear-scaling-of-images-with-pil-and-pytorch-produces-different-results
             flow = None,        # If "grey", each image is a 2D array of shape (H, W).
                                 #           Optical flow has to be saved like
                                 #           (u1, v1, u2, v2, u3, v3, u4, v4, ...)
@@ -108,6 +116,9 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
         self.gulp_dir = GulpDirectory(gulp_dir_path)
         self.mode = mode
         self.sample_index_code = sample_index_code.lower()
+        
+        self.processing_backend = processing_backend.lower()
+        assert self.processing_backend in ['torch', 'pil']
 
         self.train_jitter_min = train_jitter_min
         self.train_jitter_max = train_jitter_max
@@ -283,64 +294,120 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
 
         frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
 
-        if self.flow == 'grey':
-            # Frames are saved as (u0, v0, u1, v1, ...)
-            # Read pairs of greyscale images.
-            frame_indices = [idx*2+uv for idx in frame_indices for uv in range(2)]
-            frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices][0])     # (T*2, H, W)
-            TC, H, W = frames.shape
-            frames = np.reshape(frames, (TC//2, 2, H, W))    # (T, C=2, H, W)
-            frames = np.transpose(frames, (0,2,3,1))         # (T, H, W, C=2) 
-        else:
-            frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices][0])     # (T, H, W, C=3)
-                                                                                        # or if greyscale images, (T, H, W)
-            if frames.ndim == 3:
-                # Greyscale images. (T, H, W) -> (T, H, W, 1)
-                frames = np.expand_dims(frames, axis=-1)
+        if self.processing_backend == 'torch':
+            if self.flow == 'grey':
+                # Frames are saved as (u0, v0, u1, v1, ...)
+                # Read pairs of greyscale images.
+                frame_indices = [idx*2+uv for idx in frame_indices for uv in range(2)]
+                frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices][0])     # (T*2, H, W)
+                TC, H, W = frames.shape
+                frames = np.reshape(frames, (TC//2, 2, H, W))    # (T, C=2, H, W)
+                frames = np.transpose(frames, (0,2,3,1))         # (T, H, W, C=2) 
+            else:
+                frames = np.stack(self.gulp_dir[self._gulp_keys[index], frame_indices][0])     # (T, H, W, C=3)
+                                                                                            # or if greyscale images, (T, H, W)
+                if frames.ndim == 3:
+                    # Greyscale images. (T, H, W) -> (T, H, W, 1)
+                    frames = np.expand_dims(frames, axis=-1)
 
-            if self.flow == 'rg':
-                frames = frames[..., 0:2]   # Use R and G as u and v (x,y). Discard B channel.
+                if self.flow == 'rg':
+                    frames = frames[..., 0:2]   # Use R and G as u and v (x,y). Discard B channel.
 
 
-        if self.bgr:
-            frames = frames[..., ::-1]
+            if self.bgr:
+                frames = frames[..., ::-1]
 
-        if self.greyscale:
-            raise NotImplementedError()
+            if self.greyscale:
+                raise NotImplementedError()
 
-        frames = torch.from_numpy(frames)
+            frames = torch.from_numpy(frames)
 
-        # Perform color normalization.
-        frames = utils.tensor_normalize(
-            frames, self.mean, self.std, normalise = self.normalise
-        )
+            # Perform color normalization.
+            frames = utils.tensor_normalize(
+                frames, self.mean, self.std, normalise = self.normalise
+            )
 
-        if self.flow is not None:
-            # Reshape so that neighbouring frames go in the channel dimension.
-            _, H, W, _ = frames.shape
-            # T*neighbours, H, W, C -> T*neighbours, C, H, W
-            frames = frames.permute(0, 3, 1, 2)
-            frames = frames.reshape(self.num_frames, 2*self.flow_neighbours, H, W)  # T, C=2*neighbours, H, W
-            # T, C, H, W -> C, T, H, W
-            frames = frames.permute(1, 0, 2, 3)
-        else:
-            # T, H, W, C -> C, T, H, W
-            frames = frames.permute(3, 0, 1, 2)
+            if self.flow is not None:
+                # Reshape so that neighbouring frames go in the channel dimension.
+                _, H, W, _ = frames.shape
+                # T*neighbours, H, W, C -> T*neighbours, C, H, W
+                frames = frames.permute(0, 3, 1, 2)
+                frames = frames.reshape(self.num_frames, 2*self.flow_neighbours, H, W)  # T, C=2*neighbours, H, W
+                # T, C, H, W -> C, T, H, W
+                frames = frames.permute(1, 0, 2, 3)
+            else:
+                # T, H, W, C -> C, T, H, W
+                frames = frames.permute(3, 0, 1, 2)
 
-        # Perform data augmentation.
-        frames, scale_factor_width, scale_factor_height, x_offset, y_offset, is_flipped = utils.spatial_sampling_5(
-            frames,
-            spatial_idx=spatial_sample_index,
-            min_scale=min_scale,
-            max_scale=max_scale,
-            crop_size=crop_size,
-            random_horizontal_flip=self.train_horizontal_flip,
-        )
+            # Perform data augmentation.
+            frames, scale_factor_width, scale_factor_height, x_offset, y_offset, is_flipped = utils.spatial_sampling_5(
+                frames,
+                spatial_idx=spatial_sample_index,
+                min_scale=min_scale,
+                max_scale=max_scale,
+                crop_size=crop_size,
+                random_horizontal_flip=self.train_horizontal_flip,
+            )
 
+        elif self.processing_backend == 'pil':
+            pil_transform = Compose(
+                    [
+                        GroupNDarrayToPILImage(),
+                        GroupGrayscale() if self.greyscale else IdentityTransform(),
+                        GroupScale(round(np.random.uniform(min_scale, max_scale))),
+                        GroupRandomCrop(crop_size) if spatial_sample_index < 0 else GroupOneOfFiveCrops(crop_size, spatial_sample_index, is_flow = self.flow is not None),
+                        GroupRandomHorizontalFlip(is_flow = self.flow is not None) if spatial_sample_index < 0 else IdentityTransform(),
+                        GroupPILImageToNDarray(),
+                        np.stack,
+                    ]
+                )
+            if self.flow == 'grey':
+                # Frames are saved as (u0, v0, u1, v1, ...)
+                # Read pairs of greyscale images.
+                frame_indices = [idx*2+uv for idx in frame_indices for uv in range(2)]
+                frames = self.gulp_dir[self._gulp_keys[index], frame_indices][0]     # list(ndarray(H, W)) size T*2
+
+                frames = pil_transform(frames)      # (T, H, W)
+                            
+            else:
+                frames = self.gulp_dir[self._gulp_keys[index], frame_indices][0]
+
+                frames = pil_transform(frames)      # (T, H, W, C) or (T, H, W) if greyscaled images
+
+                if frames.ndim == 3:
+                    # Greyscale images. (T, H, W) -> (T, H, W, 1)
+                    frames = np.expand_dims(frames, axis=-1)
+
+                if self.flow == 'rg':
+                    frames = frames[..., 0:2]   # Use R and G as u and v (x,y). Discard B channel.
+
+
+            if self.bgr:
+                frames = frames[..., ::-1]
+
+            frames = torch.from_numpy(frames)
+
+            # Perform color normalization.
+            frames = utils.tensor_normalize(
+                frames, self.mean, self.std, normalise = self.normalise
+            )
+
+            if self.flow is not None:
+                # Reshape so that neighbouring frames go in the channel dimension.
+                _, H, W, _ = frames.shape
+                # T*neighbours, H, W, C -> T*neighbours, C, H, W
+                frames = frames.permute(0, 3, 1, 2)
+                frames = frames.reshape(self.num_frames, 2*self.flow_neighbours, H, W)  # T, C=2*neighbours, H, W
+                # T, C, H, W -> C, T, H, W
+                frames = frames.permute(1, 0, 2, 3)
+            else:
+                # T, H, W, C -> C, T, H, W
+                frames = frames.permute(3, 0, 1, 2)
 
         video_id = self._video_ids[index]
         label = self._labels[index]
         return frames, video_id, label, spatial_sample_index, index, np.array(frame_indices)
+
 
     def __len__(self):
         """

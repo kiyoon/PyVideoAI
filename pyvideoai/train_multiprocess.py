@@ -234,6 +234,7 @@ def train(args):
         check_random_seed_in_sync()
 
         misc.log_model_info(model)
+        misc.check_pillow_performance()
 
 
         if args.load_epoch is not None:

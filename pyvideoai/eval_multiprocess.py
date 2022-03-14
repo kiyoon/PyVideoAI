@@ -1,12 +1,8 @@
-import numpy as np
-import random
 import torch
-import torch.distributed as dist
-from torch import nn, optim
+from torch import nn
 
 import pickle
 import os
-import sys
 from shutil import copy2
 
 from experiment_utils import ExperimentBuilder
@@ -14,7 +10,6 @@ import dataset_configs, model_configs, exp_configs
 from . import config
 
 import json
-import argparse
 
 from .utils import loader
 from torch.utils.data.distributed import DistributedSampler
@@ -23,19 +18,17 @@ from .utils import distributed as du
 from .utils import misc
 from .train_and_eval import eval_epoch
 
-from .metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
-
-import coloredlogs, logging, verboselogs
-logger = verboselogs.VerboseLogger(__name__)    # add logger.success
-
-
-import configparser
-
 # Version checking
 from . import __version__
 import socket
 
 import traceback
+
+import coloredlogs, logging, verboselogs
+logger = verboselogs.VerboseLogger(__name__)    # add logger.success
+
+
+
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
 
@@ -140,6 +133,7 @@ def evaluation(args):
             )
 
         misc.log_model_info(model)
+        misc.check_pillow_performance()
 
         if args.load_epoch == -1:
             exp.load_summary()

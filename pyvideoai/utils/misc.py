@@ -179,3 +179,33 @@ def install_file_loggers(logs_dir, levels=[logging.NOTSET, logging.DEBUG, loggin
         # Add handlers to the logger
         root_logger.addHandler(f_handler)
 
+
+def check_pillow_performance():
+    try:
+        import PIL
+    except ImportError:
+        logger.error('Pillow not installed.')
+
+    if '.post' not in PIL.__version__:
+        logger.warning("Pillow-SIMD not installed. Refer to https://fastai1.fast.ai/performance.html to improve performance. Ignore this message if you're not on x86 platform.")
+    else:
+        logger.info(f'Pillow-SIMD running with version {PIL.__version__}')
+
+    # check libjpeg-turbo
+    from PIL import features, Image
+    from packaging import version
+
+    try:    ver = Image.__version__     # PIL >= 7
+    except: ver = Image.PILLOW_VERSION  # PIL <  7
+
+    if version.parse(ver) >= version.parse("5.4.0"):
+        if features.check_feature('libjpeg_turbo'):
+            logger.info("libjpeg-turbo is on. Jpeg encoding/decoding with Pillow will be faster.")
+        else:
+            logger.warning("libjpeg-turbo is not on. Jpeg encoding/decoding with Pillow will be slow. Refer to https://fastai1.fast.ai/performance.html to improve performance. Ignore this message if you're not on x86 platform.")
+    else:
+        logger.warning(f"libjpeg-turbo' status can't be derived - need Pillow(-SIMD)? >= 5.4.0 to tell, current version {ver}")
+
+
+
+
