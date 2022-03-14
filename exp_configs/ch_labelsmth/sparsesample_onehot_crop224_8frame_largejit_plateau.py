@@ -355,5 +355,5 @@ predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
 """How will you plot"""
 #from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
 #metric_plotter = DefaultMetricPlotter()
-#from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter
-#telegram_reporter = DefaultTelegramReporter()
+from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter
+telegram_reporter = DefaultTelegramReporter(include_exp_rootdir=True)
