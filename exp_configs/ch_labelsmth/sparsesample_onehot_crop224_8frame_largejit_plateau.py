@@ -6,6 +6,9 @@ from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
 from pyvideoai.utils import loader
+from functools import lru_cache
+import logging
+logger = logging.getLogger(__name__)
 
 import torch
 
@@ -56,7 +59,16 @@ loss_type = 'crossentropy'   # soft_regression, crossentropy, labelsmooth, prose
 
 labelsmooth_factor = 0.1
 #proselflc_total_time = 2639 * 60 # 60 epochs
-proselflc_total_time = 263 * 40 # 60 epochs
+#proselflc_total_time = 263 * 40 # 60 epochs
+def proselflc_total_time():
+    train_dataset = get_torch_dataset('train')
+    N = batch_size()
+    train_samples = len(train_dataset)
+    num_iters_per_epoch = train_samples // N
+    logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * 35 = {num_iters_per_epoch*35}')
+    return num_iters_per_epoch * 35     # 35 epochs
+
+
 proselflc_exp_base = 1.
 
 
@@ -67,7 +79,7 @@ def get_criterion(split):
         #return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
     elif loss_type == 'proselflc':
         if split == 'train':
-            return ProSelfLC(proselflc_total_time, proselflc_exp_base)
+            return ProSelfLC(proselflc_total_time(), proselflc_exp_base)
         else:
             return torch.nn.CrossEntropyLoss()
     elif loss_type == 'soft_regression':
@@ -86,8 +98,6 @@ def get_optim_policies(model):
     """
     return model_cfg.get_optim_policies(model)
 
-import logging
-logger = logging.getLogger(__name__)
 from pyvideoai.utils.early_stopping import min_value_within_lastN, best_value_within_lastN
 # optional
 def early_stopping_condition(exp, metric_info):
@@ -270,6 +280,8 @@ def _get_torch_dataset(csv_path, split):
         raise ValueError(f'Wrong input_type {input_type}')
 
 
+
+@lru_cache
 def get_torch_dataset(split):
     if input_type == 'RGB_video':
         split_dir = dataset_cfg.video_split_file_dir
