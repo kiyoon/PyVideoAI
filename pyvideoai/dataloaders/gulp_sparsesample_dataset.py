@@ -61,9 +61,10 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
             bgr = False,
             greyscale = False,
             sample_index_code = 'pyvideoai',
-            processing_backend = 'torch',       # torch, pil
+            processing_backend = 'pil',         # torch, pil
                                                 # Note that they will produce different result as pillow performs LPF before downsampling.
                                                 # https://stackoverflow.com/questions/60949936/why-bilinear-scaling-of-images-with-pil-and-pytorch-produces-different-results
+                                                # Also note that in pil backend, horizontal flip of flow will invert the x direction.
             flow = None,        # If "grey", each image is a 2D array of shape (H, W).
                                 #           Optical flow has to be saved like
                                 #           (u1, v1, u2, v2, u3, v3, u4, v4, ...)
@@ -357,7 +358,7 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
                         GroupGrayscale() if self.greyscale else IdentityTransform(),
                         GroupScale(round(np.random.uniform(min_scale, max_scale))),
                         GroupRandomCrop(crop_size) if spatial_sample_index < 0 else GroupOneOfFiveCrops(crop_size, spatial_sample_index, is_flow = is_flow),
-                        GroupRandomHorizontalFlip(is_flow = is_flow) if spatial_sample_index < 0 else IdentityTransform(),
+                        GroupRandomHorizontalFlip(is_flow = is_flow) if spatial_sample_index < 0 and self.train_horizontal_flip else IdentityTransform(),
                         GroupPILImageToNDarray(),
                         np.stack,
                     ]
@@ -395,7 +396,7 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
                 frames, self.mean, self.std, normalise = self.normalise
             )
 
-            if self.flow is not None:
+            if is_flow:
                 # Reshape so that neighbouring frames go in the channel dimension.
                 _, H, W, _ = frames.shape
                 # T*neighbours, H, W, C -> T*neighbours, C, H, W
