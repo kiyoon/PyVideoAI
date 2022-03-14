@@ -1,9 +1,15 @@
 """
-Modified by Kiyoon:
+Original code from TSN, but brought from EPIC-Kitchens repo.
+
+Added by Kiyoon:
     GroupPILImageToNDarray
     GroupGrayscale
     GroupHorizontalFlip
     GroupOneOfFiveCrops
+
+Bug fix by Kiyoon:
+    GroupRandomHorizontalFlip always returning original image
+    Warning fix from GroupScale
 
 Removed the ones that assumes greyscale is optical flow (which is not true anymore because of GroupGrayscale):
     GroupOversample
@@ -18,6 +24,7 @@ from typing import List
 
 import numpy as np
 import torchvision
+from torchvision.transforms import InterpolationMode
 from PIL import Image
 from PIL import ImageOps
 
@@ -73,7 +80,7 @@ class GroupCenterCrop:
 
 class GroupOneOfFiveCrops:
     """
-    Return one of five crops without oversampling.
+    Return one of five crops without oversampling. Also possible to return horizontal flipped version of them.
     spatial_idx: 0: centre 
                 1: top left 
                 2: top right
@@ -91,13 +98,13 @@ class GroupOneOfFiveCrops:
         else:
             self.size = size
         self.flip_worker = GroupHorizontalFlip(is_flow)
-        self.spatial_idx
+        self.spatial_idx = spatial_idx
     
     def __call__(self, img_group):
         crop_w, crop_h = self.size
         ret = []
         for img in img_group:
-            offset_w, offset_h = self.crop_offset(*img.size, *self.size, self.spatial_idx)
+            offset_w, offset_h = GroupOneOfFiveCrops.crop_offset(*img.size, *self.size, self.spatial_idx)
             ret.append(img.crop((offset_w, offset_h, offset_w + crop_w, offset_h + crop_h)))
 
         if self.spatial_idx >= 5:
@@ -105,6 +112,7 @@ class GroupOneOfFiveCrops:
 
         return ret
         
+    @staticmethod
     def crop_offset(image_w, image_h, crop_w, crop_h, spatial_idx: int):
         assert 0 <= spatial_idx < 10
 
@@ -186,7 +194,17 @@ class GroupScale:
     """
 
     def __init__(self, size, interpolation=Image.BILINEAR):
-        self.worker = torchvision.transforms.Resize(size, interpolation)
+        def _interpolation_modes_from_int(i: int) -> InterpolationMode:
+            inverse_modes_mapping = {
+                Image.NEAREST: InterpolationMode.NEAREST,
+                Image.BILINEAR: InterpolationMode.BILINEAR,
+                Image.BICUBIC: InterpolationMode.BICUBIC,
+                Image.BOX: InterpolationMode.BOX,
+                Image.HAMMING: InterpolationMode.HAMMING,
+                Image.LANCZOS: InterpolationMode.LANCZOS,
+            }
+            return inverse_modes_mapping[i]
+        self.worker = torchvision.transforms.Resize(size, _interpolation_modes_from_int(interpolation))
 
     @profile
     def __call__(self, img_group):

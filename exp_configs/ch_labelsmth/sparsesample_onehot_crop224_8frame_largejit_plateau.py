@@ -272,6 +272,7 @@ def _get_torch_dataset(csv_path, split):
                 normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
                 greyscale=False,
                 sample_index_code=sample_index_code,
+                processing_backend = 'pil',
                 flow = 'grey',
                 flow_neighbours = flow_neighbours,
                 video_id_to_label = video_id_to_label,

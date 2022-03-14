@@ -12,7 +12,7 @@ import logging
 
 from . import utils as utils
 
-from .transforms import GroupScale, GroupNDarrayToPILImage, GroupRandomCrop, ToTorchFormatTensor, GroupRandomHorizontalFlip, Stack, GroupPILImageToNDarray
+from .transforms import GroupScale, GroupNDarrayToPILImage, GroupRandomCrop, GroupRandomHorizontalFlip, GroupPILImageToNDarray
 from .transforms import GroupOneOfFiveCrops
 from .transforms import GroupGrayscale, IdentityTransform
 from torchvision.transforms import Compose
@@ -350,13 +350,14 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
             )
 
         elif self.processing_backend == 'pil':
+            is_flow = self.flow is not None
             pil_transform = Compose(
                     [
                         GroupNDarrayToPILImage(),
                         GroupGrayscale() if self.greyscale else IdentityTransform(),
                         GroupScale(round(np.random.uniform(min_scale, max_scale))),
-                        GroupRandomCrop(crop_size) if spatial_sample_index < 0 else GroupOneOfFiveCrops(crop_size, spatial_sample_index, is_flow = self.flow is not None),
-                        GroupRandomHorizontalFlip(is_flow = self.flow is not None) if spatial_sample_index < 0 else IdentityTransform(),
+                        GroupRandomCrop(crop_size) if spatial_sample_index < 0 else GroupOneOfFiveCrops(crop_size, spatial_sample_index, is_flow = is_flow),
+                        GroupRandomHorizontalFlip(is_flow = is_flow) if spatial_sample_index < 0 else IdentityTransform(),
                         GroupPILImageToNDarray(),
                         np.stack,
                     ]
@@ -367,8 +368,10 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
                 frame_indices = [idx*2+uv for idx in frame_indices for uv in range(2)]
                 frames = self.gulp_dir[self._gulp_keys[index], frame_indices][0]     # list(ndarray(H, W)) size T*2
 
-                frames = pil_transform(frames)      # (T, H, W)
-                            
+                frames = pil_transform(frames)
+                TC, H, W = frames.shape
+                frames = np.reshape(frames, (TC//2, 2, H, W))    # (T, C=2, H, W)
+                frames = np.transpose(frames, (0,2,3,1))         # (T, H, W, C=2) 
             else:
                 frames = self.gulp_dir[self._gulp_keys[index], frame_indices][0]
 

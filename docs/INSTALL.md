@@ -45,6 +45,16 @@ cd ../..
 pip install -e .
 ```
 
+Optional: Pillow-SIMD and libjepg-turbo to improve dataloading performance.  
+Run this at the end of the installation:  
+
+```bash
+conda uninstall -y --force pillow pil jpeg libtiff libjpeg-turbo
+pip   uninstall -y         pillow pil jpeg libtiff libjpeg-turbo
+conda install -yc conda-forge libjpeg-turbo
+CFLAGS="${CFLAGS} -mavx2" pip install --upgrade --no-cache-dir --force-reinstall --no-binary :all: --compile pillow-simd
+conda install -y jpeg libtiff
+```
 
 
 ## Pulling (updating) the project
