@@ -97,7 +97,7 @@ Refer to [INSTALL.md](docs/INSTALL.md).
 TL;DR,
 
 ```bash
-conda create -n videoai python=3.9
+conda create -n videoai python=3
 conda activate videoai
 conda install pytorch==1.10.2 torchvision cudatoolkit=10.2 -c pytorch
 ### For RTX 30xx GPUs,

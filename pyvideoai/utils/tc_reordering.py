@@ -1,6 +1,6 @@
-from functools import cache
+from functools import lru_cache
 
-@cache
+@lru_cache(maxsize=None)
 def get_frame_idx_1D(frame_idx, colour='R'):
     """
     frame_idx (int): starts from one
@@ -32,7 +32,7 @@ def get_frame_indices_1D(list_frame_colour):
     return list(map(get_frame_idx_from_str, list_frame_colour))
 
 
-@cache
+@lru_cache
 def TC_idx(T):
     """
     Returns TC Reordering indices.
@@ -54,7 +54,7 @@ def TC_idx(T):
     idx = list(map(frame_limit, idx))
     return idx
 
-@cache
+@lru_cache
 def TCPlus2_idx(T):
     """
     Returns TC+2 Reordering indices.
@@ -73,7 +73,7 @@ def TCPlus2_idx(T):
     idx = idx[:(T-2)*3] # We repeated too much so we truncate. Now, the index size is equal to (T-2) * 3 channels.
     return idx
 
-@cache
+@lru_cache
 def TCrgb_idx(T):
     """
     Returns TC Reordering indices, but alternating R G B.
@@ -93,7 +93,7 @@ def TCrgb_idx(T):
     idx = list(map(frame_limit, idx))
     return idx
 
-@cache
+@lru_cache
 def TCred_idx(T):
     """
     Returns TC Reordering indices, but using only red channel.
@@ -113,7 +113,7 @@ def TCred_idx(T):
     idx = list(map(frame_limit, idx))
     return idx
 
-@cache
+@lru_cache
 def TCShortLong_idx(T):
     """
     TC Short-Long
