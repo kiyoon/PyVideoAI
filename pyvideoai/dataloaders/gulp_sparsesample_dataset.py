@@ -17,6 +17,8 @@ from .transforms import GroupOneOfFiveCrops
 from .transforms import GroupGrayscale, IdentityTransform
 from torchvision.transforms import Compose
 
+import random
+
 logger = logging.getLogger(__name__)
 
 def count_class_frequency(csv_file):
@@ -55,6 +57,8 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
     def __init__(self, csv_file, mode, num_frames, gulp_dir_path: str,
             train_jitter_min=256, train_jitter_max=320,
             train_horizontal_flip = True,
+            train_class_balanced_sampling = False,      # index of the __getitem__ will be completely ignored, meaning any sampler like
+                                                        # DistributedSampler, RandomSampler etc. will have no effect.
             test_scale=256, test_num_spatial_crops=10, 
             crop_size = 224, mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225],
             normalise = True,           # divide pixels by 255
@@ -65,6 +69,7 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
                                                 # Note that they will produce different result as pillow performs LPF before downsampling.
                                                 # https://stackoverflow.com/questions/60949936/why-bilinear-scaling-of-images-with-pil-and-pytorch-produces-different-results
                                                 # Also note that in pil backend, horizontal flip of flow will invert the x direction.
+                                                # Using Pillow-SIMD, pil backend is much faster than torch.
             flow = None,        # If "grey", each image is a 2D array of shape (H, W).
                                 #           Optical flow has to be saved like
                                 #           (u1, v1, u2, v2, u3, v3, u4, v4, ...)
@@ -123,6 +128,14 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
 
         self.train_jitter_min = train_jitter_min
         self.train_jitter_max = train_jitter_max
+
+        if mode == 'train':
+            if train_class_balanced_sampling:
+                logger.info('Class balanced sampling is ON for training.')
+            self.train_class_balanced_sampling = train_class_balanced_sampling
+        else:
+            assert not train_class_balanced_sampling, 'train_class_balanced_sampling should only be set in train mode but used in test mode.'
+
         self.test_scale = test_scale
 
         self.train_horizontal_flip = train_horizontal_flip
@@ -160,7 +173,7 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
 
         self.video_id_to_label = video_id_to_label
         if video_id_to_label is not None:
-            logger.info(f'video_id_to_label is provided. It will replace the labels in the CSV file.')
+            logger.info('video_id_to_label is provided. It will replace the labels in the CSV file.')
 
         # For training mode, one single clip is sampled from every
         # video. For testing, NUM_ENSEMBLE_VIEWS clips are sampled from every
@@ -191,8 +204,15 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
         self._start_frames = []    # number of sample video frames
         self._end_frames = []    # number of sample video frames
         self._spatial_temporal_idx = []
+
+        if self.train_class_balanced_sampling:
+            self._indices_per_class = {}   # Dict[int, List[int]]
+
         with open(self._csv_file, "r") as f:
             self.num_classes = int(f.readline())
+            if self.num_classes > 0:
+                assert not self.train_class_balanced_sampling, "We don't know how to class-balance a multilabel dataset."
+
             for clip_idx, key_label in enumerate(f.read().splitlines()):
                 assert len(key_label.split()) == 5
                 gulp_key, video_id, label, start_frame, end_frame = key_label.split()
@@ -215,6 +235,13 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
                     self._start_frames.append(int(start_frame))
                     self._end_frames.append(int(end_frame))
                     self._spatial_temporal_idx.append(idx)
+
+                    if self.train_class_balanced_sampling:
+                        if label in self._indices_per_class.keys():
+                            self._indices_per_class[label].append(len(self._video_ids)-1)  # last added index
+                        else:
+                            self._indices_per_class[label] = [len(self._video_ids)-1]       # last added index
+
         assert (
             len(self._gulp_keys) > 0
         ), f"Failed to load video loader from {self._csv_file}"
@@ -237,6 +264,8 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
         self._start_frames = [self._start_frames[x] for x in indices_of_video_ids]
         self._end_frames = [self._end_frames[x] for x in indices_of_video_ids]
         self._spatial_temporal_idx = [self._spatial_temporal_idx[x] for x in indices_of_video_ids]
+        if self.train_class_balanced_sampling:
+            raise NotImplementedError()
 
 
     def __getitem__(self, index):
@@ -251,10 +280,16 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
                 is `channel` x `num frames` x `height` x `width`.
             video_id (int): the ID of the current video.
             label (int): the label of the current video.
-            index (int): if the video provided by pytorch sampler can be
-                decoded, then return the index of the video. If not, return the
-                index of the video replacement that can be decoded.
+            index (int): Note that it will change from the index argument if self.train_class_balanced_sampling is True.
         """
+
+        if self.train_class_balanced_sampling:
+            # Completely ignore the index, and return new index in a class-balanced way.
+            random_label = random.choice(self._indices_per_class.keys())
+            random_index = random.choice(self._indices_per_class[random_label])
+            index = random_index
+            
+
         crop_size = self.crop_size
         if self.mode == "train":
             # -1 indicates random sampling.

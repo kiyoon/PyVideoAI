@@ -9,7 +9,10 @@ from model_configs import i3d_resnet50 as model_cfg
 def _exec_relative_(relative_python_code_path):     # Use this to import base config structure from another config file.
     exec(relative_python_code_path)
 ```
+
+If you want to "actually" run this config file for debug purposes, you can use `cfg = exp_configs.load_cfg('hmdb', 'i3d_resnet50')`.
 """
+
 
 import os
 

@@ -2,10 +2,9 @@ import os
 import pickle
 
 from pyvideoai.dataloaders import FramesSparsesampleDataset, VideoSparsesampleDataset, GulpSparsesampleDataset
-from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
+from pyvideoai.utils.losses.proselflc import ProSelfLC
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
-from pyvideoai.utils import loader
 from functools import lru_cache
 import logging
 logger = logging.getLogger(__name__)
@@ -26,7 +25,7 @@ def batch_size():
     elif input_type == 'flow':
         divide_batch_size = 4       # For optical flow, you read 5 times as many frames, so it will be a bottleneck if you use too big batch size.
     elif input_type in ['gulp_rgb', 'gulp_flow']:
-        divide_batch_size = 2
+        divide_batch_size = 1
     else:
         raise ValueError(f'Wrong input_type {input_type}')
 
@@ -49,6 +48,8 @@ val_scale = 256
 val_num_spatial_crops = 1
 test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
+
+train_classifier_balanced_retraining_epochs = 0     # How many epochs to re-train the classifier from random weights, in a class-balanced way, at the end. Bingyi Kang et al. 2020, (cRT)
 
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
@@ -89,9 +90,18 @@ def get_criterion(split):
         return SoftlabelRegressionLoss()
     else:
         return torch.nn.CrossEntropyLoss()
-#
-#def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
-#    return None
+
+def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
+    if epoch == num_epochs - train_classifier_balanced_retraining_epochs:
+        # re-initialise classifier weights
+        train_kit['model'] = model_cfg.initialise_classifier(train_kit['model'])
+
+    if epoch >= num_epochs - train_classifier_balanced_retraining_epochs:
+        # freeze base model parameters
+        # model state dict doesn't save requires_grad parameters.
+        # When resuming, it has to be re-done. That's why we just call it every epoch.
+        train_kit['model'] = model_cfg.freeze_base_model(train_kit['model'])
+
 
 # optional
 def get_optim_policies(model):
@@ -198,7 +208,7 @@ def get_data_unpack_func(split):
     return _unpack_data
 
 
-def _get_torch_dataset(csv_path, split):
+def _get_torch_dataset(csv_path, split, class_balanced_sampling):
     mode = dataset_cfg.split2mode[split]
 
     if split.startswith('multicrop'):
@@ -260,6 +270,24 @@ def _get_torch_dataset(csv_path, split):
                 flow_folder_y = flow_folder_y,
                 video_id_to_label = video_id_to_label,
                 )
+    elif input_type == 'gulp_rgb':
+        gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_rgb_dirname[split])
+
+        return GulpSparsesampleDataset(csv_path, mode,
+                input_frame_length, gulp_dir_path,
+                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+                train_horizontal_flip=dataset_cfg.horizontal_flip,
+                train_class_balanced_sampling=class_balanced_sampling,
+                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+                crop_size=crop_size,
+                mean = model_cfg.input_mean,
+                std = model_cfg.input_std,
+                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+                greyscale=False,
+                sample_index_code=sample_index_code,
+                processing_backend = 'pil',
+                video_id_to_label = video_id_to_label,
+                )
     elif input_type == 'gulp_flow':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_flow_dirname[split])
         flow_neighbours = 5
@@ -268,6 +296,7 @@ def _get_torch_dataset(csv_path, split):
                 input_frame_length, gulp_dir_path,
                 train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
                 train_horizontal_flip=dataset_cfg.horizontal_flip,
+                train_class_balanced_sampling=class_balanced_sampling,
                 test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
                 crop_size=crop_size,
                 mean = model_cfg.input_mean,
@@ -286,7 +315,7 @@ def _get_torch_dataset(csv_path, split):
 
 
 @lru_cache
-def get_torch_dataset(split):
+def get_torch_dataset(split, class_balanced_sampling=False):
     if input_type == 'RGB_video':
         split_dir = dataset_cfg.video_split_file_dir
     elif input_type == 'flow':
@@ -299,7 +328,7 @@ def get_torch_dataset(split):
         raise ValueError(f'Wrong input_type {input_type}')
     csv_path = os.path.join(split_dir, dataset_cfg.split_file_basename[split])
 
-    return _get_torch_dataset(csv_path, split)
+    return _get_torch_dataset(csv_path, split, class_balanced_sampling)
 
 
 """

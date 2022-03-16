@@ -92,6 +92,40 @@ def feature_extract_model(model):
 
     return FeatureExtractModel(model)
 
+def freeze_base_model(model):
+    # requires_grad has to be set before DDP.
+    # Destroy the DDP instance and create new one.
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model_normal = model.module
+        for param in model_normal.base_model.parameters():
+            param.requires_grad = False
+
+        # load settings from the previous DDP model
+        model = nn.parallel.DistributedDataParallel(
+            module=model_normal, device_ids=model.device_ids, output_device=model.output_device,
+            find_unused_parameters=model.find_unused_parameters
+        )
+    else:
+        for param in model.base_model.parameters():
+            param.requires_grad = False
+    return model
+
+def initialise_classifier(model):
+    # DDP model has to be in sync over the processes.
+    # Just in case, convert it to normal model and then reconstruct the DDP.
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        model_normal = model.module
+        model_normal._initialise_layer(model_normal.new_fc)
+        # load settings from the previous DDP model
+        model = nn.parallel.DistributedDataParallel(
+            module=model_normal, device_ids=model.device_ids, output_device=model.output_device,
+            find_unused_parameters=model.find_unused_parameters
+        )
+    else:
+        model._initialise_layer(model.new_fc)
+    
+    return model
+
 ddp_find_unused_parameters = True
 use_amp = True
 

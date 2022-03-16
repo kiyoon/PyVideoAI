@@ -54,6 +54,8 @@ val_num_spatial_crops = 1
 test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 
+train_classifier_balanced_retraining_epochs = 0     # How many epochs to re-train the classifier from random weights, in a class-balanced way, at the end. Bingyi Kang et al. 2020, (cRT)
+
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
@@ -194,6 +196,18 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
         train_dataset = get_torch_dataset('train')
         train_sampler = DistributedSampler(train_dataset) if world_size > 1 else None
         train_kit['train_dataloader'] = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size(), shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
+
+
+    # Classifier Re-training
+    if epoch == num_epochs - train_classifier_balanced_retraining_epochs:
+        # re-initialise classifier weights
+        train_kit['model'] = model_cfg.initialise_classifier(train_kit['model'])
+
+    if epoch >= num_epochs - train_classifier_balanced_retraining_epochs:
+        # freeze base model parameters
+        # model state dict doesn't save requires_grad parameters.
+        # When resuming, it has to be re-done. That's why we just call it every epoch.
+        train_kit['model'] = model_cfg.freeze_base_model(train_kit['model'])
         
 
 # optional
