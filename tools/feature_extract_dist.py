@@ -32,17 +32,9 @@ node in your training cluster, but ideally you should pick a node that has a hig
 """
 
 import argparse
-import sys
 import torch
 
-import pyvideoai.utils.multiprocessing_helper as mpu
 from pyvideoai.extract_feature_multiprocess import feature_extraction 
-from experiment_utils.argparse_utils import add_exp_arguments
-
-import dataset_configs
-import model_configs
-import exp_configs
-from pyvideoai import config
 
 from run_feature_extract import add_feature_args
 

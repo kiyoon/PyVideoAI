@@ -4,57 +4,9 @@
 """Wrapper to train and test a video classification model."""
 
 import argparse
-import sys
-import torch
-import warnings
 
-import pyvideoai.utils.multiprocessing_helper as mpu
 from pyvideoai.extract_feature_multiprocess import feature_extraction
 from experiment_utils.argparse_utils import add_exp_arguments
-
-
-def add_distributed_args(parser):
-    """
-    Parse the following arguments for the video training and testing pipeline.
-    Args:
-        shard_id (int): shard id for the current machine. Starts from 0 to
-            num_shards - 1. If single machine is used, then set shard id to 0.
-        num_shards (int): number of shards using by the job.
-        init_method (str): initialization method to launch the job with multiple
-            devices. Options includes TCP or shared file-system for
-            initialization. details can be find in
-            https://pytorch.org/docs/stable/distributed.html#tcp-initialization
-        """
-    parser.add_argument(
-        "--local_world_size",
-        help="Number of processes per machine. (i.e. number of GPUs to use per machine)",
-        default=1,
-        type=int,
-    )
-    parser.add_argument(
-        "--shard_id",
-        help="The shard id of current node, Starts from 0 to num_shards - 1",
-        default=0,
-        type=int,
-    )
-    parser.add_argument(
-        "--num_shards",
-        help="Number of shards using by the job",
-        default=1,
-        type=int,
-    )
-    parser.add_argument(
-        "--init_method",
-        help="Initialization method, includes TCP or shared file-system",
-        default="tcp://localhost:19999",
-        type=str,
-    )
-    parser.add_argument(
-        "--backend",
-        help="Torch distributed backend",
-        default="nccl",
-        type=str,
-    )
 
 
 import dataset_configs
@@ -77,11 +29,9 @@ def add_feature_args(parser):
     parser.add_argument("-L", "--console_log_level", type=str, default='INFO', choices=['NOTSET', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], help="Logging level for console output.")
 
 
-
 def get_parser():
     parser = argparse.ArgumentParser(description="Extract features using an action model",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    add_distributed_args(parser)
     add_feature_args(parser)
     return parser
 
@@ -93,31 +43,8 @@ def main():
     parser = get_parser()
     args = parser.parse_args()
 
-    # Perform training.
-    if args.local_world_size * args.num_shards > 1:
-        warnings.warn('Running distributed evaluation with `torch.multiprocessing.spawn` is slow and thus deprecated. Use run_singlenode.sh or run_multinode.sh instead. Use this code for single GPU evaluation only.')
-        torch.multiprocessing.spawn(
-            mpu.run,
-            nprocs=args.local_world_size,
-            args=(
-                args.local_world_size,
-                feature_extraction,
-                args.init_method,
-                args.shard_id,
-                args.num_shards,
-                args.backend,
-                args
-            ),
-            daemon=False,
-        )
-    else:
-        feature_extraction(args)
-
+    feature_extraction(args)
 
 
 if __name__ == "__main__":
-    # This will probably not make any difference,
-    # as `torch.multiprocessing.spawn` defaults to "spawn" start method.
-    #torch.multiprocessing.set_start_method("forkserver")
-    #torch.multiprocessing.set_start_method("spawn")
     main()
