@@ -17,6 +17,11 @@ from pyvideoai.dataloaders.frames_densesample_dataset import FramesDensesampleDa
 
 import torch
 
+num_epochs = int(os.getenv('VAI_NUM_EPOCHS', 200))
+# This can be a function.
+#def num_epochs():
+#    return 200
+
 #batch_size = 8  # per process (per GPU)
 def batch_size():
     '''batch_size can be either integer or function returning integer.
@@ -48,7 +53,7 @@ test_num_spatial_crops = 1
 
 input_channel_num=[3]   # RGB
 
-base_learning_rate = float(os.getenv('BASE_LR', 1e-5))      # when batch_size == 1 and #GPUs == 1
+base_learning_rate = float(os.getenv('VAI_BASE_LR', 1e-5))      # when batch_size == 1 and #GPUs == 1
 
 #### OPTIONAL
 ## Gradient Clipping

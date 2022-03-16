@@ -15,6 +15,8 @@ import torch
 input_frame_length = 8
 input_type = 'RGB_video' # RGB_video / flow / gulp_rgb / gulp_flow
 
+num_epochs = int(os.getenv('VAI_NUM_EPOCHS', default=500))
+
 #batch_size = 8  # per process (per GPU)
 def batch_size():
     '''batch_size can be either integer or function returning integer.
@@ -65,8 +67,9 @@ def proselflc_total_time():
     N = batch_size()
     train_samples = len(train_dataset)
     num_iters_per_epoch = train_samples // N
-    logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * 35 = {num_iters_per_epoch*35}')
-    return num_iters_per_epoch * 35     # 35 epochs
+    total_time = num_iters_per_epoch * num_epochs
+    logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * {num_epochs} = {total_time}')
+    return total_time 
 
 
 proselflc_exp_base = 1.

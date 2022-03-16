@@ -62,7 +62,7 @@ import exp_configs
 from pyvideoai import config
 
 def add_train_args(parser):
-    parser.add_argument("-e", "--num_epochs", type=int, default=100, help="Number of epochs for training.")
+    parser.add_argument("-e", "--num_epochs", default='DEPRECATED', help="DEPRECATED.")
     add_exp_arguments(parser, 
             root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_8x8_largejit_plateau_1scrop5tcrop_split1',
             dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)

@@ -8,6 +8,7 @@ from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
 from pyvideoai.utils import loader
 from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss, MinRegressionCombinationLoss
 from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
+from pyvideoai.utils.losses.proselflc import MaskedProSelfLC
 from pyvideoai.utils.stdout_logger import OutputLogger
 
 import torch
@@ -15,6 +16,8 @@ import numpy as np
 
 input_frame_length = 8
 input_type = 'RGB_video' # RGB_video / flow / gulp_rgb / gulp_flow
+
+num_epochs = int(os.getenv('VAI_NUM_EPOCHS', default=500))
 
 #batch_size = 8  # per process (per GPU)
 def batch_size():
@@ -56,10 +59,23 @@ sample_index_code = 'pyvideoai'
 
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
-loss_type = 'mince'     # mince / maskce / minregcomb
+loss_type = 'mince'     # mince / maskce / minregcomb / maskproselflc
 
 save_features = True
 
+#proselflc_total_time = 2639 * 60 # 60 epochs
+#proselflc_total_time = 263 * 40 # 60 epochs
+def proselflc_total_time():
+    train_dataset = get_torch_dataset('train')
+    N = batch_size()
+    train_samples = len(train_dataset)
+    num_iters_per_epoch = train_samples // N
+    total_time = num_iters_per_epoch * num_epochs
+    logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * {num_epochs} = {total_time}')
+    return total_time 
+
+
+proselflc_exp_base = 1.
 
 #### OPTIONAL
 def get_criterion(split):
@@ -70,6 +86,8 @@ def get_criterion(split):
             return MaskedCrossEntropy()
         elif loss_type == 'minregcomb':
             return MinRegressionCombinationLoss()
+        elif loss_type == 'maskproselflc':
+            return MaskedProSelfLC(proselflc_total_time(), proselflc_exp_base)
         else:
             raise ValueError(f'{loss_type=} not recognised.')
     else:

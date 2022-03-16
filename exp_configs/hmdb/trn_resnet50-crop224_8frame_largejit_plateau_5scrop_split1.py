@@ -16,6 +16,11 @@ from pyvideoai.dataloaders.frames_sparsesample_dataset import FramesSparsesample
 
 import torch
 
+num_epochs = int(os.getenv('VAI_NUM_EPOCHS', 200))
+# This can be a function.
+#def num_epochs():
+#    return 200
+
 #batch_size = 8  # per process (per GPU)
 def batch_size():
     '''batch_size can be either integer or function returning integer.

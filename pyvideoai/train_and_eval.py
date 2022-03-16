@@ -13,7 +13,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from .utils.lr_scheduling import ReduceLROnPlateauMultiple, GradualWarmupScheduler
 
 
-from .utils.losses.proselflc import ProSelfLC
+from .utils.losses.proselflc import ProSelfLC, MaskedProSelfLC
 
 import logging
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ def train_iter(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_a
         outputs = model(inputs)
         batch_loss = criterion(outputs, labels)
         # some criterions require calling step() (ProSelfLC)
-        if isinstance(criterion, ProSelfLC):
+        if isinstance(criterion, ProSelfLC, MaskedProSelfLC):
             if criterion.counter == 'iteration':
                 criterion.step()
 
@@ -207,7 +207,7 @@ def train_epoch(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_
                 input_reshape_func, max_log_length, refresh_period=refresh_period)
 
     # some criterions require calling step() (ProSelfLC)
-    if isinstance(criterion, ProSelfLC):
+    if isinstance(criterion, ProSelfLC, MaskedProSelfLC):
         if criterion.counter == 'epoch':
             criterion.step()
 

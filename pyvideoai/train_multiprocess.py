@@ -451,7 +451,14 @@ def train(args):
                 else:
                     exp.tg_send_text_with_expname(f'Starting experiment..')
 
-            for epoch in range(start_epoch, args.num_epochs):
+            if hasattr(cfg, 'num_epochs'):
+                num_epochs = cfg.num_epochs() if callable(cfg.num_epochs) else cfg.num_epochs
+                logger.info(f'Training for maximum of {num_epochs} epochs')
+            else:
+                logger.warning(f'cfg.num_epochs not specified. By default it will train for 1000 epochs or until early stopping is triggered. args.num_epochs is deprecated and must not be used.')
+                num_epochs = 1000
+
+            for epoch in range(start_epoch, num_epochs):
                 if hasattr(cfg, "epoch_start_script"):
                     # structurise
                     train_kit = {}
@@ -478,7 +485,7 @@ def train(args):
 
                 if rank == 0:
                     print()
-                    logger.info("Epoch %d/%d" % (epoch, args.num_epochs-1))
+                    logger.info("Epoch %d/%d" % (epoch, num_epochs-1))
 
                 sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterions['train'], clip_grad_max_norm, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
                 if rank == 0:#{{{

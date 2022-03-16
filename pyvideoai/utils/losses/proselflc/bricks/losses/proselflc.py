@@ -146,3 +146,68 @@ class ProSelfLC(CrossEntropy):
                 raise ValueError(f'cur_time has to be zero or bigger but got {cur_time}.')
 
             self.cur_time = cur_time
+
+
+class MaskedProSelfLC(ProSelfLC):
+    """
+    It's the same as ProSelfLC in terms of label correction,
+    but it will ignore some of the classes before doing label correction and softmax.
+    It will ignore the ones with their label being negative (target_probs < 0)
+    """
+
+    def get_epsilon_progressive_adaptive_each_sample(self, pred_prob, pred_logprob, cur_time):
+        # global trust/knowledge
+        time_ratio_minus_half = torch.tensor(cur_time / self.total_time - 0.5)
+        global_trust = 1 / (1 + torch.exp(-self.exp_base * time_ratio_minus_half))
+        # example-level trust/knowledge
+        class_num = pred_probs.shape[0]
+        H_pred_probs = torch.sum(-pred_prob * pred_logprob, 0)
+        H_uniform = -torch.log(torch.tensor(1.0 / class_num))
+        example_trust = 1 - H_pred_probs / H_uniform
+        # the trade-off
+        epsilon = global_trust * example_trust
+        return epsilon
+
+
+    def forward(
+        self, pred_logits: Tensor, target_probs: Tensor
+    ) -> Tensor:
+        """
+        Inputs:
+            1. predicted probability distributions of shape (N, C)
+            2. target probability  distributions of shape (N, C), should be 0, 1 or -1. -1 for classes to be masked out.
+
+        Outputs:
+            Loss: a scalar tensor, normalised by N.
+        """
+        if not (self.cur_time <= self.total_time and self.cur_time >= 0):
+            error_msg = (
+                "The cur_time = "
+                + str(self.cur_time)
+                + ". The total_time = "
+                + str(self.total_time)
+                + ". The cur_time has to be no larger than total time "
+                + "and no less than zero."
+            )
+            raise (ParamException(error_msg))
+
+        if target_probs.dim() != 2:
+            raise ValueError(f'target_probs has to be of shape (N, C) but got {target_probs.shape}')
+
+        losses = []
+        for pred_logit, target_prob in zip(pred_logits, target_probs):
+            mask = target_prob >= 0. - EPS
+
+            pred_logit = pred_logit[mask]
+            target_prob = target_prob[mask]
+
+            pred_prob = F.softmax(pred_logit, -1)
+            pred_logprob = F.log_softmax(pred_logit, -1)
+            epsilon = self.get_epsilon_progressive_adaptive_each_sample(pred_prob, pred_logprob, self.cur_time)
+            new_target_prob = (1 - epsilon) * target_prob + epsilon * pred_prob
+            loss = torch.sum(new_target_prob * (-pred_logprob), 0)
+            losses.append(loss)
+
+        num_examples = pred_logits.shape[0] # or len(losses)
+        loss = sum(losses) / num_examples
+        return loss
