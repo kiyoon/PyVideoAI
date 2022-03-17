@@ -129,8 +129,12 @@ def train(args):
                     import wandb
                     wandb_dir = os.path.join(exp.experiment_dir)
                     wandb_config = args.__dict__
-                    wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project,
+
+                    if args.wandb_run_id is None:
+                        wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project,
                             name=f'{exp.dataset} {exp.model_name} {exp.experiment_name} v{exp.version}')
+                    else:
+                        wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project, id=args.wandb_run_id, resume='must')
                     logger.info((f'Weights & Biases initialised.\n'
                         f'View project at {wandb.run.get_project_url()}\n'
                         f'View run at {wandb.run.get_url()}'))

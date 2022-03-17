@@ -50,6 +50,7 @@ test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 
 train_classifier_balanced_retraining_epochs = 0     # How many epochs to re-train the classifier from random weights, in a class-balanced way, at the end. Bingyi Kang et al. 2020, (cRT)
+early_stop_patience = 20        # or None to turn off
 
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
@@ -126,12 +127,14 @@ def get_optim_policies(model):
 from pyvideoai.utils.early_stopping import min_value_within_lastN, best_value_within_lastN
 # optional
 def early_stopping_condition(exp, metric_info):
-    patience=20
-    if not min_value_within_lastN(exp.summary['val_loss'], patience):
+    if early_stop_patience is None:
+        return False
+
+    if not min_value_within_lastN(exp.summary['val_loss'], early_stop_patience):
         best_metric_fieldname = metric_info['best_metric_fieldname']
         best_metric_is_better = metric_info['best_metric_is_better_func']
-        if not best_value_within_lastN(exp.summary[best_metric_fieldname], patience, best_metric_is_better):
-            logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {patience} epochs. Stopping training..")
+        if not best_value_within_lastN(exp.summary[best_metric_fieldname], early_stop_patience, best_metric_is_better):
+            logger.info(f"Validation loss and {best_metric_fieldname} haven't gotten better for {early_stop_patience} epochs. Stopping training..")
             return True
 
     return False
