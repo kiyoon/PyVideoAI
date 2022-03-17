@@ -91,16 +91,28 @@ def get_criterion(split):
     else:
         return torch.nn.CrossEntropyLoss()
 
+from torch.utils.data.distributed import DistributedSampler
+import pyvideoai.utils.distributed as du
 def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
-    if epoch == num_epochs - train_classifier_balanced_retraining_epochs:
-        # re-initialise classifier weights
-        train_kit['model'] = model_cfg.initialise_classifier(train_kit['model'])
-
     if epoch >= num_epochs - train_classifier_balanced_retraining_epochs:
         # freeze base model parameters
         # model state dict doesn't save requires_grad parameters.
         # When resuming, it has to be re-done. That's why we just call it every epoch.
+        logger.info(f'Classifier re-training with balanced samples (cRT) for the last {train_classifier_balanced_retraining_epochs} epochs.')
+        logger.info(f'cRT: freezing base model')
         train_kit['model'] = model_cfg.freeze_base_model(train_kit['model'])
+
+        logger.info(f'cRT: switching to a balanced dataloader')
+        train_dataset = get_torch_dataset('train', class_balanced_sampling=True)
+        train_sampler = DistributedSampler(train_dataset) if world_size > 1 else None
+        train_kit['train_dataloader'] = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size(), shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
+
+    if epoch == num_epochs - train_classifier_balanced_retraining_epochs:
+        # re-initialise classifier weights
+        logger.info(f'cRT: re-initialising classifier weights')
+        train_kit['model'] = model_cfg.initialise_classifier(train_kit['model'])
+
+
 
 
 # optional

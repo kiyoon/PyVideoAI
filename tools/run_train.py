@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Wrapper to train and test a video classification model."""
 
 import argparse

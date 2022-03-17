@@ -135,6 +135,7 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
             self.train_class_balanced_sampling = train_class_balanced_sampling
         else:
             assert not train_class_balanced_sampling, 'train_class_balanced_sampling should only be set in train mode but used in test mode.'
+            self.train_class_balanced_sampling = False
 
         self.test_scale = test_scale
 
@@ -285,7 +286,7 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
 
         if self.train_class_balanced_sampling:
             # Completely ignore the index, and return new index in a class-balanced way.
-            random_label = random.choice(self._indices_per_class.keys())
+            random_label = random.choice(list(self._indices_per_class.keys()))
             random_index = random.choice(self._indices_per_class[random_label])
             index = random_index
             
