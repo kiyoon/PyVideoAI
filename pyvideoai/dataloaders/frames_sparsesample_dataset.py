@@ -162,7 +162,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         assert test_num_spatial_crops in [1, 5, 10], "1 for centre, 5 for centre and four corners, 10 for their horizontal flips"
         self.test_num_spatial_crops = test_num_spatial_crops
 
-        logger.info("Constructing video dataset {}...".format(mode))
+        logger.info(f"Constructing frames dataset {mode=}...")
         self._construct_loader()
 
     def _construct_loader(self):#{{{
@@ -207,13 +207,10 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
                     self._spatial_temporal_idx.append(idx)
         assert (
             len(self._path_to_frames) > 0
-        ), f"Failed to load video loader from {self._csv_file}"
+        ), f"Failed to load frames loader from {self._csv_file}"
         
-        logger.info(
-            "Constructing video dataloader (size: {}) from {}".format(
-                len(self._path_to_frames), self._csv_file
-            )
-        )#}}}
+        logger.info(f"Constructing frames dataloader (size: {len(self)}) from {self._csv_file}")
+        #}}}
 
     def filter_samples(self, video_ids: list):
         """Given a video_ids list, filter the samples.

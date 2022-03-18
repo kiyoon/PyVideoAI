@@ -188,7 +188,7 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
         assert test_num_spatial_crops in [1, 5, 10], "1 for centre, 5 for centre and four corners, 10 for their horizontal flips"
         self.test_num_spatial_crops = test_num_spatial_crops
 
-        logger.info(f"Constructing gulp video dataset mode {mode}...")
+        logger.info(f"Constructing gulp video dataset {mode=}...")
         self._construct_loader()
 
     def _construct_loader(self):#{{{
@@ -245,13 +245,10 @@ class GulpSparsesampleDataset(torch.utils.data.Dataset):
 
         assert (
             len(self._gulp_keys) > 0
-        ), f"Failed to load video loader from {self._csv_file}"
+        ), f"Failed to load gulp video loader from {self._csv_file}"
         
-        logger.info(
-            "Constructing video dataloader (size: {}) from {}".format(
-                len(self), self._csv_file
-            )
-        )#}}}
+        logger.info(f"Constructing gulp video dataloader (size: {len(self)}) from {self._csv_file}")
+        #}}}
 
     def filter_samples(self, video_ids: list):
         """Given a video_ids list, filter the samples.
