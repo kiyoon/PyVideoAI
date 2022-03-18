@@ -3,7 +3,44 @@
 
 import pickle
 import numpy as np
+
+def orig_label_to_multiverb(annotations_root, dataset):
+    with open(annotations_root + '/class_order.csv', 'r') as f:
+        class_order = f.read()
+    class_order = class_order[1:][:-2].split('","')
+
+    with open(annotations_root + f'/{dataset}.pkl', 'rb') as f:
+        data = pickle.load(f)
+
+    labels = list(data.keys())
+    verb_labels = set(label.split('_')[0].replace('-','_') for label in labels)
+    if dataset == 'CMU':
+        verb_labels.add('twist')
+        verb_labels.remove('twist_on')
+        verb_labels.remove('twist_off')
+
+
+    classes_filter_idx = [idx for idx, class_key in enumerate(class_order) if class_key in verb_labels]
+    #print(classes_filter_idx)
+
+    class_order_filtered = [class_order[idx] for idx in classes_filter_idx]
+    assert len(verb_labels) == len(class_order_filtered)
+
+    ret = {}
+    for orig_label, multiverb_label in data.items():
+        ret[orig_label] = []
+        multiverb_label_filtered = [multiverb_label[idx] for idx in classes_filter_idx]
+        #print(multiverb_label_filtered)
+
+        sort_indices = np.argsort(multiverb_label_filtered)[::-1]
+        for sort_idx in sort_indices:
+            if multiverb_label_filtered[sort_idx] >= 0.2:
+                ret[orig_label].append(class_order_filtered[sort_idx])
+
+    return ret
+
 if __name__ == '__main__':
+
     annotations_root = '/home/s1884147/scratch2/datasets/GTEA_Gaze_Plus/Multi-Verb-Labels'
 
     with open(annotations_root + '/class_order.csv', 'r') as f:
