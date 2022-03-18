@@ -2,6 +2,7 @@
 # Read the annotations and see what they look like.
 
 import pickle
+import numpy as np
 if __name__ == '__main__':
     annotations_root = '/home/s1884147/scratch2/datasets/GTEA_Gaze_Plus/Multi-Verb-Labels'
 
@@ -9,17 +10,44 @@ if __name__ == '__main__':
         class_order = f.read()
     class_order = class_order[1:][:-2].split('","')
 
-    with open(annotations_root + '/GTEA.pkl', 'rb') as f:
-        data = pickle.load(f)
+    print('new 90 labels')
+    print(class_order)
 
-    labels = list(data.keys())
-    verb_labels = set(label.split('_')[0].replace('-','_') for label in labels)
-    print(verb_labels)
+    for dataset in ['GTEA', 'CMU', 'BEOID']:
+        with open(annotations_root + f'/{dataset}.pkl', 'rb') as f:
+            data = pickle.load(f)
 
-    classes_filter_idx = [idx for idx, class_key in enumerate(class_order) if class_key in verb_labels]
-    print(classes_filter_idx)
+        labels = list(data.keys())
+        verb_labels = set(label.split('_')[0].replace('-','_') for label in labels)
+        if dataset == 'CMU':
+            verb_labels.add('twist')
+            verb_labels.remove('twist_on')
+            verb_labels.remove('twist_off')
+        print()
+        print(f"{dataset} All labels")
+        print(labels)
+        print()
+        print("Verb labels")
+        print(verb_labels)
+        print()
 
-    class_order_filtered = [class_order[idx] for idx in classes_filter_idx]
-    print(class_order_filtered)
 
+        classes_filter_idx = [idx for idx, class_key in enumerate(class_order) if class_key in verb_labels]
+        #print(classes_filter_idx)
+
+        class_order_filtered = [class_order[idx] for idx in classes_filter_idx]
+        print("Verb labels from new 90 labels")
+        print(class_order_filtered)
+        print()
+        assert len(verb_labels) == len(class_order_filtered)
+
+        for orig_label, multiverb_label in data.items():
+            print(f"{orig_label = }")
+            multiverb_label_filtered = [multiverb_label[idx] for idx in classes_filter_idx]
+            #print(multiverb_label_filtered)
+
+            sort_indices = np.argsort(multiverb_label_filtered)[::-1]
+            for sort_idx in sort_indices:
+                if multiverb_label_filtered[sort_idx] >= 0.2:
+                    print(class_order_filtered[sort_idx], round(multiverb_label_filtered[sort_idx], 2))
 
