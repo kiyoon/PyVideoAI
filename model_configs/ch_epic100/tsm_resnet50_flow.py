@@ -11,34 +11,41 @@ from video_datasets_api.epic_kitchens_100.definitions import NUM_VERB_CLASSES, N
 
 pretrained_path = os.path.join(PYVIDEOAI_DIR, 'data', 'pretrained', 'epic100', 'tsm_flow.ckpt')
 
-def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8):
+def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8, pretrained='epic100'):
     """
     num_classes can be integer or tuple
     """
 
     assert 0 < num_classes <= NUM_VERB_CLASSES+NUM_NOUN_CLASSES
+    assert pretrained in ['epic100', 'imagenet']
 
     #class_counts = (num_classes,352)
     class_counts = NUM_VERB_CLASSES+NUM_NOUN_CLASSES
     segment_count = input_frame_length
     base_model = 'resnet50'
-    pretrained = None
+
+    if pretrained == 'imagenet':
+        basemodel_pretrained = 'imagenet'
+    else:
+        basemodel_pretrained = None
 
     model = TSM(class_counts, segment_count, 'Flow',
             base_model = base_model,
-            pretrained=pretrained, dropout=0.7)
+            pretrained=basemodel_pretrained, dropout=0.7)
 
-    device = torch.cuda.current_device()
-    checkpoint = torch.load(pretrained_path, map_location='cpu')
-    from collections import OrderedDict
-    new_state_dict = OrderedDict()
-    for k, v in checkpoint['state_dict'].items():
-        name = k[6:] # remove `model.`
-        new_state_dict[name] = v
 
-    model_load_state_dict_nostrict(model, new_state_dict, partial=True)
+    if pretrained == 'epic100':
+        device = torch.cuda.current_device()
+        checkpoint = torch.load(pretrained_path, map_location='cpu')
+        from collections import OrderedDict
+        new_state_dict = OrderedDict()
+        for k, v in checkpoint['state_dict'].items():
+            name = k[6:] # remove `model.`
+            new_state_dict[name] = v
 
-    del checkpoint, new_state_dict
+        model_load_state_dict_nostrict(model, new_state_dict, partial=True)
+
+        del checkpoint, new_state_dict
 
     model.new_fc = torch.nn.Linear(2048, num_classes)
     return model

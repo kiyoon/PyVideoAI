@@ -57,6 +57,8 @@ test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 train_classifier_balanced_retraining_epochs = 0     # How many epochs to re-train the classifier from random weights, in a class-balanced way, at the end. Bingyi Kang et al. 2020, (cRT)
 early_stop_patience = 20        # or None to turn off
 
+pretrained = 'epic100'          # epic100 / imagenet
+
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
@@ -271,7 +273,7 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
         return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
 
 def load_model():
-    return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
+    return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, pretrained = pretrained)
 
 # If you need to extract features, use this. It can be defined in model_cfg too.
 #def feature_extract_model(model):
@@ -401,7 +403,7 @@ def _get_torch_dataset(csv_path, split):
                 normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
                 greyscale=False,
                 sample_index_code=sample_index_code,
-                preprocessing_backend = 'pil',
+                processing_backend = 'pil',
                 flow = 'grey',
                 flow_neighbours = flow_neighbours,
                 video_id_to_label = video_id_to_label,
