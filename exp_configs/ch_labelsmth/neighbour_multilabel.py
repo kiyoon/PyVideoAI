@@ -330,7 +330,7 @@ def get_data_unpack_func(split):
     return _unpack_data
 
 
-def _get_torch_dataset(csv_path, split):
+def _get_torch_dataset(csv_path, split, class_balanced_sampling):
     mode = dataset_cfg.split2mode[split]
 
 
@@ -388,6 +388,24 @@ def _get_torch_dataset(csv_path, split):
                 flow_folder_y = flow_folder_y,
                 video_id_to_label = video_id_to_label,
                 )
+    elif input_type == 'gulp_rgb':
+        gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_rgb_dirname[split])
+
+        return GulpSparsesampleDataset(csv_path, mode,
+                input_frame_length, gulp_dir_path,
+                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+                train_horizontal_flip=dataset_cfg.horizontal_flip,
+                train_class_balanced_sampling=class_balanced_sampling,
+                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
+                crop_size=crop_size,
+                mean = model_cfg.input_mean,
+                std = model_cfg.input_std,
+                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+                greyscale=False,
+                sample_index_code=sample_index_code,
+                processing_backend = 'pil',
+                video_id_to_label = video_id_to_label,
+                )
     elif input_type == 'gulp_flow':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_flow_dirname[split])
         flow_neighbours = 5
@@ -396,6 +414,7 @@ def _get_torch_dataset(csv_path, split):
                 input_frame_length, gulp_dir_path,
                 train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
                 train_horizontal_flip=dataset_cfg.horizontal_flip,
+                train_class_balanced_sampling=class_balanced_sampling,
                 test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
                 crop_size=crop_size,
                 mean = model_cfg.input_mean,
@@ -412,7 +431,7 @@ def _get_torch_dataset(csv_path, split):
         raise ValueError(f'Wrong input_type {input_type}')
 
 
-def get_torch_dataset(split):
+def get_torch_dataset(split, class_balanced_sampling=False):
     if input_type == 'RGB_video':
         split_dir = dataset_cfg.video_split_file_dir
     elif input_type == 'flow':
@@ -425,7 +444,7 @@ def get_torch_dataset(split):
         raise ValueError(f'Wrong input_type {input_type}')
     csv_path = os.path.join(split_dir, dataset_cfg.split_file_basename[split])
 
-    return _get_torch_dataset(csv_path, split)
+    return _get_torch_dataset(csv_path, split, class_balanced_sampling)
 
 
 
