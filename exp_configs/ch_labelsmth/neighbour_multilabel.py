@@ -57,7 +57,7 @@ test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 train_classifier_balanced_retraining_epochs = 0     # How many epochs to re-train the classifier from random weights, in a class-balanced way, at the end. Bingyi Kang et al. 2020, (cRT)
 early_stop_patience = 20        # or None to turn off
 
-pretrained = 'epic100'          # epic100 / imagenet
+pretrained = 'epic100'          # epic100 / imagenet / random
 
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
