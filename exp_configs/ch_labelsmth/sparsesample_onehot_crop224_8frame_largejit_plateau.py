@@ -56,7 +56,7 @@ sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
 
-pretrained = 'epic100'      # epic100 / imagenet
+pretrained = 'epic100'      # epic100 / imagenet / random
 
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 

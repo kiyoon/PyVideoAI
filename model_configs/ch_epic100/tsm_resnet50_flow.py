@@ -17,7 +17,7 @@ def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8, pretraine
     """
 
     assert 0 < num_classes <= NUM_VERB_CLASSES+NUM_NOUN_CLASSES
-    assert pretrained in ['epic100', 'imagenet']
+    assert pretrained in ['epic100', 'imagenet', 'random']
 
     #class_counts = (num_classes,352)
     class_counts = NUM_VERB_CLASSES+NUM_NOUN_CLASSES
