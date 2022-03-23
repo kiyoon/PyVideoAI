@@ -554,7 +554,9 @@ TSM Configurations:
             base_model.load_state_dict(sd)
             LOG.info("=> Loading pretrained Flow weight done...")
         else:
-            LOG.warning("#" * 30 + "Warning! No Flow pretrained model is found")
+            LOG.warning("#" * 30 + "No Flow pretrained model is found")
+            if self.pretrained:
+                LOG.warning("#" * 30 + "However, flow model is coverted from imagenet pretrained RGB model.")
         return base_model
 
     def _construct_diff_model(self, base_model, keep_rgb=False):

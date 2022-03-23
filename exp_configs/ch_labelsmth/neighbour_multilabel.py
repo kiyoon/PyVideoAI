@@ -66,6 +66,7 @@ base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size
 
 loss_type = 'mince'     # mince / maskce / minregcomb / maskproselflc
 
+l2_norm = True
 save_features = True
 
 #proselflc_total_time = 2639 * 60 # 60 epochs
@@ -129,7 +130,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
             kn = 10
             thr = 0.2
             with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
-                nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], kn, l2_norm=True)
+                nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], kn, l2_norm=l2_norm)
             #neighbours_ids = []
             soft_labels = []
             target_ids = feature_data['video_ids']

@@ -46,7 +46,10 @@ class ClipMeanPerclassAccuracyMetric(Metric):
             self.last_calculated_metrics = 0.
         else:
             filtered_perclass_accuracies = [tp / sample_count for tp, sample_count in zip(self.num_true_positives, self.num_seen_samples) if sample_count >= self.exclude_classes_less_sample_than]
-            self.last_calculated_metrics = sum(filtered_perclass_accuracies) / len(filtered_perclass_accuracies)
+            if len(filtered_perclass_accuracies) > 0:
+                self.last_calculated_metrics = sum(filtered_perclass_accuracies) / len(filtered_perclass_accuracies)
+            else:
+                self.last_calculated_metrics = 0.
 
     def types_of_metrics(self):
         return float
