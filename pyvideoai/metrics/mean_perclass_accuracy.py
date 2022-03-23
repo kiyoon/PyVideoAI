@@ -7,8 +7,10 @@ from .metric import Metric, AverageMetric
 class ClipMeanPerclassAccuracyMetric(Metric):
     """Don't need activation softmax for clip accuracy calculation.
     """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *args, exclude_classes_less_sample_than = 1, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert exclude_classes_less_sample_than >= 1
+        self.exclude_classes_less_sample_than = exclude_classes_less_sample_than
 
 
     def clean_data(self):
@@ -43,7 +45,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         if self.num_seen_samples is None:
             self.last_calculated_metrics = 0.
         else:
-            filtered_perclass_accuracies = [tp / sample_count for tp, sample_count in zip(self.num_true_positives, self.num_seen_samples) if sample_count > 0]
+            filtered_perclass_accuracies = [tp / sample_count for tp, sample_count in zip(self.num_true_positives, self.num_seen_samples) if sample_count >= self.exclude_classes_less_sample_than]
             self.last_calculated_metrics = sum(filtered_perclass_accuracies) / len(filtered_perclass_accuracies)
 
     def types_of_metrics(self):
@@ -51,11 +53,17 @@ class ClipMeanPerclassAccuracyMetric(Metric):
 
 
     def tensorboard_tags(self):
-        return 'Clip mean per-class accuracy'
+        if self.exclude_classes_less_sample_than == 1:
+            return 'Clip mean per-class accuracy'
+        else:
+            return f'Clip mean per-class accuracy {self.exclude_classes_less_sample_than} or more'
 
 
     def get_csv_fieldnames(self):
-        return f'{self.split}_meanperclassacc'
+        if self.exclude_classes_less_sample_than == 1:
+            return f'{self.split}_meanperclassacc'
+        else:
+            return f'{self.split}_meanperclassacc{self.exclude_classes_less_sample_than}'
 
 
     def logging_msg_iter(self):
@@ -69,7 +77,12 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         else:
             prefix = f'{self.split}_'
 
-        message = f'{prefix}meanperclassacc: {self.last_calculated_metrics:.4f}'
+        if self.exclude_classes_less_sample_than == 1:
+            suffix = ''
+        else:
+            suffix = f'>={self.exclude_classes_less_sample_than}'
+
+        message = f'{prefix}meanperclassacc{suffix}: {self.last_calculated_metrics:.4f}'
         return message
 
 
@@ -87,14 +100,19 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         Return:
             either tuple or a single str 
         """
-        if self.split == 'train':
-            return 'Training average per-class accuracy'
-        elif self.split == 'val':
-            return 'Validation average per-class accuracy'
-        elif self.split == 'multicropval':
-            return 'Multicrop validation average per-class accuracy'
+        if self.exclude_classes_less_sample_than == 1:
+            suffix = ''
         else:
-            return f'{self.split} average per-class accuracy'
+            suffix = f' (exclude classes < {self.exclude_classes_less_sample_than}'
+
+        if self.split == 'train':
+            return f'Training average per-class accuracy{suffix}'
+        elif self.split == 'val':
+            return f'Validation average per-class accuracy{suffix}'
+        elif self.split == 'multicropval':
+            return f'Multicrop validation average per-class accuracy{suffix}'
+        else:
+            return f'{self.split} average per-class accuracy{suffix}'
 
 
     def plot_file_basenames(self):
@@ -103,7 +121,11 @@ class ClipMeanPerclassAccuracyMetric(Metric):
             either tuple or a single str 
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
-        return 'mean_perclass_accuracy'
+        if self.exclude_classes_less_sample_than == 1:
+            suffix = ''
+        else:
+            suffix = f'_{self.exclude_classes_less_sample_than}ormore'
+        return f'mean_perclass_accuracy{suffix}'
 
     
     @staticmethod

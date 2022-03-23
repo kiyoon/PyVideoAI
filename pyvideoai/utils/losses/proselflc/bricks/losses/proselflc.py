@@ -8,6 +8,8 @@ import torch.nn.functional as F
 import verboselogs 
 logger = verboselogs.VerboseLogger(__name__)
 
+EPS = 1e-6
+
 class ProSelfLC(CrossEntropy):
     """
     IMPORTANT: I think this code is numerically instable?
@@ -160,7 +162,7 @@ class MaskedProSelfLC(ProSelfLC):
         time_ratio_minus_half = torch.tensor(cur_time / self.total_time - 0.5)
         global_trust = 1 / (1 + torch.exp(-self.exp_base * time_ratio_minus_half))
         # example-level trust/knowledge
-        class_num = pred_probs.shape[0]
+        class_num = pred_prob.shape[0]
         H_pred_probs = torch.sum(-pred_prob * pred_logprob, 0)
         H_uniform = -torch.log(torch.tensor(1.0 / class_num))
         example_trust = 1 - H_pred_probs / H_uniform
