@@ -59,14 +59,14 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         if self.exclude_classes_less_sample_than == 1:
             return 'Clip mean per-class accuracy'
         else:
-            return f'Clip mean per-class accuracy {self.exclude_classes_less_sample_than} or more'
+            return f'Clip mean per-class accuracy {self.exclude_classes_less_sample_than}+'
 
 
     def get_csv_fieldnames(self):
         if self.exclude_classes_less_sample_than == 1:
             return f'{self.split}_meanperclassacc'
         else:
-            return f'{self.split}_meanperclassacc{self.exclude_classes_less_sample_than}'
+            return f'{self.split}_meanperclassacc{self.exclude_classes_less_sample_than}+'
 
 
     def logging_msg_iter(self):
@@ -83,7 +83,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         if self.exclude_classes_less_sample_than == 1:
             suffix = ''
         else:
-            suffix = f'>={self.exclude_classes_less_sample_than}'
+            suffix = f'{self.exclude_classes_less_sample_than}+'
 
         message = f'{prefix}meanperclassacc{suffix}: {self.last_calculated_metrics:.4f}'
         return message
@@ -106,7 +106,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         if self.exclude_classes_less_sample_than == 1:
             suffix = ''
         else:
-            suffix = f' (exclude classes < {self.exclude_classes_less_sample_than}'
+            suffix = f' ({self.exclude_classes_less_sample_than}+ samples)'
 
         if self.split == 'train':
             return f'Training average per-class accuracy{suffix}'
@@ -127,7 +127,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         if self.exclude_classes_less_sample_than == 1:
             suffix = ''
         else:
-            suffix = f'_{self.exclude_classes_less_sample_than}ormore'
+            suffix = f'_{self.exclude_classes_less_sample_than}+'
         return f'mean_perclass_accuracy{suffix}'
 
     
