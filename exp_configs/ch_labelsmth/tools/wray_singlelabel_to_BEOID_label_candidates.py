@@ -17,7 +17,11 @@ if __name__ == '__main__':
         for line in lines:
             fields = line.split(',')
             verb_label = fields[2].split('.v.')[0]
-            noun_label = fields[3]
+            noun_label = fields[3:]
+            noun_label = [noun.strip() for noun in noun_label]
+            if noun_label[-1] == '':
+                del noun_label[-1]
+            noun_label = ','.join(noun_label)
             #print(f"{noun_label = }")
 
             BEOID_all_labels.add((verb_label, noun_label))
@@ -34,7 +38,8 @@ if __name__ == '__main__':
         if len(avail_nouns) == 2:
             avail_nouns = [avail_nouns[1], avail_nouns[0]]
 
-        print("Wray label: " + str((avail_verb, avail_nouns)))
+        #print("Wray label: " + str((avail_verb, avail_nouns)))
+        print("Wray label: " + avail_label)
         candidates = set()
 
         for BEOID_label in BEOID_all_labels:

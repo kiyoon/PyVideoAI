@@ -29,8 +29,8 @@ if __name__ == '__main__':
 
     orig_label_to_multiverb = multiverb_label_inspect.orig_label_to_multiverb('/home/s1884147/scratch2/datasets/GTEA_Gaze_Plus/Multi-Verb-Labels', 'CMU')
 
-    for avail_label in orig_label_to_multiverb.keys():
-        avail_label = avail_label.split('_')
+    for orig_avail_label in orig_label_to_multiverb.keys():
+        avail_label = orig_avail_label.split('_')
         avail_verb = avail_label[0]
         avail_noun = avail_label[1] if len(avail_label) > 1 else ''
         avail_nouns = avail_noun.split('+')
@@ -38,7 +38,8 @@ if __name__ == '__main__':
         if len(avail_nouns) == 2:
             avail_nouns = [avail_nouns[1], avail_nouns[0]]
 
-        print("Wray label: " + str((avail_verb, avail_nouns)))
+        #print("Wray label: " + str((avail_verb, avail_nouns)))
+        print("Wray label: " + orig_avail_label)
         candidates = set()
 
         for CMU_label in CMU_all_labels:
