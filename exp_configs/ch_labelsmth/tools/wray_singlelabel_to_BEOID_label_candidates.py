@@ -2,6 +2,7 @@
 # Read the annotations and see what they look like.
 
 import os
+from pprint import pprint
 
 import multiverb_label_inspect
 if __name__ == '__main__':
@@ -16,21 +17,23 @@ if __name__ == '__main__':
 
         for line in lines:
             fields = line.split(',')
-            verb_label = fields[2].split('.v.')[0]
+            verb_label = fields[2].split('.v.')[0].replace(' ', '-')
             noun_label = fields[3:]
-            noun_label = [noun.strip() for noun in noun_label]
+            noun_label = [noun.strip().replace(' ', '-') for noun in noun_label]
             if noun_label[-1] == '':
                 del noun_label[-1]
-            noun_label = ','.join(noun_label)
+            noun_label = '+'.join(noun_label)
             #print(f"{noun_label = }")
 
             BEOID_all_labels.add((verb_label, noun_label))
 
     print("BEOID all labels")
     print(BEOID_all_labels)
+    print()
 
     orig_label_to_multiverb = multiverb_label_inspect.orig_label_to_multiverb('/home/s1884147/scratch2/datasets/GTEA_Gaze_Plus/Multi-Verb-Labels', 'BEOID')
 
+    wray_class_key_to_BEOID_class_keys = {}
     for avail_label in orig_label_to_multiverb.keys():
         avail_verb, avail_noun = avail_label.split('_')
         avail_nouns = avail_noun.split('+')
@@ -48,11 +51,24 @@ if __name__ == '__main__':
             if avail_verb == verb_label.replace(' ', '-'):
                 for avail_noun in avail_nouns:
                     if avail_noun in noun_label.replace(' ', '-'):
-                        candidates.add(f'{verb_label}-{noun_label}')
+                        candidates.add(f'{verb_label}_{noun_label}')
                         #noun = orig_label.
 
 
         print(f"Candidates from BEOID: {candidates}")
         print()
+        wray_class_key_to_BEOID_class_keys[avail_label] = list(candidates)
 
+
+    print("Now printing in a Python dict format")
+    pprint(wray_class_key_to_BEOID_class_keys)
+
+    BEOID_class_key_to_wray_class_key = {}
+    for k, v in wray_class_key_to_BEOID_class_keys.items():
+        for beoid_class_key in v:
+            BEOID_class_key_to_wray_class_key[beoid_class_key] = k
+
+    print()
+    print("BEOID class key to Wray class key")
+    pprint(BEOID_class_key_to_wray_class_key)
 
