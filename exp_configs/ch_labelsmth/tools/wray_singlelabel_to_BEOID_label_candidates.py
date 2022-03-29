@@ -3,8 +3,24 @@
 
 import os
 from pprint import pprint
-
 import multiverb_label_inspect
+
+
+noun_synonyms = {
+                'cup': ['mug'],
+                'plug': ['socket'],
+           }
+
+# some cannot be auto detected so we assign where they belongs to
+hard_fix_wray_to_BEOID = {
+        'press_button': 'push_button',
+        'pull-out_weight-pin': 'pull_weight-pin',
+        'scoop_spoon': 'spoon_',
+        'insert_foot': 'insert_pedal',
+        }
+
+
+
 if __name__ == '__main__':
     labels_dir = '/home/s1884147/scratch2/datasets/BEOID/Annotations'
 
@@ -31,6 +47,8 @@ if __name__ == '__main__':
     print(BEOID_all_labels)
     print()
 
+    BEOID_not_used_labels = BEOID_all_labels.copy()
+
     orig_label_to_multiverb = multiverb_label_inspect.orig_label_to_multiverb('/home/s1884147/scratch2/datasets/GTEA_Gaze_Plus/Multi-Verb-Labels', 'BEOID')
 
     wray_class_key_to_BEOID_class_keys = {}
@@ -41,8 +59,6 @@ if __name__ == '__main__':
         if len(avail_nouns) == 2:
             avail_nouns = [avail_nouns[1], avail_nouns[0]]
 
-        #print("Wray label: " + str((avail_verb, avail_nouns)))
-        print("Wray label: " + avail_label)
         candidates = set()
 
         for BEOID_label in BEOID_all_labels:
@@ -52,15 +68,26 @@ if __name__ == '__main__':
                 for avail_noun in avail_nouns:
                     if avail_noun in noun_label.replace(' ', '-'):
                         candidates.add(f'{verb_label}_{noun_label}')
+                        BEOID_not_used_labels.discard((verb_label, noun_label))
                         #noun = orig_label.
+                    elif avail_noun in noun_synonyms.keys():
+                        for synonym in noun_synonyms[avail_noun]:
+                            if synonym in noun_label.replace(' ', '-'):
+                                candidates.add(f'{verb_label}_{noun_label}')
+                                BEOID_not_used_labels.discard((verb_label, noun_label))
 
 
-        print(f"Candidates from BEOID: {candidates}")
-        print()
+
         wray_class_key_to_BEOID_class_keys[avail_label] = list(candidates)
 
+    for wray_key, BEOID_key in hard_fix_wray_to_BEOID.items():
+        wray_class_key_to_BEOID_class_keys[wray_key].append(BEOID_key)
+        verb_label, noun_label = BEOID_key.split('_')
+        BEOID_not_used_labels.remove((verb_label, noun_label))
 
-    print("Now printing in a Python dict format")
+
+
+    print("Wray label to BEOID label candidates")
     pprint(wray_class_key_to_BEOID_class_keys)
 
     BEOID_class_key_to_wray_class_key = {}
@@ -71,4 +98,8 @@ if __name__ == '__main__':
     print()
     print("BEOID class key to Wray class key")
     pprint(BEOID_class_key_to_wray_class_key)
+
+    print()
+    print("BEOID class keys that are not used. No match, and possibly minor classes.")
+    pprint(BEOID_not_used_labels)
 
