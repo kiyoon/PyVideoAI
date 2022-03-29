@@ -52,10 +52,10 @@ def main(args):
                     num_train_samples = round(len(segments) * args.train_ratio / 100)
                     random.shuffle(segments)
                     for segment in segments[:num_train_samples]:
-                        write_str = f'{segment.clip_id_str} {segment.clip_id} {segment.wray_verblabel_idx} 0 {segment.end_frame - segment.start_frame + 1}\n'
+                        write_str = f'{segment.clip_id_str} {segment.clip_id} {segment.wray_verblabel_idx} 0 {segment.end_frame - segment.start_frame}\n'
                         train_split.write(write_str)
                     for segment in segments[num_train_samples:]:
-                        write_str = f'{segment.clip_id_str} {segment.clip_id} {segment.wray_verblabel_idx} 0 {segment.end_frame - segment.start_frame + 1}\n'
+                        write_str = f'{segment.clip_id_str} {segment.clip_id} {segment.wray_verblabel_idx} 0 {segment.end_frame - segment.start_frame}\n'
                         val_split.write(write_str)
 
 

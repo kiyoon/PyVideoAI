@@ -1,11 +1,11 @@
-from abc import *
+from abc import ABC, abstractmethod
 from typing import Dict
+import torch
+import numpy as np
 
 import logging
 logger = logging.getLogger(__name__)
 
-import torch
-import numpy as np
 def is_numpy(instance):
     return type(instance).__module__ == np.__name__
 
@@ -74,7 +74,10 @@ class Metric(ABC):
 
 
     @abstractmethod
-    def add_clip_predictions(self, video_ids, clip_predictions, labels):
+    def add_clip_predictions(self, video_ids: torch.FloatTensor,
+            clip_predictions: torch.FloatTensor,
+            labels: torch.FloatTensor,
+            ):
         """By default, we will average the clip predictions with the same video_ids.
         If averaging does not fit your needs, override and redefine this function as you'd like.
 
@@ -89,12 +92,12 @@ class Metric(ABC):
 
         with torch.no_grad():
             if self.video_id_to_label is not None:
+                video_ids_numpy = video_ids.cpu().numpy().astype(int)
                 if self.video_id_to_label_missing_action == 'error':
-                    labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids]), dtype=video_ids.dtype, device=video_ids.device)
+                    labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids_numpy]), dtype=video_ids.dtype, device=video_ids.device)
                 elif self.video_id_to_label_missing_action == 'original_label':
-                    labels = torch.tensor(np.array([self.video_id_to_label[vid] if vid in self.video_id_to_label.keys() else labels[idx] for idx, vid in enumerate(video_ids)]), dtype=video_ids.dtype, device=video_ids.device)
+                    labels = torch.tensor(np.array([self.video_id_to_label[vid] if vid in self.video_id_to_label.keys() else labels[idx] for idx, vid in enumerate(video_ids_numpy)]), dtype=video_ids.dtype, device=video_ids.device)
                 else:   # skip
-                    video_ids_numpy = video_ids.cpu().numpy().astype(int)
                     labels = torch.tensor(np.array([self.video_id_to_label[vid] for vid in video_ids_numpy if vid in self.video_id_to_label.keys()]), dtype=video_ids.dtype, device=video_ids.device)
                     if len(labels) == 0:
                         return None, None, None
