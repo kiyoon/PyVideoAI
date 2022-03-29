@@ -24,7 +24,8 @@ setup(
        'pretrainedmodels',      # epic models TSN TRN
        'moviepy',               # Tensorboard `add_video()`
        'decord',                # Video decoding
-       'av',                    # Video decoding (you may not need it in favour of decord
+       'av',                    # Video decoding (you may not need it in favour of decord)
        'scikit-image',          # Only used for timecycle
+       'gulpio2',
        ],
 )

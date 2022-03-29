@@ -81,10 +81,14 @@ if __name__ == '__main__':
         for orig_label, multiverb_label in data.items():
             print(f"{orig_label = }")
             multiverb_label_filtered = [multiverb_label[idx] for idx in classes_filter_idx]
+            
+            # l1 norm
+            sum_filtered = sum(multiverb_label_filtered)
+            multiverb_label_filtered = [score / sum_filtered for score in multiverb_label_filtered]
             #print(multiverb_label_filtered)
 
             sort_indices = np.argsort(multiverb_label_filtered)[::-1]
             for sort_idx in sort_indices:
-                if multiverb_label_filtered[sort_idx] >= 0.2:
+                if multiverb_label_filtered[sort_idx] >= 0.15:
                     print(class_order_filtered[sort_idx], round(multiverb_label_filtered[sort_idx], 2))
 
