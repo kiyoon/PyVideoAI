@@ -126,6 +126,10 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
         # feature_data['video_ids'] feature_data['labels'] feature_data['clip_features']
 
         if rank == 0:
+            if feature_data['clip_features'].shape[1] == input_frame_length:
+                # features are not averaged. Average now
+                feature_data['clip_features'] = np.mean(feature_data['clip_features'], axis=1)
+
             assert feature_data['clip_features'].shape[1] == 2048
             kn = 10
             thr = 0.2
