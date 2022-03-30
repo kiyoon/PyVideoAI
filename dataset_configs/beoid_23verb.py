@@ -7,7 +7,7 @@ import numpy as np
 
 from video_datasets_api.wray_multiverb.beoid import NUM_CLASSES as num_classes
 from video_datasets_api.wray_multiverb.beoid import read_all_annotations
-from video_datasets_api.wray_multiverb.beoid import Wray_verb_class_keys_filtered as class_keys 
+from video_datasets_api.wray_multiverb.beoid import Wray_verb_class_keys_filtered as class_keys
 
 from pyvideoai.config import DATA_DIR
 
@@ -22,6 +22,7 @@ wray_annotations_root = os.path.join(DATA_DIR, 'Multi-Verb-Labels')
 beoid_annotations_root = os.path.join(dataset_root, 'Annotations')
 
 BEOID_all_videos = read_all_annotations(wray_annotations_root, beoid_annotations_root)
+video_id_to_singleverb: dict[int, int] = {video_info.clip_id: video_info.wray_verblabel_idx for video_info in BEOID_all_videos}
 video_id_to_multiverb: dict[int, np.array] = {}
 for video_info in BEOID_all_videos:
     label_array = np.zeros(num_classes, dtype=float)
@@ -32,5 +33,4 @@ for video_info in BEOID_all_videos:
 gulp_rgb_split_file_dir = os.path.join(dataset_root, 'wray_splits_gulp_rgb')
 split_file_basename_format = {'train': 'train{}.csv', 'val': 'val{}.csv', 'multicropval': 'val{}.csv', 'traindata_testmode': 'train{}.csv'}
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test', 'traindata_testmode': 'test'}
-horizontal_flip = True 
-
+horizontal_flip = True
