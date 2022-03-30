@@ -78,7 +78,7 @@ def proselflc_total_time():
     num_iters_per_epoch = train_samples // N
     total_time = num_iters_per_epoch * num_epochs
     logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * {num_epochs} = {total_time}')
-    return total_time 
+    return total_time
 
 
 proselflc_exp_base = 1.
@@ -151,10 +151,13 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
             soft_labels = np.array(soft_labels)
 
             multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
-            if loss_type == 'maskce':
+            if loss_type in ['maskce', 'maskproselflc']:
+                logger.info('Turning multilabels to mask out sign (-1) and including one single label')
                 multilabels = -multilabels      # negative numbers mean masks. Mask out the relevant verbs.
                 for idx, label in enumerate(feature_data['labels']):
                     multilabels[idx, label] = 1     # Make the actual single label GT the only label.
+            else:
+                logger.info('Including all multilabels and singlelabel')
 
             if save_features:
                 logger.info(f"Saving features, neighbours, and multilabels to {os.path.join(exp.predictions_dir, 'features_neighbours')}")
@@ -224,7 +227,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
         logger.info(f'cRT: re-initialising classifier weights')
         train_kit['model'] = model_cfg.initialise_classifier(train_kit['model'])
 
-        
+
 
 # optional
 def get_optim_policies(model):
@@ -275,7 +278,7 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     else:
         after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
 
-        return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
+        return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler)
 
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, pretrained = pretrained)
@@ -375,8 +378,8 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
         flow_neighbours = 5
         flow_folder_x = 'u'
         flow_folder_y = 'v'
-        return FramesSparsesampleDataset(csv_path, mode, 
-                input_frame_length, 
+        return FramesSparsesampleDataset(csv_path, mode,
+                input_frame_length,
                 train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
                 train_horizontal_flip=dataset_cfg.horizontal_flip,
                 test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,

@@ -5,11 +5,14 @@ from pyvideoai.dataloaders import GulpSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
+from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss, MinRegressionCombinationLoss
+from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
+from pyvideoai.utils.losses.proselflc import MaskedProSelfLC
 from functools import lru_cache
 import logging
 logger = logging.getLogger(__name__)
 
-data_split_number = 0
+data_split_number = int(os.getenv('VAI_SPLIT_IDX', 0))
 
 input_frame_length = 8
 input_type = 'gulp_rgb'  # gulp_rgb / gulp_flow
@@ -45,7 +48,6 @@ val_num_spatial_crops = 1
 test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 
-train_classifier_balanced_retraining_epochs = 0     # How many epochs to re-train the classifier from random weights, in a class-balanced way, at the end. Bingyi Kang et al. 2020, (cRT)
 early_stop_patience = 20        # or None to turn off
 
 sample_index_code = 'pyvideoai'
@@ -57,6 +59,7 @@ pretrained = 'imagenet'      # epic100 / imagenet / random
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
 loss_type = 'crossentropy'   # soft_regression, crossentropy, labelsmooth, proselflc
+                             # mince / maskce / minregcomb / maskproselflc
 
 labelsmooth_factor = 0.1
 def proselflc_total_time():
@@ -66,7 +69,7 @@ def proselflc_total_time():
     num_iters_per_epoch = train_samples // N
     total_time = num_iters_per_epoch * num_epochs
     logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * {num_epochs} = {total_time}')
-    return total_time 
+    return total_time
 
 
 proselflc_exp_base = 1.
@@ -84,32 +87,21 @@ def get_criterion(split):
             return torch.nn.CrossEntropyLoss()
     elif loss_type == 'soft_regression':
         return SoftlabelRegressionLoss()
+    elif loss_type == 'mince':
+        return MinCEMultilabelLoss()
+    elif loss_type == 'maskce':
+        return MaskedCrossEntropy()
+    elif loss_type == 'minregcomb':
+        return MinRegressionCombinationLoss()
+    elif loss_type == 'maskproselflc':
+        return MaskedProSelfLC(proselflc_total_time(), proselflc_exp_base)
     else:
         return torch.nn.CrossEntropyLoss()
 
-from torch.utils.data.distributed import DistributedSampler
-import pyvideoai.utils.distributed as du
+'''
 def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
-    if epoch >= num_epochs - train_classifier_balanced_retraining_epochs:
-        # freeze base model parameters
-        # model state dict doesn't save requires_grad parameters.
-        # When resuming, it has to be re-done. That's why we just call it every epoch.
-        logger.info(f'Classifier re-training with balanced samples (cRT) for the last {train_classifier_balanced_retraining_epochs} epochs.')
-        logger.info('cRT: freezing base model')
-        train_kit['model'] = model_cfg.freeze_base_model(train_kit['model'])
-
-        logger.info('cRT: switching to a balanced dataloader')
-        train_dataset = get_torch_dataset('train', class_balanced_sampling=True)
-        train_sampler = DistributedSampler(train_dataset) if world_size > 1 else None
-        train_kit['train_dataloader'] = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size(), shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
-
-    if epoch == num_epochs - train_classifier_balanced_retraining_epochs:
-        # re-initialise classifier weights
-        logger.info('cRT: re-initialising classifier weights')
-        train_kit['model'] = model_cfg.initialise_classifier(train_kit['model'])
-
-
-
+    return None
+'''
 
 # optional
 def get_optim_policies(model):
@@ -160,7 +152,7 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     else:
         after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
 
-        return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
+        return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler)
 
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, pretrained=pretrained)
@@ -230,17 +222,24 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
         _test_scale = val_scale
         _test_num_spatial_crops = val_num_spatial_crops
 
-    video_id_to_label = None
-#    if split == 'train':
-#        if train_label_type == '5neighbours':
-#            video_id_to_label = {}
-#            softlabel_pickle_path = '/home/kiyoon/storage/tsm_flow_neigh/5-neighbours-from-features_epoch_0009_traindata_testmode_oneclip.pkl'
-#            with open(softlabel_pickle_path, 'rb') as f:
-#                d = pickle.load(f)
-#            video_ids, soft_labels = d['query_ids'], d['soft_labels']
-#
-#            for video_id, soft_label in zip(video_ids, soft_labels):
-#                video_id_to_label[video_id] = soft_label
+    if loss_type in ['maskce', 'maskproselflc']:
+        logger.info('Turning multilabels to mask out sign (-1) and including one single label')
+        video_id_to_label = {}
+        for video_id, multiverb in dataset_cfg.video_id_to_multiverb:
+            new_label = -multiverb
+            new_label[dataset_cfg.video_id_to_singleverb[video_id]] = 1
+            video_id_to_label[video_id] = new_label
+
+    elif loss_type in ['mince', 'minregcomb', 'soft_regression']:
+        logger.info('Including all multilabels and singlelabel')
+        video_id_to_label = {}
+        for video_id, multiverb in dataset_cfg.video_id_to_multiverb:
+            new_label = multiverb
+            new_label[dataset_cfg.video_id_to_singleverb[video_id]] = 1
+            video_id_to_label[video_id] = new_label
+    else:
+        logger.info('Including just single labels.')
+        video_id_to_label = None
 
     if input_type == 'gulp_rgb':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_rgb_dir)
@@ -330,6 +329,7 @@ from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMet
 from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
 from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
 from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict
+video_id_to_singlelabel = dataset_cfg.video_id_to_singleverb
 video_id_to_multilabel = dataset_cfg.video_id_to_multiverb
 
 best_metric = ClipAccuracyMetric()
@@ -338,8 +338,8 @@ metrics = {'train': [
     ClipMeanPerclassAccuracyMetric(),
             ],
         'val': [best_metric,
-            ClipAccuracyMetric(topk=(5,)),
-            ClipMeanPerclassAccuracyMetric(),
+            ClipAccuracyMetric(topk=(5,), video_id_to_label = video_id_to_singlelabel),
+            ClipMeanPerclassAccuracyMetric(video_id_to_label = video_id_to_singlelabel),
             ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, split='multilabelval'),
             ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, split='multilabelval'),
             ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, split='multilabelval'),
