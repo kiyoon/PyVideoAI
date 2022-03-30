@@ -8,7 +8,6 @@ from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
 from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss, MinRegressionCombinationLoss
 from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
 from pyvideoai.utils.losses.proselflc import MaskedProSelfLC
-from functools import lru_cache
 import logging
 logger = logging.getLogger(__name__)
 
@@ -225,7 +224,7 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
     if loss_type in ['maskce', 'maskproselflc']:
         logger.info('Turning multilabels to mask out sign (-1) and including one single label')
         video_id_to_label = {}
-        for video_id, multiverb in dataset_cfg.video_id_to_multiverb:
+        for video_id, multiverb in dataset_cfg.video_id_to_multiverb.items():
             new_label = -multiverb
             new_label[dataset_cfg.video_id_to_singleverb[video_id]] = 1
             video_id_to_label[video_id] = new_label
@@ -233,7 +232,7 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
     elif loss_type in ['mince', 'minregcomb', 'soft_regression']:
         logger.info('Including all multilabels and singlelabel')
         video_id_to_label = {}
-        for video_id, multiverb in dataset_cfg.video_id_to_multiverb:
+        for video_id, multiverb in dataset_cfg.video_id_to_multiverb.items():
             new_label = multiverb
             new_label[dataset_cfg.video_id_to_singleverb[video_id]] = 1
             video_id_to_label[video_id] = new_label
@@ -285,7 +284,6 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
 
 
 
-@lru_cache
 def get_torch_dataset(split, class_balanced_sampling=False):
     if input_type == 'gulp_rgb':
         split_dir = dataset_cfg.gulp_rgb_split_file_dir
