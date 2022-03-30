@@ -47,7 +47,8 @@ def feature_extract_model(model):
             imagenet_features = self.model.features(x)
             # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
             # Average over frames
-            return torch.mean(imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:]), dim=1)
+            #return torch.mean(imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:]), dim=1)
+            return imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
 
     return FeatureExtractModel(model)
 
