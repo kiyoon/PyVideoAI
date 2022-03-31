@@ -19,7 +19,7 @@ dataset_root = os.path.join(DATA_DIR, 'EPIC_KITCHENS_100')
 video_dir = os.path.join(dataset_root, 'segments324_15fps')
 flowframes_dir = os.path.join(dataset_root, 'flow_frames')
 gulp_rgb_dirname = {'train': 'gulp_rgb/train', 'val': 'gulp_rgb/val', 'multicropval': 'gulp_rgb/val'}
-gulp_flow_dirname = {'train': 'gulp_flow/train', 'val': 'gulp_flow/val', 'multicropval': 'gulp_flow/val', 'trainpartialdata_testmode': 'gulp_flow/train'}
+gulp_flow_dirname = {'train': 'gulp_flow/train', 'val': 'gulp_flow/val', 'multicropval': 'gulp_flow/val', 'trainpartialdata_testmode': 'gulp_flow/train', 'traindata_testmode': 'gulp_flow/train'}
 annotations_root = os.path.join(dataset_root, 'epic-kitchens-100-annotations')
 
 narration_id_to_video_id, narration_id_sorted = epic_narration_id_to_unique_id(annotations_root)
@@ -34,7 +34,7 @@ gulp_rgb_split_file_dir = os.path.join(dataset_root, 'splits_gulp_rgb')
 gulp_flow_split_file_dir = os.path.join(dataset_root, 'splits_gulp_flow')
 split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv', 'traindata_testmode': 'train.csv', 'trainpartialdata_testmode': 'train_partial.csv'}
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test', 'traindata_testmode': 'test', 'trainpartialdata_testmode': 'test'}
-horizontal_flip = True 
+horizontal_flip = True
 
 
 
@@ -67,8 +67,8 @@ def plot_confusion_matrix(df_confusion_matrix, shrink=False, vmin=0, vmax=1, cma
         plt.ylabel('Target', fontsize=50)
 
         # This sets the yticks "upright" with 0, as opposed to sideways with 90.
-        plt.yticks(fontsize=12, rotation=0) 
-        plt.xticks(fontsize=12, rotation=90) 
+        plt.yticks(fontsize=12, rotation=0)
+        plt.xticks(fontsize=12, rotation=90)
 
         # here set the colorbar labelsize by 50
         cbar = ax.collections[0].colorbar
@@ -86,8 +86,8 @@ def plot_confusion_matrix(df_confusion_matrix, shrink=False, vmin=0, vmax=1, cma
         plt.ylabel('Target', fontsize=20)
 
         # This sets the yticks "upright" with 0, as opposed to sideways with 90.
-        plt.yticks(fontsize=12, rotation=0) 
-        plt.xticks(fontsize=12, rotation=90) 
+        plt.yticks(fontsize=12, rotation=0)
+        plt.xticks(fontsize=12, rotation=90)
 
         # here set the colorbar labelsize by 20
         cbar = ax.collections[0].colorbar
