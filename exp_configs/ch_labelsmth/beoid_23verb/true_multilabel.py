@@ -322,6 +322,7 @@ last_activation = 'softmax'   # or, you can pass a callable function like `torch
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
+from pyvideoai.metrics.mAP import Clip_mAPMetric
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
 from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
@@ -341,6 +342,7 @@ metrics = {'train': [
             ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, split='multilabelval'),
             ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, split='multilabelval'),
             ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, split='multilabelval'),
+            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, split='multilabelval'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
@@ -361,4 +363,4 @@ predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
 #from pyvideoai.visualisations.metric_plotter import DefaultMetricPlotter
 #metric_plotter = DefaultMetricPlotter()
 from pyvideoai.visualisations.telegram_reporter import DefaultTelegramReporter
-telegram_reporter = DefaultTelegramReporter(include_exp_rootdir=True)
+telegram_reporter = DefaultTelegramReporter(include_exp_rootdir=True, ignore_figures=True)
