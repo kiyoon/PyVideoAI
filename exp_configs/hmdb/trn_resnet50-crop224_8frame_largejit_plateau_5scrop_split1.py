@@ -112,16 +112,19 @@ def load_model():
 
 
 # If you need to extract features, use this. It can be defined in model_cfg too.
-#def feature_extract_model(model):
-#    from torch.nn import Module
-#    class FeatureExtractModel(Module):
-#        def __init__(self, model):
-#            super().__init__()
-#            self.model = model
-#        def forward(self, x):
-#            return self.model.features(x)
+#def feature_extract_model(model, featuremodel_name):
+#    if featuremodel_name == 'features':
+#        from torch.nn import Module
+#        class FeatureExtractModel(Module):
+#            def __init__(self, model):
+#                super().__init__()
+#                self.model = model
+#            def forward(self, x):
+#                return self.model.features(x)
 #
-#    return FeatureExtractModel(model)
+#        return FeatureExtractModel(model)
+#    else:
+#        raise ValueError(f'Unknown feature model: {featuremodel_name}')
 
 
 # optional
@@ -178,7 +181,7 @@ def _get_torch_dataset(csv_path, split):
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
     return FramesSparsesampleDataset(csv_path, mode,
-            input_frame_length, 
+            input_frame_length,
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
             train_horizontal_flip = dataset_cfg.horizontal_flip,
             test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,

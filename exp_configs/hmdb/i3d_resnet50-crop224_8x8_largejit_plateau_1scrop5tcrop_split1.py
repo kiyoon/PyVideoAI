@@ -83,13 +83,13 @@ base_learning_rate = float(os.getenv('VAI_BASE_LR', 1e-5))      # when batch_siz
 #                conv_bias.append(ps[1])
 #        # ...
 #    return [
-#        {   
+#        {
 #            "params": conv_weight,
 #            "lr_mult": 1,
 #            "decay_mult": 1,
 #            "name": "conv_weight",
 #        },
-#        {   
+#        {
 #            "params": conv_bias,
 #            "lr_mult": 2,
 #            "decay_mult": 0,
@@ -141,16 +141,19 @@ def load_model():
 
 
 # If you need to extract features, use this. It can be defined in model_cfg too.
-#def feature_extract_model(model):
-#    from torch.nn import Module
-#    class FeatureExtractModel(Module):
-#        def __init__(self, model):
-#            super().__init__()
-#            self.model = model
-#        def forward(self, x):
-#            return self.model.features(x)
+#def feature_extract_model(model, featuremodel_name):
+#    if featuremodel_name == 'features':
+#        from torch.nn import Module
+#        class FeatureExtractModel(Module):
+#            def __init__(self, model):
+#                super().__init__()
+#                self.model = model
+#            def forward(self, x):
+#                return self.model.features(x)
 #
-#    return FeatureExtractModel(model)
+#        return FeatureExtractModel(model)
+#    else:
+#        raise ValueError(f'Unknown feature model: {featuremodel_name}')
 
 
 # optional

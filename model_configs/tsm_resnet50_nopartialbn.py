@@ -36,21 +36,24 @@ def get_optim_policies(model):
     return model.get_optim_policies()
 
 # If you need to extract features, use this. It can be defined in model_cfg too.
-def feature_extract_model(model):
-    from torch.nn import Module
-    class FeatureExtractModel(Module):
-        def __init__(self, model):
-            super().__init__()
-            self.model = model
-        def forward(self, x):
-            batch_size = x.shape[0]
-            imagenet_features = self.model.features(x)
-            # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
-            # Average over frames
-            #return torch.mean(imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:]), dim=1)
-            return imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
+def feature_extract_model(model, featuremodel_name):
+    if featuremodel_name == 'features':
+        from torch.nn import Module
+        class FeatureExtractModel(Module):
+            def __init__(self, model):
+                super().__init__()
+                self.model = model
+            def forward(self, x):
+                batch_size = x.shape[0]
+                imagenet_features = self.model.features(x)
+                # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
+                # Average over frames
+                #return torch.mean(imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:]), dim=1)
+                return imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
 
-    return FeatureExtractModel(model)
+        return FeatureExtractModel(model)
+    else:
+        raise ValueError(f'Unknown feature model: {featuremodel_name}')
 
 
 ddp_find_unused_parameters = False
@@ -62,4 +65,3 @@ input_normalise = True
 input_bgr = False
 input_mean = [0.485, 0.456, 0.406]
 input_std = [0.229, 0.224, 0.225]
-

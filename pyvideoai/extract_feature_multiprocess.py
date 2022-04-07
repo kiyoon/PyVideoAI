@@ -25,7 +25,7 @@ import traceback
 import coloredlogs, logging, verboselogs
 logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath( __file__ ))
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def feature_extraction(args):
@@ -64,7 +64,7 @@ def feature_extraction(args):
         du.suppress_print()
 
     try:
-        # Writes the pids to file, to make killing processes easier.    
+        # Writes the pids to file, to make killing processes easier.
         if world_size > 1:
             du.write_pids_to_file(os.path.join(config.PYVIDEOAI_DIR, 'tools', "last_pids.txt"))
 
@@ -145,9 +145,9 @@ def feature_extraction(args):
 
         # Convert the model to feature model
         if hasattr(cfg, 'feature_extract_model'):
-            model = cfg.feature_extract_model(model)
+            model = cfg.feature_extract_model(model, args.featuremodel_name)
         else:
-            model = cfg.model_cfg.feature_extract_model(model)
+            model = cfg.model_cfg.feature_extract_model(model, args.featuremodel_name)
 
         # Transfer the model to the current GPU device
         model = model.to(device=cur_device, non_blocking=True)
@@ -162,22 +162,20 @@ def feature_extraction(args):
         misc.check_pillow_performance()
 
 
-        oneclip = args.mode == 'oneclip'
-
         if rank == 0:
-            exp.tg_send_text_with_expname(f'Starting to extract features..')
+            exp.tg_send_text_with_expname('Starting to extract features..')
 
         feature_data, _, _, _, eval_log_str = extract_features(model, val_dataloader, data_unpack_func, cfg.dataset_cfg.num_classes, split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
 
         if rank == 0:
             # save features
             if load_epoch is None:
-                features_file_path = os.path.join(exp.predictions_dir, f'features_pretrained_{split}_{args.mode}.pkl')
+                features_file_path = os.path.join(exp.predictions_dir, f'{args.featuremodel_name}_pretrained_{split}_{args.mode}.pkl')
             else:
-                features_file_path = os.path.join(exp.predictions_dir, f'features_epoch_{load_epoch:04d}_{split}_{args.mode}.pkl')
+                features_file_path = os.path.join(exp.predictions_dir, f'{args.featuremodel_name}_epoch_{load_epoch:04d}_{split}_{args.mode}.pkl')
                 os.makedirs(exp.predictions_dir, exist_ok=True)
-                
-                print("Saving features to: " + features_file_path) 
+
+                print("Saving features to: " + features_file_path)
                 with open(features_file_path, 'wb') as f:
                     pickle.dump(feature_data, f, pickle.HIGHEST_PROTOCOL)
 
@@ -186,11 +184,10 @@ def feature_extraction(args):
         if rank == 0:
             exp.tg_send_text_with_expname('Finished extracting features\n\n' + eval_log_str)
 
-    except Exception as e:
+    except Exception:
         logger.exception("Exception occurred whilst extracting features")
         # Every process is going to send exception.
         # This can make your Telegram report filled with many duplicates,
         # but at the same time it ensures that you receive a message when anything wrong happens.
 #        if rank == 0:
         exp.tg_send_text_with_expname('Exception occurred whilst extracting features\n\n' + traceback.format_exc())
-

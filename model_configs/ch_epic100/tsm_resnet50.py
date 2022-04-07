@@ -25,7 +25,7 @@ def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8, pretraine
     base_model = 'resnet50'
 
     if pretrained == 'imagenet':
-        basemodel_pretrained = 'imagenet' 
+        basemodel_pretrained = 'imagenet'
     else:
         basemodel_pretrained = None
 
@@ -33,7 +33,7 @@ def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8, pretraine
             base_model = base_model,
             pretrained=basemodel_pretrained, dropout=0.7)
 
-    
+
     if pretrained == 'epic100':
         device = torch.cuda.current_device()
         checkpoint = torch.load(pretrained_path, map_location='cpu')
@@ -75,29 +75,52 @@ def get_optim_policies(model):
     return model.get_optim_policies()
 
 # If you need to extract features, use this. It can be defined in exp_configs too.
-def feature_extract_model(model):
-    class FeatureExtractModel(Module):
-        def __init__(self, model):
-            super().__init__()
-            self.model = model
-            if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
-                self.is_ddp = True
-            else:
-                self.is_ddp = False
-            
-        def forward(self, x):
-            batch_size = x.shape[0]
-            if self.is_ddp:
-                imagenet_features = self.model.module.features(x)
-            else:
-                imagenet_features = self.model.features(x)
-            # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
-            # Average over frames
-            #return torch.mean(imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:]), dim=1)
-            return imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
+def feature_extract_model(model, featuremodel_name):
+    if featuremodel_name == 'features':
+        class FeatureExtractModel(Module):
+            def __init__(self, model):
+                super().__init__()
+                self.model = model
+                if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+                    self.is_ddp = True
+                else:
+                    self.is_ddp = False
+
+            def forward(self, x):
+                batch_size = x.shape[0]
+                if self.is_ddp:
+                    imagenet_features = self.model.module.features(x)
+                else:
+                    imagenet_features = self.model.features(x)
+                # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
+                # Average over frames
+                #return torch.mean(imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:]), dim=1)
+                return imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
 
 
-    return FeatureExtractModel(model)
+        return FeatureExtractModel(model)
+
+    elif featuremodel_name == 'logits':
+        class LogitsExtractModel(Module):
+            def __init__(self, model):
+                super().__init__()
+                self.model = model
+                if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+                    self.is_ddp = True
+                else:
+                    self.is_ddp = False
+
+            def forward(self, x):
+                if self.is_ddp:
+                    logits = self.model.module.logits(x)
+                else:
+                    logits = self.model.logits(x)
+                return logits
+
+        return LogitsExtractModel(model)
+    else:
+        raise ValueError(f'Unknown feature model: {featuremodel_name}')
+
 
 
 def freeze_base_model(model):
@@ -131,9 +154,9 @@ def initialise_classifier(model):
         )
     else:
         model._initialise_layer(model.new_fc)
-    
+
     return model
-        
+
 
 
 ddp_find_unused_parameters = True
