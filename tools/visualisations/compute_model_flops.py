@@ -3,25 +3,18 @@
 model_cfg needs NCTHW_to_model_input_shape(inputs) function
 '''
 import argparse
-import logging
 import numpy as np
-import os
-import sys
-
-import coloredlogs, verboselogs
-logger = verboselogs.VerboseLogger(__name__)
 
 import torch
-from torch import nn
-from experiment_utils import ExperimentBuilder
 import model_configs
-import time
 
-from pyvideoai import config
 from pyvideoai.utils import misc
 
 from fvcore.nn.activation_count import activation_count
 from fvcore.nn.flop_count import FlopCountAnalysis
+
+import coloredlogs, verboselogs
+logger = verboselogs.VerboseLogger(__name__)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -30,7 +23,7 @@ def main():
     parser.add_argument("-M", "--model", type=str, default='tsn_resnet50', help="Model")
     parser.add_argument("-c:m", "--model_channel", type=str, default='', choices = model_configs.available_channels, help="Model channel")
     parser.add_argument("--seed", type=int, default=12, help="Random seed for np, torch, torch.cuda, DALI. Actual seed will be seed+rank.")
-    parser.add_argument("--mode", type=str, default='flop', choices=['flop', 'activation'],  help="Giga flop or mega activation count.")
+    parser.add_argument("--mode", type=str, default='flop', choices=['flop', 'activation'], help="Giga flop or mega activation count.")
     parser.add_argument("--crop_size", type=int, default=224, help="Input crop size")
     parser.add_argument("--num_classes", type=int, default=51, help="Input crop size")
     parser.add_argument("--sequence_length", type=int, default=8, help="Input #frame.")
@@ -70,7 +63,7 @@ def main():
             count = sum(count_dict.values())
             logger.info(f"Activation count: {count} M")
 
-    except Exception as e:
+    except Exception:
         logger.exception("Exception occurred")
 
 

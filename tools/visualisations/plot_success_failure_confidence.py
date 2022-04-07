@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 def get_parser():
     parser = argparse.ArgumentParser(description="Read predictions and plot confidence distribution.",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    add_exp_arguments(parser, 
+    add_exp_arguments(parser,
             root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='epic100_verb', model_default='tsm_resnet50_nopartialbn', name_default='onehot',
             dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)
     parser.add_argument("-l", "--load_epoch", type=int, default=-2, help="Load from checkpoint. Set to -1 to load from the last checkpoint.")
@@ -37,19 +37,17 @@ def main():
     args = parser.parse_args()
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
-    dataset_cfg = cfg.dataset_cfg
-    model_cfg = cfg.model_cfg
 
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
 
     if args.version == 'last':
-        _expversion = -2    # choose the last version
+        _expversion = 'last'    # choose the last version
     else:
         _expversion = int(args.version)
 
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name,
             summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
             version=_expversion,
             telegram_key_ini = config.KEY_INI_PATH)
@@ -75,13 +73,13 @@ def main():
             split = 'val'
         else:   # multicrop
             split = 'multicropval'
-    
+
     predictions_file_path = os.path.join(exp.predictions_dir, f'epoch_{load_epoch:04d}_{split}_{args.mode}.pkl')
 
     with open(predictions_file_path, 'rb') as f:
         predictions = pickle.load(f)
 
-        
+
     video_predictions = predictions['video_predictions']
     video_labels = predictions['video_labels']
     video_ids = predictions['video_ids']
@@ -115,7 +113,7 @@ def main():
     ax2.title.set_text('Failure')
     ax3.title.set_text('Success without 0-10%')
     ax4.title.set_text('Failure without 0-10%')
-    
+
 
 
     os.makedirs(exp.plots_dir, exist_ok=True)

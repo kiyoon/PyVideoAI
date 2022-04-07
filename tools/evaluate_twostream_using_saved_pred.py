@@ -9,7 +9,6 @@ from __future__ import unicode_literals
 
 import argparse
 import pickle
-import csv
 import logging
 import numpy as np
 import os
@@ -23,14 +22,10 @@ logger = logging.getLogger(__name__)
 
 from sklearn.metrics import accuracy_score
 
-import torch
-from torch import nn
-from experiment_utils.csv_to_dict import csv_to_dict
 from experiment_utils.argparse_utils import add_exp_arguments
 from experiment_utils import ExperimentBuilder
 from pyvideoai import config
 import dataset_configs, model_configs, exp_configs
-import time
 
 from pyvideoai.tasks import SingleLabelClassificationTask, MultiLabelClassificationTask
 
@@ -82,22 +77,22 @@ def evaluate_pred(args):
         raise ValueError(f'Unknown task {cfg.dataset_cfg.task}')
     ## 1
     if args.version == 'auto':
-        version = -2
+        version = 'last'
     else:
         version = int(args.version)
 
     if args.version2 == 'auto':
-        version2 = -2
+        version2 = 'last'
     else:
         version2 = int(args.version2)
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, version=version)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, version=version)
     exp.load_summary()
     video_predictions, video_labels, video_ids = load_predictions(args.load_epoch, args.mode, exp, multilabel)
 
 
     ## 2
-    exp2 = ExperimentBuilder(args.experiment_root, args.dataset, args.model2, args.experiment_name2, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, version=version2)
+    exp2 = ExperimentBuilder(args.experiment_root, args.dataset, args.model2, args.experiment_name2, args.subfolder_name2, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH, version=version2)
     exp2.load_summary()
     video_predictions2, video_labels2, video_ids2 = load_predictions(args.load_epoch2, args.mode2, exp2, multilabel)
 
@@ -146,6 +141,7 @@ def main():
     parser.add_argument("-c:m2", "--model_channel2", type=str, default="", choices=model_configs.available_channels, help="The second model channel")
     parser.add_argument("-E2", "--experiment_name2", type=str, default="test",  help="The second experiment name")
     parser.add_argument("-c:e2", "--experiment_channel2", type=str, default="", choices=exp_configs.available_channels, help="The second experiment channel")
+    parser.add_argument("-S2", "--subfolder_name2", type=str, default=None,  help="The second experiment's subfolder name")
     parser.add_argument("-v", "--version", type=str, default='auto', help="Experiment version (`auto` or integer). `auto` chooses the last version.")
     parser.add_argument("-v2", "--version2", type=str, default='auto', help="Experiment version (`auto` or integer). `auto` chooses the last version.")
 

@@ -10,8 +10,6 @@ import pickle
 import cv2
 from PIL import Image
 
-import csv
-
 from experiment_utils.argparse_utils import add_exp_arguments
 from experiment_utils import ExperimentBuilder
 
@@ -47,7 +45,7 @@ gif_duration = 200
 def get_parser():
     parser = argparse.ArgumentParser(description="Visualise success and failures. For now, only support EPIC",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    add_exp_arguments(parser, 
+    add_exp_arguments(parser,
             root_default=config.DEFAULT_EXPERIMENT_ROOT, dataset_default='hmdb', model_default='i3d_resnet50', name_default='crop224_8x8_largejit_plateau_1scrop5tcrop_split1',
             dataset_channel_choices=dataset_configs.available_channels, model_channel_choices=model_configs.available_channels, exp_channel_choices=exp_configs.available_channels)
     parser.add_argument("-l", "--load_epoch", type=int, default=None, help="Load from checkpoint. Set to -1 to load from the last checkpoint.")
@@ -137,7 +135,7 @@ def visualise_pred_info(image, video_label, video_id, predicted_score_for_ground
     image = cv2.putText(image, 'Ground truth: {:s} (prediction: {:.4f}%)'.format(class_keys[video_label], predicted_score_for_ground_truth_class * 100), (x0, y0+dy*line), font,
                        fontScale, default_colour, thickness, cv2.LINE_AA)
 
-    
+
     for i, (label, pred) in enumerate(zip(topk_label, topk_pred)):
         line += 1
         if i==0:
@@ -152,7 +150,7 @@ def visualise_pred_info(image, video_label, video_id, predicted_score_for_ground
             colour=default_colour
         image = cv2.putText(image, '{:s} {:.4f}%'.format(class_keys[label], pred * 100), (x0, y0+dy*line), font,
                            fontScale, colour, thickness, cv2.LINE_AA)
-        
+
     return image
 
 def main():
@@ -161,18 +159,17 @@ def main():
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
     dataset_cfg = cfg.dataset_cfg
-    model_cfg = cfg.model_cfg
 
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
 
     if args.version == 'last':
-        _expversion = -2    # choose the last version
+        _expversion = 'last'    # choose the last version
     else:
         _expversion = int(args.version)
 
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name,
             summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
             version=_expversion,
             telegram_key_ini = config.KEY_INI_PATH)
@@ -198,7 +195,7 @@ def main():
             split = 'val'
         else:   # multicrop
             split = 'multicropval'
-    
+
     predictions_file_path = os.path.join(exp.predictions_dir, f'epoch_{load_epoch:04d}_{split}_{args.mode}.pkl')
 
     with open(predictions_file_path, 'rb') as f:
@@ -215,7 +212,7 @@ def main():
 
     if args.input_size is None:
         args.input_size = cfg.crop_size
-        
+
     vis_width = args.input_size * vis_frame_x
     vis_height = vis_width // 4 * 3        # 4:3 aspect ratio
     assert vis_height >= args.input_size * vis_frame_y, 'Not enough pixels to put the frames'
@@ -280,7 +277,7 @@ def main():
             video_based_info_gif = cv2.resize(video_based_info[:,:vis_width//2,:], (vis_width_gif, vis_height_gif), interpolation=cv2.INTER_CUBIC)
             cv2.imwrite(os.path.join(output_dir_jpg_worst, 'worst_{:02d}-uid_{:05d}-multicrop.jpg'.format(worst_idx, video_id)), video_based_info)
             cv2.imwrite(os.path.join(output_dir_gif_worst, 'worst_{:02d}-uid_{:05d}-multicrop.jpg'.format(worst_idx, video_id)), video_based_info_gif)
-    
+
     ################################################################
     # evaluate each clip again to get the clip-based predictions
     print("Saving clip-based visualisations.")
@@ -315,7 +312,7 @@ def main():
         model = model.to(device=cur_device, non_blocking=True)
 
         weights_path = exp.get_checkpoint_path(load_epoch)
-        #logger.info("Loading weights: " + weights_path) 
+        #logger.info("Loading weights: " + weights_path)
         checkpoint = torch.load(weights_path, map_location = "cuda:{}".format(cur_device))
         model.load_state_dict(checkpoint["model_state"])
 

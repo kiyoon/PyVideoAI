@@ -8,26 +8,22 @@ import argparse
 import logging
 import numpy as np
 import os
-import sys
 
-import coloredlogs, verboselogs
-logger = verboselogs.VerboseLogger(__name__)
 
 
 import torch
-from torch import nn
 from torch.utils.tensorboard import SummaryWriter
-import torchvision
 from experiment_utils.argparse_utils import add_exp_arguments
 from experiment_utils.telegram_post import send_numpy_video_as_gif, send_numpy_photo
 from experiment_utils import ExperimentBuilder
 import dataset_configs, model_configs, exp_configs
-import time
-import copy
 import tqdm
 
 from pyvideoai import config
 from pyvideoai.utils import misc
+
+import coloredlogs, verboselogs
+logger = verboselogs.VerboseLogger(__name__)
 
 def video_ids_to_dataset_index(video_ids: list, dataset):
     return [index for index, video_id in enumerate(dataset._video_ids) if video_id in video_ids]
@@ -62,7 +58,7 @@ def main():
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = -1, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = 'new', telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
 
     exp.make_dirs_for_training()
 
@@ -74,12 +70,6 @@ def main():
             # Network
             # Construct the model
             model = cfg.load_model()
-            if hasattr(cfg, 'get_optim_policies'):
-                policies = cfg.get_optim_policies(model)
-            elif hasattr(cfg.model_cfg, 'get_optim_policies'):
-                policies = cfg.model_cfg.get_optim_policies(model)
-            else:
-                policies = model.parameters()
             misc.log_model_info(model)
 
             #criterion = cfg.dataset_cfg.task.get_criterion(cfg)

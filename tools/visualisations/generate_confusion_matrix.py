@@ -10,34 +10,32 @@ import numpy as np
 import os
 import sys
 
+import matplotlib
+import matplotlib.pyplot as plt
+import seaborn as sn
+import pandas as pd
+
+from sklearn.metrics import confusion_matrix
+from sklearn.preprocessing import normalize
+
+from experiment_utils.argparse_utils import add_exp_arguments
+from experiment_utils import ExperimentBuilder
+import dataset_configs
+import model_configs
+import exp_configs
+
+from torch.utils.tensorboard import SummaryWriter
+
+from pyvideoai.config import DEFAULT_EXPERIMENT_ROOT
+from pyvideoai.tasks import SingleLabelClassificationTask
+
 
 FORMAT = '[%(levelname)s: %(filename)s: %(lineno)4d]: %(message)s'
 logging.basicConfig(level=logging.INFO, format=FORMAT, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 
-from sklearn.metrics import confusion_matrix
-from sklearn.preprocessing import normalize
-import matplotlib
 matplotlib.use('pdf')
-import matplotlib.pyplot as plt
-import seaborn as sn
-import pandas as pd
-
-import torch
-from torch import nn
-from experiment_utils.csv_to_dict import csv_to_dict
-from experiment_utils.argparse_utils import add_exp_arguments
-from experiment_utils import ExperimentBuilder
-import dataset_configs
-import model_configs
-import exp_configs
-import time
-
-from torch.utils.tensorboard import SummaryWriter
-
-from pyvideoai.config import DEFAULT_EXPERIMENT_ROOT
-from pyvideoai.tasks import SingleLabelClassificationTask 
 
 
 def generate_remapped_labels(num_classes, labels_to_keep):
@@ -110,8 +108,8 @@ def generate_confusion_matrix(args, sort_method, dataset_cfg, output_dir, video_
     '''
 
     class_indices = range(dataset_cfg.num_classes)
-    class_keys = dataset_cfg.class_keys 
-    
+    class_keys = dataset_cfg.class_keys
+
     pred_labels = np.argmax(video_predictions, axis=1)
     cm = confusion_matrix(video_labels, pred_labels, labels = class_indices)
     class_frequency_in_train = dataset_cfg.count_train_class_frequency()
@@ -142,7 +140,7 @@ def generate_confusion_matrix(args, sort_method, dataset_cfg, output_dir, video_
         # remove the ones with too few val samples
         # whilst keeping the top 20 classes
         labels_to_keep = []
-        
+
         for i in sort_labels:
             if num_samples_per_target[i] >= 20:
                 labels_to_keep.append(i)
@@ -182,8 +180,8 @@ def generate_confusion_matrix(args, sort_method, dataset_cfg, output_dir, video_
         plt.ylabel('Target', fontsize=300)
 
         # This sets the yticks "upright" with 0, as opposed to sideways with 90.
-        plt.yticks(fontsize=50, rotation=0) 
-        plt.xticks(fontsize=50, rotation=90) 
+        plt.yticks(fontsize=50, rotation=0)
+        plt.xticks(fontsize=50, rotation=90)
 
         # here set the colorbar labelsize by 20
         cbar = ax.collections[0].colorbar
@@ -229,16 +227,16 @@ def main():
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
 
     if not isinstance(cfg.dataset_cfg.task, SingleLabelClassificationTask):
-        logger.error(f'Only supports single label classification but got {dataset_cfg.task} task. Exiting..')
+        logger.error(f'Only supports single label classification but got {cfg.dataset_cfg.task} task. Exiting..')
         return
 
     if args.version == 'auto':
-        _expversion = -2    # last version (do not create new)
+        _expversion = 'last'    # last version (do not create new)
     else:
         _expversion = int(args.version)
 
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion)
 
     if args.load_epoch == -1:
         exp.load_summary()

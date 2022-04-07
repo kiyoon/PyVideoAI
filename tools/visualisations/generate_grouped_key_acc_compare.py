@@ -121,12 +121,12 @@ def generate_confusion_matrix(args, sort_method, shrink=0):
     """save confusion matrix
     Params:
         shrink (int): set to 0 if you don't want to shrink the matrix. n for the first n, -n for the last n.
-    
+
     """
 
     dataset_cfg = dataset_configs.load_cfg(args.dataset)
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name)
     exp.load_summary()
 
     def load_predictions(load_epoch, mode, exp):
@@ -158,7 +158,7 @@ def generate_confusion_matrix(args, sort_method, shrink=0):
 
 
     ## 2
-    exp2 = ExperimentBuilder(args.experiment_root, args.dataset, args.model2, args.experiment_name2)
+    exp2 = ExperimentBuilder(args.experiment_root, args.dataset, args.model2, args.experiment_name2, args.subfolder_name2)
     exp2.load_summary()
 
     video_predictions2, video_labels2 = load_predictions(args.load_epoch2, args.mode2, exp2)
@@ -174,7 +174,7 @@ def generate_confusion_matrix(args, sort_method, shrink=0):
     '''
 
     class_indices = range(dataset_cfg.num_classes)
-    class_keys = dataset_cfg.class_keys 
+    class_keys = dataset_cfg.class_keys
 
     def grouped_accuracy(pred_labels, video_labels):
         num_total_val_samples = {}
@@ -219,12 +219,12 @@ def generate_confusion_matrix(args, sort_method, shrink=0):
     #ax.bar(index, diff_correct_pred.values(), width=1, color='b')
     #plt.ylabel('Class Group', fontsize=12)
     plt.xlabel('Correct sample count difference', fontsize=12)
-    plt.yticks(index,  np.array(list(num_correct_pred.keys()))[sort_index], fontsize=6, rotation=0) 
-    plt.xticks(fontsize=12, rotation=0) 
+    plt.yticks(index,  np.array(list(num_correct_pred.keys()))[sort_index], fontsize=6, rotation=0)
+    plt.xticks(fontsize=12, rotation=0)
 
     fig.set_tight_layout(True)
 
-    
+
     # Generate visualisation and summary files
 
     out_dir = os.path.join(args.output_dir, 'grouped_accuracy_comparison', args.dataset, '{:s}_{:s}_{:s}'.format(args.model, args.experiment_name, args.mode), '{:s}_{:s}_{:s}'.format(args.model2, args.experiment_name2, args.mode2), 'sort_%s' % sort_method)
@@ -239,12 +239,12 @@ def generate_confusion_matrix(args, sort_method, shrink=0):
     ax.barh(index, np.fromiter(diff_accuracy.values(), dtype=np.float)[sort_index], height=1, color='b')
     #plt.ylabel('Class Group', fontsize=12)
     plt.xlabel('Class accuracy difference', fontsize=12)
-    plt.yticks(index, np.array(list(num_correct_pred.keys()))[sort_index], fontsize=6, rotation=0) 
-    plt.xticks(fontsize=12, rotation=0) 
+    plt.yticks(index, np.array(list(num_correct_pred.keys()))[sort_index], fontsize=6, rotation=0)
+    plt.xticks(fontsize=12, rotation=0)
 
     fig.set_tight_layout(True)
 
-    
+
     # Generate visualisation and summary files
 
     plt.savefig('%s/normalised.pdf' % (out_dir))
@@ -256,7 +256,7 @@ def generate_confusion_matrix(args, sort_method, shrink=0):
         csvwriter.writerow(['class_key_first_word', 'accuracy1 (%)', 'accuracy2 (%)', 'accuracy_diff', 'num_correct_pred1', 'num_correct_pred2', 'num_correct_diff', 'num_samples_in_val'])
 
         for key in num_correct_pred.keys():
-            
+
             accuracy1 = float(num_correct_pred[key]) / num_total_val_samples[key] * 100
             accuracy2 = float(num_correct_pred2[key]) / num_total_val_samples2[key] * 100
             accuracy_diff = accuracy2-accuracy1
@@ -272,10 +272,11 @@ def main():
     parser.add_argument("-l", "--load_epoch", type=int, default=-2, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
     parser.add_argument("-L", "--load_epoch2", type=int, default=-2, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
     parser.add_argument("-m", "--mode", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
-    parser.add_argument("-2", "--mode2", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
+    parser.add_argument("-m2", "--mode2", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
 
-    parser.add_argument("-O", "--model2", type=str, default="i3d", choices=model_configs.available_models,  help="Mode used for run_val.py")
-    parser.add_argument("-X", "--experiment_name2", type=str, default="test",  help="")
+    parser.add_argument("-M2", "--model2", type=str, default="i3d", choices=model_configs.available_models,  help="Mode used for run_val.py")
+    parser.add_argument("-E2", "--experiment_name2", type=str, default="test",  help="")
+    parser.add_argument("-S2", "--subfolder_name2", type=str, default="test",  help="")
 
     parser.add_argument(
         '--sort_method', type=str, default='all', choices=['train_class_frequency', 'val_class_frequency', 'val_per_class_accuracy', 'all'], help='Sorting method')

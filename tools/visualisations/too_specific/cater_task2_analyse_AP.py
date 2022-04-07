@@ -20,9 +20,7 @@ from experiment_utils.csv_to_dict import csv_to_dict
 from experiment_utils import ExperimentBuilder
 import os
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib
 #matplotlib.use('TKAgg')
 
 from video_datasets_api.cater.class_keys import ACTIONS, OBJECTS, class_keys_task1
@@ -49,7 +47,7 @@ if __name__ == '__main__':
     else:
         raise ValueError(f"Not recognised dataset_cfg.task: {dataset_cfg.task}")
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes)
     exp.load_summary()
 
     if args.load_epoch == -1:
@@ -75,7 +73,7 @@ if __name__ == '__main__':
         lens = []
         sum_num_train_samples = []
         for contain_str in class_key_contains:
-            num_train_cond = per_class_AP['num_samples_in_train'] > num_train_samples_threshold 
+            num_train_cond = per_class_AP['num_samples_in_train'] > num_train_samples_threshold
             positive_AP_cond = per_class_AP['AP'] >= 0
             class_filter_cond = per_class_AP['class_key'].str.contains(contain_str)
 
@@ -130,4 +128,3 @@ if __name__ == '__main__':
     plot_grouped_analysis(ACTIONS, "ACTIONS", 500)
     plot_grouped_analysis(OBJECTS, "OBJECTS", 500)
     plot_grouped_analysis(OBJECT_AND_ACTIONS, "OBJECT_AND_ACTIONS", 500, 90, (7,7))
-

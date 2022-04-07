@@ -24,7 +24,6 @@ from __future__ import unicode_literals
 
 import argparse
 import pickle
-import csv
 import logging
 import numpy as np
 import os
@@ -36,20 +35,12 @@ logging.basicConfig(level=logging.INFO, format=FORMAT, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 
-from sklearn.metrics import confusion_matrix
-from sklearn.preprocessing import normalize
 import matplotlib
 matplotlib.use('pdf')
 import matplotlib.pyplot as plt
-import seaborn as sn
-import pandas as pd
 
-import torch
-from torch import nn
-from experiment_utils.csv_to_dict import csv_to_dict
 from experiment_utils.argparse_utils import add_exp_arguments
 from experiment_utils import ExperimentBuilder
-import time
 
 from pyvideoai import config, dataset_configs, model_configs
 
@@ -75,7 +66,7 @@ def main():
     perform_multicropval=True       # when loading, assume there was multicropval. Even if there was not, having more CSV field information doesn't hurt.
     assert dataset_cfg.task == 'multilabel_classification'
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_multilabel(multicropval = perform_multicropval)
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, telegram_key_ini = config.KEY_INI_PATH)
     exp.load_summary()
 
     if args.load_epoch == -1:

@@ -19,7 +19,6 @@ from torch.utils.data.distributed import DistributedSampler
 import time
 
 
-#import slowfast.utils.checkpoint as cu
 from .utils import distributed as du
 import json
 from .utils import misc
@@ -57,7 +56,6 @@ def train(args):
     rank, world_size, local_rank, local_world_size, local_seed = du.distributed_init(args.seed, local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='', level=logging.NOTSET, stream=open(os.devnull, 'w'))  # Will set the output stream later on with custom level.
-        #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     perform_multicropval = args.multi_crop_val_period > 0
 
@@ -69,24 +67,24 @@ def train(args):
     load_version = None
     if args.version == 'auto':
         if args.load_epoch == -1:
-            _expversion = -2    # choose the last version
+            _expversion = 'last'
         elif args.load_epoch is None:
-            _expversion = -1    # create new version
+            _expversion = 'new'
         else:
             # Load from intermediate (not last) checkpoint.
             # Copy stats from the last version (until the loading epoch) and continue with a new version.
             # Thus, load_version and _expversion is different
-            load_version = -2   # load from last version
-            _expversion = -1    # create new version
+            load_version = 'last'
+            _expversion = 'new'
 
     else:
         if args.load_epoch == -1 or args.load_epoch is None:
             _expversion = int(args.version)
         else:
             load_version = int(args.version)
-            _expversion = -1
+            _expversion = 'new'
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name,
             summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
             version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
     du.synchronize()  # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
@@ -96,7 +94,7 @@ def train(args):
     if load_version is None:
         load_exp = exp
     else:
-        load_exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name,
+        load_exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name,
                 summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes,
                 version = load_version, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
         du.synchronize()  # before creating any experiment directory, we need to make sure that all versions for all processes is equal.
@@ -114,7 +112,7 @@ def train(args):
 
 
     try:
-        # Writes the pids to file, to make killing processes easier.    
+        # Writes the pids to file, to make killing processes easier.
         if world_size > 1:
             du.write_pids_to_file(os.path.join(config.PYVIDEOAI_DIR, 'tools', "last_pids.txt"))
 
@@ -122,7 +120,7 @@ def train(args):
             logger.info(f"PyTorch=={torch.__version__}")
             logger.info(f"PyVideoAI=={__version__}")
             logger.info(f"Experiment folder: {exp.experiment_dir} on host {socket.gethostname()}")
-            
+
             # Enable Weights & Biases visualisation service.
             if args.wandb_project is not None:
                 with OutputLogger('wandb', input='stderr'):
@@ -132,13 +130,13 @@ def train(args):
 
                     if args.wandb_run_id is None:
                         wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project,
-                            name=f'{exp.dataset} {exp.model_name} {exp.experiment_name} v{exp.version}')
+                            name=exp.full_exp_name)
                     else:
                         wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project, id=args.wandb_run_id, resume='must')
                     logger.info((f'Weights & Biases initialised.\n'
                         f'View project at {wandb.run.get_project_url()}\n'
                         f'View run at {wandb.run.get_url()}'))
-                    
+
 
             # save configs
             exp.dump_args(args)
@@ -342,7 +340,7 @@ def train(args):
             #    for i in range(start_epoch*iters_per_epoch):
             #        scheduler.step()
                 if scheduler is not None:
-                    last_iter_num = start_epoch * iters_per_epoch 
+                    last_iter_num = start_epoch * iters_per_epoch
                     if hasattr(cfg, 'load_scheduler_state'):
                         load_scheduler_state = cfg.load_scheduler_state
                     else:
@@ -400,7 +398,7 @@ def train(args):
                 return tensorboard_writers[split]
 
 
-            max_val_metric = None 
+            max_val_metric = None
             max_val_epoch = -1
 
             # Load the latest best metric until `start_epoch`
@@ -408,7 +406,7 @@ def train(args):
                 all_stats_logical_idx = exp.summary['epoch'] < start_epoch
                 all_stats = exp.summary[all_stats_logical_idx]
                 for row in all_stats.itertuples():
-                    val_metric = getattr(row, best_metric_fieldname) 
+                    val_metric = getattr(row, best_metric_fieldname)
                     is_better = True if max_val_metric is None else best_metric.is_better(val_metric, max_val_metric)
                     if is_better:
                         max_val_metric = val_metric
@@ -467,12 +465,12 @@ def train(args):
                     # structurise
                     train_kit = {}
                     train_kit["model"] = model
-                    train_kit["optimiser"] = optimiser 
-                    train_kit["scheduler"] = scheduler 
-                    train_kit["criterions"] = criterions 
-                    train_kit["train_dataloader"] = train_dataloader 
-                    train_kit["data_unpack_funcs"] = data_unpack_funcs 
-                    train_kit["input_reshape_funcs"] = input_reshape_funcs 
+                    train_kit["optimiser"] = optimiser
+                    train_kit["scheduler"] = scheduler
+                    train_kit["criterions"] = criterions
+                    train_kit["train_dataloader"] = train_dataloader
+                    train_kit["data_unpack_funcs"] = data_unpack_funcs
+                    train_kit["input_reshape_funcs"] = input_reshape_funcs
                     # train_kit can be modified in the function
                     cfg.epoch_start_script(epoch, copy.deepcopy(exp), copy.deepcopy(args), rank, world_size, train_kit)
                     # unpack and apply the modifications
@@ -499,7 +497,7 @@ def train(args):
                     get_tensorboard_writer('train').add_scalar('Runtime_sec', elapsed_time, epoch)
                     get_tensorboard_writer('train').add_scalar('Sample_seen', sample_seen, epoch)
                     get_tensorboard_writer('train').add_scalar('Total_samples', total_samples, epoch)
-                    
+
                     for metric in metrics['train']:
                         tensorboard_tags = metric.tensorboard_tags()
                         if not isinstance(tensorboard_tags, (list, tuple)):
@@ -522,7 +520,7 @@ def train(args):
 
 
                     #}}}
-         
+
                 val_sample_seen, val_total_samples, val_loss, val_elapsed_time, _ = eval_epoch(model, criterions['val'], val_dataloader, data_unpack_funcs['val'], metrics['val'], best_metric, cfg.dataset_cfg.num_classes, 'val', rank, world_size, input_reshape_func=input_reshape_funcs['val'], scheduler=scheduler, refresh_period=args.refresh_period)
                 if rank == 0:#{{{
                     curr_stat.update({'val_runtime_sec': val_elapsed_time, 'val_loss': val_loss})
@@ -599,7 +597,7 @@ def train(args):
                         metric_info = {'metrics': metrics,
                                 'best_metric_fieldname': best_metric_fieldname, 'best_metric_is_better_func': best_metric.is_better}
                         early_stopping = cfg.early_stopping_condition(exp, metric_info)
-                    
+
                     send_telegram = early_stopping or (epoch % args.telegram_post_period == args.telegram_post_period -1)
                     if send_telegram:
                         try:
@@ -639,8 +637,8 @@ def train(args):
                     if is_better or args.save_mode in ["all", "last_and_peaks"]:
                         # all, last_and_peaks: save always
                         # higher: save model when higher
-                        model_path = exp.get_checkpoint_path(epoch) 
-                        io_error = True 
+                        model_path = exp.get_checkpoint_path(epoch)
+                        io_error = True
                         while io_error:
                             try:
                                 logger.info(f"Saving model to {model_path}")
@@ -661,13 +659,13 @@ def train(args):
                     if args.save_mode == "last_and_peaks":
                         if epoch > 0 and epoch - 1 != max_val_epoch:
                             # delete previous checkpoint if not best
-                            model_path = exp.get_checkpoint_path(epoch-1) 
+                            model_path = exp.get_checkpoint_path(epoch-1)
                             try:
                                 logger.info(f"Removing previous model: {model_path}")
                                 os.remove(model_path)
                             except IOError:
                                 logger.exception("IOError whilst removing the model. Skipping..")
-                    
+
                     # Whatever the save mode is, make the best model symlink (keep it up-to-date)
                     best_model_name = exp.checkpoints_format.format(max_val_epoch)
                     best_symlink_path = os.path.join(exp.weights_dir, 'best.pth')
@@ -675,7 +673,7 @@ def train(args):
                         os.remove(best_symlink_path)
                     os.symlink(best_model_name, best_symlink_path)  # first argument not full path -> make relative symlink
 
-                    
+
                 if hasattr(cfg, 'early_stopping_condition'):
                     if world_size > 1:
                         # Broadcast the early stopping flag to the entire process.
@@ -709,5 +707,3 @@ def train(args):
         # but at the same time it ensures that you receive a message when anything wrong happens.
 #        if rank == 0:
         exp.tg_send_text_with_expname('Exception occurred whilst training\n\n' + traceback.format_exc())
-
-

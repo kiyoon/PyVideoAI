@@ -113,13 +113,13 @@ def visualise_pred_info(image, video_label, video_id, topk_label, topk_pred, dat
     image = cv2.putText(image, 'UCF-101 Ground truth: {:s}'.format(data_class_keys[video_label]), (x0, y0+dy*line), font,
                        fontScale, default_colour, thickness, cv2.LINE_AA)
 
-    
+
     for i, (label, pred) in enumerate(zip(topk_label, topk_pred)):
         line += 1
         colour=default_colour
         image = cv2.putText(image, '{:s} {:.4f}%'.format(model_class_keys[label], pred * 100), (x0, y0+dy*line), font,
                            fontScale, colour, thickness, cv2.LINE_AA)
-        
+
     return image
 
 if __name__ == '__main__':
@@ -127,7 +127,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, telegram_key_ini = config.KEY_INI_PATH)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name, telegram_key_ini = config.KEY_INI_PATH)
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name)
 
     if args.load_epoch is None:
@@ -184,7 +184,7 @@ if __name__ == '__main__':
     os.makedirs(output_dir_gif_best, exist_ok=True)
     os.makedirs(output_dir_jpg_worst, exist_ok=True)
     os.makedirs(output_dir_gif_worst, exist_ok=True)
-    
+
     ################################################################
     print("Saving centre clip visualisations with multicrop prediction results.")
 
@@ -266,4 +266,3 @@ if __name__ == '__main__':
                     save_name = '{:s}_{:02d}-uid_{:05d}.gif'.format(mode, best_idx, uid)
                     gif_frames[0].save(os.path.join(output_dir_gif, mode, save_name),
                             save_all=True, append_images=gif_frames[1:], optimize=True, duration=gif_duration, loop=0)
-

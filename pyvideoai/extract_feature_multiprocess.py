@@ -36,7 +36,6 @@ def feature_extraction(args):
     rank, world_size, local_rank, local_world_size, local_seed = du.distributed_init(args.seed, local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='', level=logging.NOTSET, stream=open(os.devnull, 'w'))  # Will set the output stream later on with custom level.
-        #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
 
@@ -44,14 +43,14 @@ def feature_extraction(args):
 
     if args.version == 'auto':
         if args.load_epoch is not None:
-            _expversion = -2    # last version (do not create new)
+            _expversion = 'last'
         else:
-            _expversion = -1    # create new version
+            _expversion = 'new'
     else:
         _expversion = int(args.version)
 
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
 
 
 

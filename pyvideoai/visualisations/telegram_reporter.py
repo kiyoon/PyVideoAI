@@ -1,7 +1,6 @@
 
 from experiment_utils.experiment_builder import ExperimentBuilder
 from ..metrics import Metrics
-import socket
 import torch
 
 from .. import __version__
@@ -17,32 +16,31 @@ class DefaultTelegramReporter:
         self.ignore_figures = ignore_figures
 
     def report(self, metrics: Metrics, exp: ExperimentBuilder, figs) -> None:
-        #telegram_report_msgs = [f'Running on {socket.gethostname()}, Plots at epoch {exp.summary["epoch"].iloc[-1]:d}']
         telegram_report_msgs = []
         if self.include_wandb_url:
-            try: 
+            try:
                 import wandb
                 if wandb.run is not None:
                     telegram_report_msgs.append(f'W&B Project: {wandb.run.get_project_url()}')
                     telegram_report_msgs.append(f'W&B Run: {wandb.run.get_url()}')
                 else:
-                    logger.debug(f'`wandb.run` does not exist. Forgot to call `wandb.init()`? Skipping reporting W&B URLs to Telegram.')
+                    logger.debug('`wandb.run` does not exist. Forgot to call `wandb.init()`? Skipping reporting W&B URLs to Telegram.')
             except ImportError:
-                logger.debug(f'Package `wandb` not installed. Skipping reporting W&B URLs to Telegram.')
+                logger.debug('Package `wandb` not installed. Skipping reporting W&B URLs to Telegram.')
         if self.include_version:
             telegram_report_msgs.append(f'PyTorch={torch.__version__}, PyVideoAI={__version__}')
         if self.include_exp_rootdir:
             telegram_report_msgs.append(f'Experiment root: {exp.experiment_root}')
-        
+
         for split, metrics_in_split in metrics.items():
             for metric in metrics_in_split:
-                msg_line = metric.telegram_report_msg_line(exp) 
+                msg_line = metric.telegram_report_msg_line(exp)
                 if msg_line is not None:
                     telegram_report_msgs.append(msg_line)
 
         telegram_report_msgs.append(exp.time_summary_to_text())
 
-        final_message = '\n'.join(telegram_report_msgs) 
+        final_message = '\n'.join(telegram_report_msgs)
         exp.tg_send_text_with_expname(final_message)
 
         if not self.ignore_figures:

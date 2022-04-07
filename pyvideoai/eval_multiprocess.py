@@ -3,7 +3,6 @@ from torch import nn
 
 import pickle
 import os
-from shutil import copy2
 
 from experiment_utils import ExperimentBuilder
 import dataset_configs, model_configs, exp_configs
@@ -41,7 +40,6 @@ def evaluation(args):
     rank, world_size, local_rank, local_world_size, local_seed = du.distributed_init(args.seed, local_world_size)
     if rank == 0:
         coloredlogs.install(fmt='', level=logging.NOTSET, stream=open(os.devnull, 'w'))  # Will set the output stream later on with custom level.
-        #logging.getLogger('pyvideoai.slowfast.utils.checkpoint').setLevel(logging.WARNING)
 
     cfg = exp_configs.load_cfg(args.dataset, args.model, args.experiment_name, args.dataset_channel, args.model_channel, args.experiment_channel)
 
@@ -49,14 +47,14 @@ def evaluation(args):
 
     if args.version == 'auto':
         if args.load_epoch is not None:
-            _expversion = -2    # last version (do not create new)
+            _expversion = 'last'
         else:
-            _expversion = -1    # create new version
+            _expversion = 'new'
     else:
         _expversion = int(args.version)
 
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion, telegram_key_ini = config.KEY_INI_PATH, telegram_bot_idx = args.telegram_bot_idx)
 
 
 
@@ -69,7 +67,7 @@ def evaluation(args):
         du.suppress_print()
 
     try:
-        # Writes the pids to file, to make killing processes easier.    
+        # Writes the pids to file, to make killing processes easier.
         if world_size > 1:
             du.write_pids_to_file(os.path.join(config.PYVIDEOAI_DIR, 'tools', "last_pids.txt"))
 
@@ -153,7 +151,7 @@ def evaluation(args):
 
         if load_epoch is not None:
             weights_path = exp.get_checkpoint_path(load_epoch)
-            checkpoint = loader.model_load_weights_GPU(model, weights_path)
+            loader.model_load_weights_GPU(model, weights_path)
 
             logger.info("Training stats: %s", json.dumps(exp.get_epoch_stat(load_epoch), sort_keys=False, indent=4))
         else:
@@ -164,7 +162,7 @@ def evaluation(args):
         criterion = cfg.dataset_cfg.task.get_criterion(cfg, split)
 
         if rank == 0:
-            exp.tg_send_text_with_expname(f'Starting evaluation..')
+            exp.tg_send_text_with_expname('Starting evaluation..')
 
         _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], None, cfg.dataset_cfg.num_classes, split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
 
@@ -199,8 +197,8 @@ def evaluation(args):
                 else:
                     predictions_file_path = os.path.join(exp.predictions_dir, f'epoch_{load_epoch:04d}_{split}_{args.mode}.pkl')
                 os.makedirs(exp.predictions_dir, exist_ok=True)
-                
-                print("Saving predictions to: " + predictions_file_path) 
+
+                print("Saving predictions to: " + predictions_file_path)
                 with open(predictions_file_path, 'wb') as f:
                     pickle.dump({'video_predictions': video_predictions, 'video_labels': video_labels, 'video_ids': video_ids}, f, pickle.HIGHEST_PROTOCOL)
 
@@ -210,11 +208,10 @@ def evaluation(args):
         if rank == 0:
             exp.tg_send_text_with_expname('Finished evaluation\n\n' + eval_log_str)
 
-    except Exception as e:
+    except Exception:
         logger.exception("Exception occurred whilst evaluating")
         # Every process is going to send exception.
         # This can make your Telegram report filled with many duplicates,
         # but at the same time it ensures that you receive a message when anything wrong happens.
 #        if rank == 0:
         exp.tg_send_text_with_expname('Exception occurred whilst evaluating\n\n' + traceback.format_exc())
-

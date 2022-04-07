@@ -121,14 +121,14 @@ def generate_confusion_matrix(args, sort_method, shrink=0):
     """save confusion matrix
     Params:
         shrink (int): set to 0 if you don't want to shrink the matrix. n for the first n, -n for the last n.
-    
+
     """
     print(sort_method)
     print(shrink)
 
     dataset_cfg = dataset_configs.load_cfg(args.dataset)
 
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name)
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name)
     exp.load_summary()
 
     def load_predictions(load_epoch, mode, exp):
@@ -174,8 +174,8 @@ def generate_confusion_matrix(args, sort_method, shrink=0):
     '''
 
     class_indices = range(dataset_cfg.num_classes)
-    class_keys = dataset_cfg.class_keys 
-    
+    class_keys = dataset_cfg.class_keys
+
     pred_labels = np.argmax(video_predictions, axis=1)
     cm1 = confusion_matrix(video_labels, pred_labels, labels = class_indices)
 
@@ -215,7 +215,7 @@ def generate_confusion_matrix(args, sort_method, shrink=0):
 
         if args.dataset == 'something_v1':
             class_category_count = {}
-        
+
         for i in sort_labels:
             # for sthsth, only plot classes with two [something]
             #if class_keys[i].count('[]') >= 2:
@@ -298,10 +298,11 @@ def main():
     parser.add_argument("-l", "--load_epoch", type=int, default=-2, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
     parser.add_argument("-L", "--load_epoch2", type=int, default=-2, help="Load from checkpoint. Set to -1 to load from the last checkpoint, and to -2 to load best model in terms of val_acc.")
     parser.add_argument("-m", "--mode", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
-    parser.add_argument("-d", "--mode2", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
+    parser.add_argument("-m2", "--mode2", type=str, default="oneclip", choices=["oneclip", "multicrop"],  help="Mode used for run_val.py")
 
-    parser.add_argument("-O", "--model2", type=str, default="i3d", choices=model_configs.available_models,  help="The second model")
-    parser.add_argument("-X", "--experiment_name2", type=str, default="test",  help="The second experiment name")
+    parser.add_argument("-M2", "--model2", type=str, default="i3d", choices=model_configs.available_models,  help="The second model")
+    parser.add_argument("-E2", "--experiment_name2", type=str, default="test",  help="The second experiment name")
+    parser.add_argument("-S2", "--subfolder_name2", type=str, default=None,  help="The second experiment's subfolder name")
 
     parser.add_argument(
         '--sort_method', type=str, default='all', choices=['train_class_frequency', 'val_class_frequency', 'val_per_class_accuracy', 'all'], help='Sorting method')

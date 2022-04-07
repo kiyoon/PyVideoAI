@@ -3,29 +3,24 @@ import pickle
 import csv
 import numpy as np
 import os
-import sys
 
 
 from sklearn.metrics import accuracy_score
 from pyvideoai.metrics.AP import mAP_from_AP, compute_multiple_aps
 from pyvideoai.utils.multilabel_tools import count_num_samples_per_class, count_num_samples_per_class_from_csv, count_num_TP_per_class
 
-import torch
-from torch import nn
-from experiment_utils.csv_to_dict import csv_to_dict
 from experiment_utils.argparse_utils import add_exp_arguments
 from experiment_utils import ExperimentBuilder
 import dataset_configs
 import model_configs
 import exp_configs
-import time
 
 from pyvideoai.tasks import SingleLabelClassificationTask, MultiLabelClassificationTask
 
 from pyvideoai.config import DEFAULT_EXPERIMENT_ROOT
 
 
-import coloredlogs, logging, verboselogs
+import coloredlogs, verboselogs
 logger = verboselogs.VerboseLogger(__name__)    # add logger.success
 
 def evaluate_pred(args):
@@ -35,13 +30,13 @@ def evaluate_pred(args):
     metrics = cfg.dataset_cfg.task.get_metrics(cfg)
 
     if args.version == 'auto':
-        _expversion = -2    # last version (do not create new)
+        _expversion = 'last'
     else:
         _expversion = int(args.version)
 
     summary_fieldnames, summary_fieldtypes = ExperimentBuilder.return_fields_from_metrics(metrics)
-    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion)
-    
+    exp = ExperimentBuilder(args.experiment_root, args.dataset, args.model, args.experiment_name, args.subfolder_name, summary_fieldnames = summary_fieldnames, summary_fieldtypes = summary_fieldtypes, version = _expversion)
+
 
     if args.load_epoch == -1:
         exp.load_summary()
@@ -53,7 +48,7 @@ def evaluate_pred(args):
         best_metric_is_better = best_metric.is_better
         if isinstance(best_metric_fieldname, tuple):
             if len(best_metric_fieldname) > 1:
-                logger.warn(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
+                logger.warning(f'best_metric returns multiple metric values and PyVideoAI will use the first one: {best_metric_fieldname[0]}.')
             best_metric_fieldname = best_metric_fieldname[0]
 
         logger.info(f'Using the best metric from CSV field `{best_metric_fieldname}`')
@@ -86,7 +81,7 @@ def evaluate_pred(args):
         print()
     '''
 
-    
+
     if isinstance(cfg.dataset_cfg.task, MultiLabelClassificationTask):
         APs = compute_multiple_aps(video_labels, video_predictions)
         mAP = mAP_from_AP(APs)
@@ -95,7 +90,7 @@ def evaluate_pred(args):
         num_samples_in_val = count_num_samples_per_class(video_labels)
         TPs = count_num_TP_per_class(video_labels, video_predictions)
         # !! TODO: IMPORTANT: This may not work if using the partial dataset.
-        # CHANGE IT 
+        # CHANGE IT
         train_csv = os.path.join(cfg.dataset_cfg.frames_splits_dir, cfg.dataset_cfg.split_file_basename['train'])
         num_samples_in_train = count_num_samples_per_class_from_csv(train_csv, cfg.dataset_cfg.num_classes)
 
@@ -119,11 +114,11 @@ def evaluate_pred(args):
 
     if args.dataset == 'something_v1':
         # for Something-Something-V1, count the # of [something] in the class keys
-        class_keys = cfg.dataset_cfg.class_keys 
+        class_keys = cfg.dataset_cfg.class_keys
 
         video_labels_kept = []
         pred_labels_kept = []
-        
+
         for pred, label in zip(pred_labels, video_labels):
             if class_keys[label].count('[]') < 2:
                 video_labels_kept.append(label)
@@ -135,7 +130,7 @@ def evaluate_pred(args):
 
         video_labels_kept = []
         pred_labels_kept = []
-        
+
         for pred, label in zip(pred_labels, video_labels):
             if class_keys[label].count('[]') >= 2:
                 video_labels_kept.append(label)
