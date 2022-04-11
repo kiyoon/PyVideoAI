@@ -59,7 +59,7 @@ class ClipMultilabelAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         if self.split == 'train':
             prefix = ''
@@ -74,7 +74,7 @@ class ClipMultilabelAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         return self.logging_msg_iter()
 
@@ -82,14 +82,14 @@ class ClipMultilabelAccuracyMetric(Metric):
     def plot_legend_labels(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         if self.split == 'train':
-            return f'Training multilabel accuracy'
+            return 'Training multilabel accuracy'
         elif self.split == 'val':
-            return f'Validation multilabel accuracy'
+            return 'Validation multilabel accuracy'
         elif self.split == 'multicropval':
-            return f'Multicrop validation multilabel accuracy'
+            return 'Multicrop validation multilabel accuracy'
         else:
             return f'{self.split} multilabel accuracy'
 
@@ -97,12 +97,12 @@ class ClipMultilabelAccuracyMetric(Metric):
     def plot_file_basenames(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
         return 'multilabel_accuracy'
 
-    
+
     @staticmethod
     def is_better(value_1, value_2):
         """Metric comparison function
@@ -113,8 +113,7 @@ class ClipMultilabelAccuracyMetric(Metric):
         return:
             True if value_1 is better. False if value_2 is better or they're equal.
         """
-        return value_1 > value_2 
+        return value_1 > value_2
 
     def __len__(self):
         return len(self.accuracy_per_clip)
-

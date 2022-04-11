@@ -134,7 +134,7 @@ def data_to_gpu(*args):         #(inputs, uids, labels):
 
     cur_device = torch.cuda.current_device()
 
-    gpu_tensors = [] 
+    gpu_tensors = []
     for arg in args:
         assert arg.shape[0] == args[0].shape[0], f'Different number of batch size found when copying to GPU. {arg.shape[0]} and {args[0].shape[0]}'
         gpu_tensors.append(arg.to(cur_device, non_blocking=True))
@@ -171,7 +171,7 @@ def install_file_loggers(logs_dir, levels=[logging.NOTSET, logging.DEBUG, loggin
             str_level = logging.getLevelName(level)
         else:
             raise ValueError(f'Logging level has to be either integer or string, but got {type(level)}.)')
-        
+
         f_handler = logging.FileHandler(os.path.join(logs_dir, f'{file_prefix}_{str_level}.log'))
         f_handler.setLevel(level)
         f_handler.setFormatter(f_format)
@@ -208,4 +208,42 @@ def check_pillow_performance():
 
 
 
+def check_single_label_target_and_convert_to_numpy(target: torch.Tensor) -> np.array:
+    """
+    Check if a target vector is a correct single-label form.
+    It has to be either shape of (N, ) or (N, C) where N=batch size, C=num classes.
+    If it's 2-D, then only one has to be value of 1 and others have to be zero.
 
+    Raises:
+        ValueError
+
+    Returns:
+        None
+    """
+
+    target = target.cpu().numpy()
+
+    if target.ndim == 1:
+        is_float = target.dtype in (np.float16, np.float32, np.float64)
+        for target_value in target:
+            if target_value < 0:
+                raise ValueError(f'1D target value has to be zero or positive but got a negative number {target_value}.')
+            if is_float and not target_value.is_integer():
+                raise ValueError(f'target value has to be integer but got a non-integer number {target_value}.')
+    elif target.ndim == 2:
+        for sample_target in target:
+            num_ones = 0
+            for target_value in sample_target:
+                if target_value not in (1, 0):
+                    raise ValueError(f'2D target value has to be zero or one but got {target_value}.')
+
+                num_ones += target_value == 1
+
+            if num_ones != 1:
+                raise ValueError(f'{num_ones} "1" value in a single-label target vector. It should only exist one time.')
+
+    else:
+        raise ValueError(f'target has to be 1D or 2D tensor but got {target.ndim}-D.')
+
+
+    return target

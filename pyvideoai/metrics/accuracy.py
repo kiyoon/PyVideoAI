@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 from .metric import Metric, AverageMetric
 
 def accuracy(output:torch.Tensor, target:torch.Tensor, topk=(1,)):
@@ -7,14 +6,15 @@ def accuracy(output:torch.Tensor, target:torch.Tensor, topk=(1,)):
     Kiyoon edit: target possible to be either 1D tensor or one-hot/labelsmooth 2D tensor.
 
     """
-    maxk = max(topk)
     assert target.dim() in [1,2], f'target has to be 1D or 2D tensor but got {target.dim()}-D.'
+
+    maxk = max(topk)
     if target.dim() == 2:
         # Convert 2D one-hot label to 1D label
         target = target.argmax(dim=1)
     batch_size = target.size(0)
 
-    _, pred = output.topk(maxk, 1, True, True)
+    _, pred = output.topk(maxk, dim=1, largest=True, sorted=True)
     pred = pred.t()
     correct = pred.eq(target.view(1, -1).expand_as(pred))
 
@@ -53,21 +53,20 @@ class ClipAccuracyMetric(Metric):
             return      # sometimes, after filtering the samples, there can be no samples to do anything.
 
         maxk = max(self.topk)
-        assert labels.dim() in [1,2], f'target has to be 1D or 2D tensor but got {target.dim()}-D.'
+        assert labels.dim() in [1,2], f'labels has to be 1D or 2D tensor but got {labels.dim()}-D.'
         if labels.dim() == 2:
             # Convert 2D one-hot label to 1D label
             labels = labels.argmax(dim=1)
         batch_size = labels.size(0)
 
-        _, pred = clip_predictions.topk(maxk, 1, True, True)
+        _, pred = clip_predictions.topk(maxk, dim=1, largest=True, sorted=True)
         pred = pred.t()
         correct = pred.eq(labels.view(1, -1).expand_as(pred))
 
-        res = []
         for i, k in enumerate(self.topk):
             batch_correct = correct[:k].reshape(-1).int().sum(0)
             self.num_correct_preds[i] += batch_correct
-        self.num_seen_samples += batch_size 
+        self.num_seen_samples += batch_size
 
 
     def calculate_metrics(self):
@@ -90,7 +89,7 @@ class ClipAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         if self.split == 'train':
             prefix = ''
@@ -106,7 +105,7 @@ class ClipAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         return self.logging_msg_iter()
 
@@ -114,7 +113,7 @@ class ClipAccuracyMetric(Metric):
     def plot_legend_labels(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         if self.split == 'train':
             return tuple([f'Training accuracy top{topk}' if topk != 1 else 'Training accuracy' for topk in self.topk])
@@ -129,12 +128,12 @@ class ClipAccuracyMetric(Metric):
     def plot_file_basenames(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
         return tuple([f'accuracy_top{topk}' if topk != 1 else 'accuracy' for topk in self.topk])
 
-    
+
     @staticmethod
     def is_better(value_1, value_2):
         """Metric comparison function
@@ -145,7 +144,7 @@ class ClipAccuracyMetric(Metric):
         return:
             True if value_1 is better. False if value_2 is better or they're equal.
         """
-        return value_1 > value_2 
+        return value_1 > value_2
 
     def __len__(self):
         return self.num_seen_samples
@@ -204,12 +203,12 @@ class VideoAccuracyMetric(AverageMetric):
         messages = [f'{prefix}vid_acc: {value:.4f}' if topk == 1 else f'{prefix}vid_acc_top{topk}: {value:.4f}' for topk, value in zip(self.topk, self.last_calculated_metrics)]
         message = ' - '.join(messages)
         return message
-    
+
 
     def plot_legend_labels(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         if self.split == 'train':
             return tuple([f'Training video accuracy top{topk}' if topk != 1 else 'Training video accuracy' for topk in self.topk])
@@ -224,10 +223,10 @@ class VideoAccuracyMetric(AverageMetric):
     def plot_file_basenames(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
-        # Plot within the same graph 
+        # Plot within the same graph
         return tuple([f'accuracy_top{topk}' if topk != 1 else 'accuracy' for topk in self.topk])
 
 
@@ -241,5 +240,4 @@ class VideoAccuracyMetric(AverageMetric):
         return:
             True if value_1 is better. False if value_2 is better or they're equal.
         """
-        return value_1 > value_2 
-
+        return value_1 > value_2
