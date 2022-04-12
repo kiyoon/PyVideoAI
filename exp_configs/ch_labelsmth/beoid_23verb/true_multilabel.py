@@ -331,7 +331,7 @@ from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2l
 video_id_to_singlelabel = dataset_cfg.video_id_to_singleverb
 video_id_to_multilabel = dataset_cfg.video_id_to_multiverb
 
-best_metric = ClipAccuracyMetric()
+best_metric = ClipAccuracyMetric(video_id_to_label = video_id_to_singlelabel)
 metrics = {'train': [
     ClipAccuracyMetric(video_id_to_label = video_id_to_singlelabel),
     ClipMeanPerclassAccuracyMetric(video_id_to_label = video_id_to_singlelabel),

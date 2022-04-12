@@ -1,5 +1,9 @@
 import torch
 from .metric import Metric, AverageMetric
+from ..utils.misc import check_single_label_target_and_convert_to_numpy
+
+import logging
+logger = logging.getLogger(__name__)
 
 def accuracy(output:torch.Tensor, target:torch.Tensor, topk=(1,)):
     """Computes the precision@k for the specified values of k using PyTorch.
@@ -29,13 +33,17 @@ def accuracy(output:torch.Tensor, target:torch.Tensor, topk=(1,)):
 class ClipAccuracyMetric(Metric):
     """Don't need activation softmax for clip accuracy calculation.
     """
-    def __init__(self, topk=(1,), **kwargs):
+    def __init__(self, topk=(1,), verify_singlelabel: bool = False, **kwargs):
         if isinstance(topk, tuple):
             self.topk = topk
         elif isinstance(topk, int):
             self.topk = (topk,)
         else:
             raise ValueError(f'topk {topk} not recognised. It must be a tuple or integer.')
+
+        self.verify_singlelabel = verify_singlelabel
+        if self.verify_singlelabel:
+            logger.warning('verify_singlelabel is ON when calculating accuracy metric. Only for debugging use and should be turned off for speed. It will copy GPU tensors to CPU and check every elements to see if it is the right format.')
 
         super().__init__(**kwargs)
 
@@ -51,6 +59,9 @@ class ClipAccuracyMetric(Metric):
         video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
         if video_ids is None:
             return      # sometimes, after filtering the samples, there can be no samples to do anything.
+
+        if self.verify_singlelabel:
+            check_single_label_target_and_convert_to_numpy(labels)
 
         maxk = max(self.topk)
         assert labels.dim() in [1,2], f'labels has to be 1D or 2D tensor but got {labels.dim()}-D.'
