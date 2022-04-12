@@ -225,7 +225,7 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
         logger.info('Turning multilabels to mask out sign (-1) and including one single label')
         video_id_to_label = {}
         for video_id, multiverb in dataset_cfg.video_id_to_multiverb.items():
-            new_label = -multiverb
+            new_label = -multiverb.copy()
             new_label[dataset_cfg.video_id_to_singleverb[video_id]] = 1
             video_id_to_label[video_id] = new_label
 
@@ -233,7 +233,7 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
         logger.info('Including all multilabels and singlelabel')
         video_id_to_label = {}
         for video_id, multiverb in dataset_cfg.video_id_to_multiverb.items():
-            new_label = multiverb
+            new_label = multiverb.copy()
             new_label[dataset_cfg.video_id_to_singleverb[video_id]] = 1
             video_id_to_label[video_id] = new_label
     else:
@@ -333,8 +333,8 @@ video_id_to_multilabel = dataset_cfg.video_id_to_multiverb
 
 best_metric = ClipAccuracyMetric()
 metrics = {'train': [
-    ClipAccuracyMetric(),
-    ClipMeanPerclassAccuracyMetric(),
+    ClipAccuracyMetric(video_id_to_label = video_id_to_singlelabel),
+    ClipMeanPerclassAccuracyMetric(video_id_to_label = video_id_to_singlelabel),
             ],
         'val': [best_metric,
             ClipAccuracyMetric(topk=(5,), video_id_to_label = video_id_to_singlelabel),
@@ -344,9 +344,11 @@ metrics = {'train': [
             ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, split='multilabelval'),
             Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, split='multilabelval'),
             ],
-        'traindata_testmode': [ClipAccuracyMetric()],
-        'trainpartialdata_testmode': [ClipAccuracyMetric()],
-        'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
+        'traindata_testmode': [ClipAccuracyMetric(video_id_to_label = video_id_to_singlelabel)],
+        'trainpartialdata_testmode': [ClipAccuracyMetric(video_id_to_label = video_id_to_singlelabel)],
+        'multicropval': [ClipAccuracyMetric(video_id_to_label = video_id_to_singlelabel),
+            VideoAccuracyMetric(topk=(1,5), activation=last_activation, video_id_to_label = video_id_to_singlelabel)
+            ],
         }
 
 """
