@@ -47,16 +47,16 @@ def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8, pretraine
 
         del checkpoint, new_state_dict
 
-    model.new_fc = torch.nn.Linear(2048, num_classes)
-    return model
-#    class VerbModel(Module):
-#        def __init__(self, model):
-#            super().__init__()
-#            self.model = model
-#        def forward(self, x):
-#            return self.model(x)[:num_classes]
-#
-#    return VerbModel(model)
+#    model.new_fc = torch.nn.Linear(2048, num_classes)
+#    return model
+    class VerbModel(Module):
+        def __init__(self, model):
+            super().__init__()
+            self.model = model
+        def forward(self, x):
+            return self.model(x)[:num_classes]
+
+    return VerbModel(model)
 
 
 def NCTHW_to_model_input_shape(inputs):
@@ -80,7 +80,7 @@ def feature_extract_model(model, featuremodel_name):
         class FeatureExtractModel(Module):
             def __init__(self, model):
                 super().__init__()
-                self.model = model
+                self.model = model.model
                 if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
                     self.is_ddp = True
                 else:

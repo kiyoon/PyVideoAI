@@ -101,23 +101,7 @@ def feature_extract_model(model, featuremodel_name):
         return FeatureExtractModel(model)
 
     elif featuremodel_name == 'logits':
-        class LogitsExtractModel(Module):
-            def __init__(self, model):
-                super().__init__()
-                self.model = model
-                if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
-                    self.is_ddp = True
-                else:
-                    self.is_ddp = False
-
-            def forward(self, x):
-                if self.is_ddp:
-                    logits = self.model.module.logits(x)
-                else:
-                    logits = self.model.logits(x)
-                return logits
-
-        return LogitsExtractModel(model)
+        return model
     else:
         raise ValueError(f'Unknown feature model: {featuremodel_name}')
 
