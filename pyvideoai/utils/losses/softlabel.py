@@ -19,3 +19,39 @@ class SoftlabelRegressionLoss(nn.Module):
         loss = (targets * torch.log(preds+self.eps)) + ((1 - targets) * torch.log(1-preds+self.eps))
 
         return -loss.sum(dim=-1).mean(dim=0)
+
+
+class MaskedSoftlabelRegressionLoss(nn.Module):
+    """Similar to negative log likelihood,
+    but we use sigmoid instead of softmax and we have soft labels
+    When the target is negative value, that will be masked out before computing the loss.
+
+    """
+    def __init__(self, eps=1e-6):
+        super().__init__()
+        self.eps = eps
+
+
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor):
+        """
+        Inputs:
+            inputs: logits of shape (N, C).
+            targets: targets of shape (N, C). Values lower than zero are considered as mask.
+
+        Outputs:
+            Loss: a scalar tensor, normalised by N.
+        """
+        assert targets.shape == inputs.shape
+
+        preds = torch.sigmoid(inputs)
+        losses = []
+        for pred, target_prob in zip(preds, targets):
+            mask = target_prob >= 0. - self.eps
+            pred = pred[mask]
+            target_prob = target_prob[mask]
+
+            loss = (target_prob * torch.log(pred+self.eps)) + ((1 - target_prob) * torch.log(1-pred+self.eps))
+            loss = -loss.sum()
+            losses.append(loss)
+
+        return sum(losses) / len(losses)

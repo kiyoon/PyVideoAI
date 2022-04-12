@@ -4,7 +4,7 @@ import torch
 from pyvideoai.dataloaders import GulpSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
-from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
+from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss, MaskedSoftlabelRegressionLoss
 from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss, MinRegressionCombinationLoss
 from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
 from pyvideoai.utils.losses.proselflc import MaskedProSelfLC
@@ -57,8 +57,9 @@ pretrained = 'imagenet'      # epic100 / imagenet / random
 
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
-loss_type = 'crossentropy'   # soft_regression, crossentropy, labelsmooth, proselflc
+loss_type = 'crossentropy'   # hard_regression, crossentropy, labelsmooth, proselflc
                              # mince / maskce / minregcomb / maskproselflc
+                             # mask_hard_regression
 
 labelsmooth_factor = 0.1
 def proselflc_total_time():
@@ -84,7 +85,7 @@ def get_criterion(split):
             return ProSelfLC(proselflc_total_time(), proselflc_exp_base)
         else:
             return torch.nn.CrossEntropyLoss()
-    elif loss_type == 'soft_regression':
+    elif loss_type == 'hard_regression':
         return SoftlabelRegressionLoss()
     elif loss_type == 'mince':
         return MinCEMultilabelLoss()
@@ -94,6 +95,8 @@ def get_criterion(split):
         return MinRegressionCombinationLoss()
     elif loss_type == 'maskproselflc':
         return MaskedProSelfLC(proselflc_total_time(), proselflc_exp_base)
+    elif loss_type == 'mask_hard_regression':
+        return MaskedSoftlabelRegressionLoss()
     else:
         return torch.nn.CrossEntropyLoss()
 
@@ -221,7 +224,7 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
         _test_scale = val_scale
         _test_num_spatial_crops = val_num_spatial_crops
 
-    if loss_type in ['maskce', 'maskproselflc']:
+    if loss_type in ['maskce', 'maskproselflc', 'mask_hard_regression']:
         logger.info('Turning multilabels to mask out sign (-1) and including one single label')
         video_id_to_label = {}
         for video_id, multiverb in dataset_cfg.video_id_to_multiverb.items():
@@ -229,7 +232,7 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
             new_label[dataset_cfg.video_id_to_singleverb[video_id]] = 1
             video_id_to_label[video_id] = new_label
 
-    elif loss_type in ['mince', 'minregcomb', 'soft_regression']:
+    elif loss_type in ['mince', 'minregcomb', 'hard_regression']:
         logger.info('Including all multilabels and singlelabel')
         video_id_to_label = {}
         for video_id, multiverb in dataset_cfg.video_id_to_multiverb.items():
