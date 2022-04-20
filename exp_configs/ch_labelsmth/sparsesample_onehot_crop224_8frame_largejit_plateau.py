@@ -5,6 +5,8 @@ from pyvideoai.dataloaders import FramesSparsesampleDataset, VideoSparsesampleDa
 from pyvideoai.utils.losses.proselflc import ProSelfLC
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
+from pyvideoai.utils.losses.single_positive_multilabel import WeakAssumeNegativeLoss, BinaryLabelSmoothLoss, BinaryNegativeLabelSmoothLoss, EntropyMaximiseLoss
+from kornia.losses import FocalLoss, BinaryFocalLossWithLogits
 from functools import lru_cache
 import logging
 logger = logging.getLogger(__name__)
@@ -61,7 +63,9 @@ pretrained = 'epic100'      # epic100 / imagenet / random
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
 train_label_type = 'epic100_original'    # epic100_original, 5neighbours
-loss_type = 'crossentropy'   # soft_regression, crossentropy, labelsmooth, proselflc
+loss_type = 'crossentropy'  # crossentropy, labelsmooth, proselflc, focal
+                            # assume_negative (soft_regression), weak_assume_negative, binary_labelsmooth, binary_negative_labelsmooth, binary_focal
+                            # entropy_maximise
 
 labelsmooth_factor = 0.1
 #proselflc_total_time = 2639 * 60 # 60 epochs
@@ -73,7 +77,7 @@ def proselflc_total_time():
     num_iters_per_epoch = train_samples // N
     total_time = num_iters_per_epoch * num_epochs
     logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * {num_epochs} = {total_time}')
-    return total_time 
+    return total_time
 
 
 proselflc_exp_base = 1.
@@ -81,7 +85,9 @@ proselflc_exp_base = 1.
 
 #### OPTIONAL
 def get_criterion(split):
-    if loss_type == 'labelsmooth':
+    if loss_type == 'crossentropy':
+        return torch.nn.CrossEntropyLoss()
+    elif loss_type == 'labelsmooth':
         return torch.nn.CrossEntropyLoss(label_smoothing=labelsmooth_factor)
         #return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
     elif loss_type == 'proselflc':
@@ -89,10 +95,22 @@ def get_criterion(split):
             return ProSelfLC(proselflc_total_time(), proselflc_exp_base)
         else:
             return torch.nn.CrossEntropyLoss()
-    elif loss_type == 'soft_regression':
+    elif loss_type == 'focal':
+        return FocalLoss(alpha=0.25, reduction='mean')
+    elif loss_type in ['soft_regression', 'assume_negative']:
         return SoftlabelRegressionLoss()
+    elif loss_type == 'weak_assume_negative':
+        return WeakAssumeNegativeLoss(num_classes = dataset_cfg.num_classes)
+    elif loss_type == 'binary_labelsmooth':
+        return BinaryLabelSmoothLoss()
+    elif loss_type == 'binary_negative_labelsmooth':
+        return BinaryNegativeLabelSmoothLoss()
+    elif loss_type == 'binary_focal':
+        return BinaryFocalLossWithLogits(alpha = 0.25, reduction='mean')
+    elif loss_type == 'entropy_maximise':
+        return EntropyMaximiseLoss()
     else:
-        return torch.nn.CrossEntropyLoss()
+        return ValueError(f'Wrong loss type: {loss_type}')
 
 from torch.utils.data.distributed import DistributedSampler
 import pyvideoai.utils.distributed as du
@@ -165,7 +183,7 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     else:
         after_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimiser, 'min', factor=0.1, patience=10, verbose=True)     # NOTE: This special scheduler will ignore iters_per_epoch and last_epoch.
 
-        return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler) 
+        return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler)
 
 def load_model():
     if pretrained is not None:
@@ -272,8 +290,8 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
         flow_neighbours = 5
         flow_folder_x = 'u'
         flow_folder_y = 'v'
-        return FramesSparsesampleDataset(csv_path, mode, 
-                input_frame_length, 
+        return FramesSparsesampleDataset(csv_path, mode,
+                input_frame_length,
                 train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
                 train_horizontal_flip=dataset_cfg.horizontal_flip,
                 test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,

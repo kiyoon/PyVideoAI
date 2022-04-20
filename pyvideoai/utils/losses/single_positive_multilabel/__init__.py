@@ -1,0 +1,2 @@
+from .binary_losses import AssumeNegativeLoss, WeakAssumeNegativeLoss, BinaryLabelSmoothLoss, BinaryNegativeLabelSmoothLoss
+from .entropy_maximisation import EntropyMaximiseLoss

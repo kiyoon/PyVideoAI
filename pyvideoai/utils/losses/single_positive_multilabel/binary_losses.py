@@ -1,5 +1,4 @@
 import torch
-from kornia.losses import BinaryFocalLossWithLogits
 from ..softlabel import SoftlabelRegressionLoss
 from ..loss import k_one_hot
 
@@ -13,7 +12,7 @@ class WeakAssumeNegativeLoss(AssumeNegativeLoss):
     """
     A.K.A Down Weighting
     """
-    def __init__(self, *args, num_classes: int, **kwargs) -> None:
+    def __init__(self, num_classes: int, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.gamma = 1 / (num_classes - 1)
@@ -32,7 +31,7 @@ class WeakAssumeNegativeLoss(AssumeNegativeLoss):
 
 
 class BinaryLabelSmoothLoss(AssumeNegativeLoss):
-    def __init__(self, *args, smoothing: float = 0.1, **kwargs) -> None:
+    def __init__(self, smoothing: float = 0.1, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         assert 0 <= smoothing < 1

@@ -1,0 +1,23 @@
+import torch
+from ..softlabel import SoftlabelRegressionLoss
+from ..loss import k_one_hot
+
+
+
+class EntropyMaximiseLoss(SoftlabelRegressionLoss):
+    def __init__(self, alpha: float = 0.2, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+
+        assert 0 <= alpha <= 1
+        self.alpha = alpha
+
+
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor):
+        if targets.dim() != inputs.dim():
+            targets = k_one_hot(targets, inputs.size(-1))
+
+        preds = torch.sigmoid(inputs)
+
+        entropy = -(preds * torch.log(preds + self.eps) + (1-preds) * torch.log(1-preds + self.eps))
+        loss = (targets * torch.log(preds + self.eps)) + ((1 - targets) * self.alpha * entropy)
+        return -loss.sum(dim=-1).mean(dim=0)
