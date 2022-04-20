@@ -5,8 +5,8 @@ from pyvideoai.dataloaders import FramesSparsesampleDataset, VideoSparsesampleDa
 from pyvideoai.utils.losses.proselflc import ProSelfLC
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
-from pyvideoai.utils.losses.single_positive_multilabel import WeakAssumeNegativeLoss, BinaryLabelSmoothLoss, BinaryNegativeLabelSmoothLoss, EntropyMaximiseLoss
-from kornia.losses import FocalLoss, BinaryFocalLossWithLogits
+from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits, WeakAssumeNegativeLossWithLogits, BinaryLabelSmoothLossWithLogits, BinaryNegativeLabelSmoothLossWithLogits, EntropyMaximiseLossWithLogits, BinaryFocalLossWithLogits
+from kornia.losses import FocalLoss
 from functools import lru_cache
 import logging
 logger = logging.getLogger(__name__)
@@ -97,18 +97,20 @@ def get_criterion(split):
             return torch.nn.CrossEntropyLoss()
     elif loss_type == 'focal':
         return FocalLoss(alpha=0.25, reduction='mean')
-    elif loss_type in ['soft_regression', 'assume_negative']:
+    elif loss_type == 'soft_regression':
         return SoftlabelRegressionLoss()
+    elif loss_type == 'assume_negative':
+        return AssumeNegativeLossWithLogits()
     elif loss_type == 'weak_assume_negative':
-        return WeakAssumeNegativeLoss(num_classes = dataset_cfg.num_classes)
+        return WeakAssumeNegativeLossWithLogits(num_classes = dataset_cfg.num_classes)
     elif loss_type == 'binary_labelsmooth':
-        return BinaryLabelSmoothLoss()
+        return BinaryLabelSmoothLossWithLogits(smoothing=labelsmooth_factor)
     elif loss_type == 'binary_negative_labelsmooth':
-        return BinaryNegativeLabelSmoothLoss()
+        return BinaryNegativeLabelSmoothLossWithLogits(smoothing=labelsmooth_factor)
     elif loss_type == 'binary_focal':
-        return BinaryFocalLossWithLogits(alpha = 0.25, reduction='mean')
+        return BinaryFocalLossWithLogits()
     elif loss_type == 'entropy_maximise':
-        return EntropyMaximiseLoss()
+        return EntropyMaximiseLossWithLogits()
     else:
         return ValueError(f'Wrong loss type: {loss_type}')
 
@@ -120,7 +122,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
         # model state dict doesn't save requires_grad parameters.
         # When resuming, it has to be re-done. That's why we just call it every epoch.
         logger.info(f'Classifier re-training with balanced samples (cRT) for the last {train_classifier_balanced_retraining_epochs} epochs.')
-        logger.info(f'cRT: freezing base model')
+        logger.info('cRT: freezing base model')
         train_kit['model'] = model_cfg.freeze_base_model(train_kit['model'])
 
         logger.info(f'cRT: switching to a balanced dataloader')

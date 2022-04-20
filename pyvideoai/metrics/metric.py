@@ -57,7 +57,7 @@ class Metric(ABC):
             labels = torch.from_numpy(labels)
 
         return video_ids, clip_predictions, labels
-    
+
     def _check_num_classes(self, clip_predictions, labels):
         """Check if the shape of the predictions and labels is consistent.
         """
@@ -87,7 +87,7 @@ class Metric(ABC):
         if video_ids is None:
             return          # sometimes, after filtering out samples of interest, there will be no samples to do anything.
         ```
-        """ 
+        """
         video_ids, clip_predictions, labels = self._check_data_shape(video_ids, clip_predictions, labels)
 
         with torch.no_grad():
@@ -136,7 +136,7 @@ class Metric(ABC):
     def tensorboard_tags(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         return 'Metric'
 
@@ -145,7 +145,7 @@ class Metric(ABC):
     def get_csv_fieldnames(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         return f'{self.split}_metric'     # like val_acc
 
@@ -155,7 +155,7 @@ class Metric(ABC):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         return f'{self.split}_metric: {self.last_calculated_metrics:.5f}'
 
@@ -165,22 +165,22 @@ class Metric(ABC):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         return f'{self.split}_metric: {self.last_calculated_metrics:.5f}'
-    
+
     @abstractmethod
     def plot_legend_labels(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         if self.split == 'train':
-            return 'Train metric' 
+            return 'Train metric'
         elif self.split == 'val':
-            return 'Validation metric' 
+            return 'Validation metric'
         elif self.split == 'multicropval':
-            return 'Multicrop validation metric' 
+            return 'Multicrop validation metric'
         else:
             raise ValueError(f'Unknown split: {self.split}')
 
@@ -189,7 +189,7 @@ class Metric(ABC):
     def plot_file_basenames(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         return 'metric'     # output plot file names will be metric.png and metric.pdf
 
@@ -215,10 +215,10 @@ class Metric(ABC):
                 last_stat = exp.get_last_model_stat(fieldname)
                 messages.append(f'Highest (@ epoch {best_stat["epoch"]}) / Last (@ {last_stat["epoch"]}) {fieldname}: {best_stat[fieldname]:.4f} / {last_stat[fieldname]:.4f}')
 
-        
+
         return '\n'.join(messages) if len(messages) > 0 else None
 
-    
+
     @staticmethod
     def is_better(value_1, value_2):
         """Metric comparison function
@@ -229,7 +229,7 @@ class Metric(ABC):
         return:
             True if value_1 is better. False if value_2 is better or they're equal.
         """
-        return value_1 > value_2 
+        return value_1 > value_2
 
 
     @abstractmethod
@@ -245,8 +245,11 @@ class ClipMetric(Metric):
     """
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
         """We will ignore the video_ids and store all the clip predictions independently without aggregating (like averaging).
-        """ 
+        """
         video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
+        if video_ids is None:
+            return
+
         with torch.no_grad():
             if 'video_ids' in self.data.keys():
                 self.data['video_ids'] = torch.cat((self.data['video_ids'], video_ids), dim=0)
@@ -263,12 +266,12 @@ class ClipMetric(Metric):
         return self.data['clip_predictions'].cpu(), self.data['labels'].cpu(), self.data['video_ids'].cpu()
 
     def get_predictions_numpy(self):
-        """Return the video-based predictions in numpy array 
+        """Return the video-based predictions in numpy array
         """
         return map(np.array, self.get_predictions_torch())
 
     def __len__(self):
-        return len(self.data['clip_predictions']) 
+        return len(self.data['clip_predictions'])
 
 
 class AverageMetric(Metric):
@@ -276,8 +279,11 @@ class AverageMetric(Metric):
     """
     def add_clip_predictions(self, video_ids, clip_predictions, labels):
         """We will average the clip predictions with the same video_ids.
-        """ 
+        """
         video_ids, clip_predictions, labels = super().add_clip_predictions(video_ids, clip_predictions, labels)
+        if video_ids is None:
+            return
+
         with torch.no_grad():
             for video_id, clip_prediction, label in zip(video_ids, clip_predictions, labels):
                 video_id = round(video_id.item())
@@ -304,12 +310,12 @@ class AverageMetric(Metric):
             for b, video_id in enumerate(self.data.keys()):
                 video_predictions[b] = self.data[video_id]['clip_prediction_accum'] / self.data[video_id]['num_clips']
                 video_labels[b] = self.data[video_id]['label']
-                video_ids[b] = video_id 
+                video_ids[b] = video_id
 
         return video_predictions, video_labels, video_ids
 
     def get_predictions_numpy(self):
-        """Return the video-based predictions in numpy array 
+        """Return the video-based predictions in numpy array
         """
         return map(np.array, self.get_predictions_torch())
 
@@ -351,7 +357,7 @@ class ClipPredictionsGatherer(ClipMetric):
 
     def telegram_report_msg_line(self, exp):
         return None
-    
+
     def is_better(value_1, value_2):
         return None
 
@@ -376,7 +382,7 @@ class VideoPredictionsGatherer(AverageMetric):
 
     def logging_msg_epoch(self):
         return None
-    
+
     def plot_legend_labels(self):
         return None
 
@@ -444,7 +450,7 @@ class Metrics(dict):
                 for metric in metrics_in_split:
                     is_best_metric = id(metric) == id(best_metric)
                     self.add_metric(split, metric, is_best_metric)
-        
+
         assert self.best_metric_split is not None and self.best_metric_index is not None, 'None of the items in metrics_dict is the best metric that determines the best model. Put best_metric directly in the metrics_dict.'
 
 

@@ -1,10 +1,11 @@
 import torch
-from ..softlabel import SoftlabelRegressionLoss
+import torch.nn.functional as F
+from .binary_losses import AssumeNegativeLossWithLogits
 from ..loss import k_one_hot
 
 
 
-class EntropyMaximiseLoss(SoftlabelRegressionLoss):
+class EntropyMaximiseLossWithLogits(AssumeNegativeLossWithLogits):
     def __init__(self, alpha: float = 0.2, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
@@ -17,7 +18,10 @@ class EntropyMaximiseLoss(SoftlabelRegressionLoss):
             targets = k_one_hot(targets, inputs.size(-1))
 
         preds = torch.sigmoid(inputs)
+        logsig_pos = F.logsigmoid(inputs)
+        logsig_neg = F.logsigmoid(-inputs)
 
-        entropy = -(preds * torch.log(preds + self.eps) + (1-preds) * torch.log(1-preds + self.eps))
-        loss = (targets * torch.log(preds + self.eps)) + ((1 - targets) * self.alpha * entropy)
+        #entropy = -(preds * torch.log(preds + self.eps) + (1-preds) * torch.log(1-preds + self.eps))
+        entropy = -(preds * logsig_pos + (1 - preds) * logsig_neg)
+        loss = (targets * logsig_pos) + ((1 - targets) * self.alpha * entropy)
         return -loss.sum(dim=-1).mean(dim=0)
