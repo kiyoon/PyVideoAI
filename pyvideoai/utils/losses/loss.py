@@ -54,8 +54,6 @@ Edits:
         a. Make sure to provide labels that sum to 1.
 """
 import torch
-import numpy as np
-import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from torch.nn import CrossEntropyLoss
@@ -69,7 +67,7 @@ class OneHotCrossEntropyLoss(_WeightedLoss):
 
     def reduce_loss(self, loss):
         return loss.mean() if self.reduction == 'mean' else loss.sum() \
-        if self.reduction == 'sum' else loss
+            if self.reduction == 'sum' else loss
 
     def forward(self, inputs, targets):
         log_preds = F.log_softmax(inputs, -1)
@@ -79,12 +77,12 @@ class OneHotCrossEntropyLoss(_WeightedLoss):
 
         return self.reduce_loss(-(targets * log_preds).sum(dim=-1))
 
-def k_one_hot(targets:torch.Tensor, n_classes:int, smoothing=0.0):
+def k_one_hot(targets:torch.Tensor, n_classes:int, smoothing=0.0, smooth_only_negatives = False):
     with torch.no_grad():
         targets = torch.empty(size=(targets.size(0), n_classes),
                               device=targets.device) \
-                              .fill_(smoothing /n_classes) \
-                              .scatter_(1, targets.data.unsqueeze(1), 1.-smoothing + smoothing /n_classes)
+                              .fill_(smoothing / n_classes) \
+                              .scatter_(1, targets.data.unsqueeze(1), 1. if smooth_only_negatives else 1. - smoothing + smoothing / n_classes)
     return targets
 
 class LabelSmoothCrossEntropyLoss(OneHotCrossEntropyLoss):
@@ -104,11 +102,11 @@ class LabelSmoothCrossEntropyLoss(OneHotCrossEntropyLoss):
 if __name__ == '__main__':
     crit = CrossEntropyLoss()
     predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
-				 [0, 0.9, 0.2, 0.2, 1], 
+				 [0, 0.9, 0.2, 0.2, 1],
 				 [1, 0.2, 0.7, 0.9, 1]])
     label = torch.LongTensor([2, 1, 0])
     onehot_label = torch.FloatTensor([[0., 0., 1., 0., 0.],
-				 [0., 1., 0., 0., 0.], 
+				 [0., 1., 0., 0., 0.],
 				 [1., 0, 0, 0, 0]])
 
     # Official PyTorch CrossEntropyLoss test with 1D tensor labels.
@@ -134,4 +132,3 @@ if __name__ == '__main__':
     v = smooth_crit(Variable(predict),
 	     Variable(label))
     print(f'LabelSmoothCrossEntropyLoss (1D labels but smooth internally): {v}')
-
