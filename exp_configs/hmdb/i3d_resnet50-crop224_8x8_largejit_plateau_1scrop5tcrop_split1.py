@@ -10,7 +10,7 @@ def _exec_relative_(relative_python_code_path):     # Use this to import base co
     exec(relative_python_code_path)
 ```
 
-If you want to "actually" run this config file for debug purposes, you can use `cfg = exp_configs.load_cfg('hmdb', 'i3d_resnet50')`.
+If you want to "actually" run this config file for debug purposes, you can use `cfg = exp_configs.load_cfg('hmdb', 'i3d_resnet50', 'crop224_8frame_largejit_plateau_5scrop_split1')`.
 """
 
 
