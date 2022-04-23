@@ -1,16 +1,11 @@
-#!/usr/bin/env python3
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
-
 import numpy as np
 import os
-import random
 import torch
 import torch.utils.data
 
 #import slowfast.utils.logging as logging
 import logging
 
-from . import transform as transform
 from . import utils as utils
 
 logger = logging.getLogger(__name__)
@@ -45,10 +40,10 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
     and four corners.
     """
 
-    def __init__(self, csv_file, mode, num_frames, 
+    def __init__(self, csv_file, mode, num_frames,
             train_jitter_min=256, train_jitter_max=320,
             train_horizontal_flip = True,
-            test_scale=256, test_num_spatial_crops=10, 
+            test_scale=256, test_num_spatial_crops=10,
             crop_size = 224, mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225],
             normalise = True,           # divide pixels by 255
             bgr = False,
@@ -81,13 +76,12 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
 
         Args:
             mode (str): Options includes `train`, or `test` mode.
-                For the train, the data loader will take data
-                from the train set, and sample one clip per video.
-                For the test mode, the data loader will take data from test set,
-                and sample multiple clips per video.
+                For the train, the data loader will sample one clip per video.
+                For the test mode, the data loader may sample multiple clips per video.
             sample_index_code (str): Options include `pyvideoai`, `TSN` and `TDN`.
                 Slightly different implementation of how video is sampled (pyvideoai and TSN),
                 and for the TDN, it is completely different as it samples num_frames*5 frames.
+                pyvideoai code utilises all frames when there are not enough frames, whereas TSN code will just sample the first frame and duplicate it.
         """
         # Only support train, and test mode.
         assert mode in [
@@ -122,7 +116,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
 
         self.normalise = normalise
         self.bgr = bgr
-        self.greyscale = greyscale 
+        self.greyscale = greyscale
 
         if flow is None:
             self.flow = None
@@ -148,7 +142,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
 
         self.video_id_to_label = video_id_to_label
         if video_id_to_label is not None:
-            logger.info(f'video_id_to_label is provided. It will replace the labels in the CSV file.')
+            logger.info('video_id_to_label is provided. It will replace the labels in the CSV file.')
 
         # For training mode, one single clip is sampled from every
         # video. For testing, NUM_ENSEMBLE_VIEWS clips are sampled from every
@@ -208,7 +202,7 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
         assert (
             len(self._path_to_frames) > 0
         ), f"Failed to load frames loader from {self._csv_file}"
-        
+
         logger.info(f"Constructing frames dataloader (size: {len(self)}) from {self._csv_file}")
         #}}}
 
@@ -339,4 +333,3 @@ class FramesSparsesampleDataset(torch.utils.data.Dataset):
             (int): the number of videos in the dataset.
         """
         return len(self._path_to_frames)
-

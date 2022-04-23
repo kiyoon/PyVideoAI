@@ -1,16 +1,12 @@
-#!/usr/bin/env python3
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
-
+from __future__ import annotations
 import numpy as np
 import os
-import random
 import torch
 import torch.utils.data
 
 #import slowfast.utils.logging as logging
 import logging
 
-from . import transform as transform
 from . import utils as utils
 
 logger = logging.getLogger(__name__)
@@ -31,7 +27,8 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
             train_jitter_min=256, train_jitter_max=320,
             train_horizontal_flip=True,
             test_scale=256,
-            test_num_ensemble_views=10, test_num_spatial_crops=3, 
+            test_num_ensemble_views: int | str = 10,
+            test_num_spatial_crops: int = 3,
             crop_size = 224, mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225],
             normalise = True,           # divide pixels by 255
             bgr = False,
@@ -49,11 +46,16 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
         path_to_frames_dir_N/{frame:05d}.jpg video_id_N label_N start_frame_N end_frame_N
         ```
         Args:
-            mode (string): Options includes `train`, `val`, or `test` mode.
-                For the train and val mode, the data loader will take data
-                from the train or val set, and sample one clip per video.
-                For the test mode, the data loader will take data from test set,
-                and sample multiple clips per video.
+            mode (string): Options includes `train`, or `test` mode.
+                For the train mode, the data loader will sample one clip per video.
+                For the test mode, the data loader will sample multiple clips per video.
+            test_num_ensemble_views: If int type, sample fixed number of temperal views
+                per segment no matter how long the segment is.
+                Set it to 'most_frames' if you want it to return most frames.
+                For example, when frame range is [0, 20] and num_frames=8, it will sample
+                clips with frame number [0, 1, 2, 3, 4, 5, 6, 7] and [8, 9, 10, 11, 12, 13, 14].
+                It won't sample [15, 16, 17, 18, 19, 20].
+                If it can't sample 1 clip, it will still sample 1 clip by duplicating the last frame.
         """
         # Only support train, and test mode.
         assert mode in [
@@ -71,7 +73,15 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
 
         self.num_frames = num_frames
         self.sampling_rate = sampling_rate
-        self.test_num_emsemble_views = test_num_ensemble_views
+
+        if isinstance(test_num_ensemble_views, str):
+            assert test_num_ensemble_views in ['most_frames'], f'Unsupported {test_num_ensemble_views = }'
+        else:
+            assert test_num_ensemble_views > 0, f'Unsupported {test_num_ensemble_views = }'
+        self.test_num_ensemble_views = test_num_ensemble_views
+
+        assert test_num_spatial_crops in [1, 3], "1 for centre, 3 for centre and left,right/top,bottom"
+        self.test_num_spatial_crops = test_num_spatial_crops
 
         self.train_horizontal_flip = train_horizontal_flip
 
@@ -90,20 +100,10 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
         self.bgr = bgr
         self.greyscale = greyscale
 
-        # For training, one single clip is sampled from every
-        # video. For testing, NUM_ENSEMBLE_VIEWS clips are sampled from every
-        # video. For every clip, NUM_SPATIAL_CROPS is cropped spatially from
-        # the frames.
-        if self.mode in ["train"]:
-            self._num_clips = 1
-        elif self.mode in ["test"]:
-            self._num_clips = test_num_ensemble_views * test_num_spatial_crops
-
-        assert test_num_spatial_crops in [1, 3], "1 for centre, 3 for centre and left,right/top,bottom"
-        self.test_num_spatial_crops = test_num_spatial_crops
 
         logger.info("Constructing video dataset {}...".format(mode))
         self._construct_loader()
+
 
     def _construct_loader(self):#{{{
         """
@@ -118,12 +118,17 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
         self._labels = []
         self._start_frames = []    # number of sample video frames
         self._end_frames = []    # number of sample video frames
-        self._spatial_temporal_idx = []
+        self._spatial_idx = []
+        self._temporal_idx = []
+        self._num_temporal_crops = []
         with open(self._csv_file, "r") as f:
             self.num_classes = int(f.readline())
             for clip_idx, path_label in enumerate(f.read().splitlines()):
                 assert len(path_label.split()) == 5
                 path, video_id, label, start_frame, end_frame = path_label.split()
+                start_frame = int(start_frame)
+                end_frame = int(end_frame)
+                assert start_frame <= end_frame
 
                 if self.num_classes > 0:
                     label_list = label.split(",")
@@ -133,15 +138,31 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
                 else:
                     label = int(label)
 
-                for idx in range(self._num_clips):
-                    self._path_to_frames.append(
-                        os.path.join(self._path_prefix, path)
-                    )
-                    self._video_ids.append(int(video_id))
-                    self._labels.append(label)
-                    self._start_frames.append(int(start_frame))
-                    self._end_frames.append(int(end_frame))
-                    self._spatial_temporal_idx.append(idx)
+                # calculate number of crops for this clip.
+                if self.mode == 'train':
+                    num_spatial_crops = 1
+                    num_temporal_crops = 1
+                else:
+                    num_spatial_crops = self.test_num_spatial_crops
+                    if self.test_num_ensemble_views == 'most_frames':
+                        num_temporal_crops = (end_frame - start_frame + 1) // self.num_frames
+                        if num_temporal_crops == 0:
+                            num_temporal_crops = 1
+                    else:   # int
+                        num_temporal_crops = self.test_num_ensemble_views
+
+                for spatial_idx in range(num_spatial_crops):
+                    for temporal_idx in range(num_temporal_crops):
+                        self._path_to_frames.append(
+                            os.path.join(self._path_prefix, path)
+                        )
+                        self._video_ids.append(int(video_id))
+                        self._labels.append(label)
+                        self._start_frames.append(int(start_frame))
+                        self._end_frames.append(int(end_frame))
+                        self._spatial_idx.append(spatial_idx)
+                        self._temporal_idx.append(temporal_idx)
+                        self._num_temporal_crops.append(num_temporal_crops)
         assert (
             len(self._path_to_frames) > 0
         ), "Failed to load video loader split {} from {}".format(
@@ -152,6 +173,7 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
                 len(self._path_to_frames), self._csv_file
             )
         )#}}}
+
 
     def __getitem__(self, index):
         """
@@ -177,17 +199,12 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
             min_scale = self.train_jitter_min
             max_scale = self.train_jitter_max
         elif self.mode in ["test"]:
-            temporal_sample_index = (
-                self._spatial_temporal_idx[index]
-                // self.test_num_spatial_crops
-            )
+            temporal_sample_index = self._temporal_idx[index]
             # spatial_sample_index is in [0, 1, 2]. Corresponding to centre, left,
             # or right if width is larger than height, and middle, top,
             # or bottom if height is larger than width.
-            spatial_sample_index = (
-                self._spatial_temporal_idx[index]
-                % self.test_num_spatial_crops
-            )
+            spatial_sample_index = self._spatial_idx[index]
+
             min_scale, max_scale = [self.test_scale] * 2
             # The testing is deterministic and no jitter should be performed.
             # min_scale, max_scale are expect to be the same.
@@ -199,7 +216,7 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
 
 
         num_video_frames = self._end_frames[index] - self._start_frames[index] + 1
-        frame_indices = utils.dense_frame_indices(num_video_frames, self.num_frames, self.sampling_rate, clip_idx = temporal_sample_index, num_clips = self.test_num_emsemble_views)
+        frame_indices = utils.dense_frame_indices(num_video_frames, self.num_frames, self.sampling_rate, clip_idx = temporal_sample_index, num_clips = self._num_temporal_crops[index])
         frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
 
         try:
@@ -237,7 +254,6 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
 
         video_id = self._video_ids[index]
         label = self._labels[index]
-        #frames = utils.pack_pathway_output(self.cfg, frames)
         return frames, video_id, label, spatial_sample_index, temporal_sample_index, index, np.array(frame_indices)
 
     def __len__(self):
@@ -246,4 +262,3 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
             (int): the number of videos in the dataset.
         """
         return len(self._path_to_frames)
-
