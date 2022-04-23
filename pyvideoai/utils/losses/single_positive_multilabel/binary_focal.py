@@ -1,6 +1,7 @@
 import torch
 from torch import nn
-from kornia.losses import binary_focal_loss_with_logits
+#from kornia.losses import binary_focal_loss_with_logits
+from torchvision.ops.focal_loss import sigmoid_focal_loss
 from ..loss import k_one_hot
 
 class BinaryFocalLossWithLogits(nn.Module):
@@ -19,4 +20,5 @@ class BinaryFocalLossWithLogits(nn.Module):
         if target.dim() != input.dim():
             target = k_one_hot(target, input.size(-1))
 
-        return binary_focal_loss_with_logits(input, target, self.alpha, self.gamma, self.reduction)
+        #return binary_focal_loss_with_logits(input, target, self.alpha, self.gamma, self.reduction)
+        return sigmoid_focal_loss(input, target, self.alpha, self.gamma, self.reduction)
