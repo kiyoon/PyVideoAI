@@ -1,6 +1,6 @@
-tools/key.ini
-tools/last_pids.txt
-data/
+/tools/key.ini
+/tools/last_pids.txt
+/data/
 pyvideoai/unused
 
 # Byte-compiled / optimized / DLL files

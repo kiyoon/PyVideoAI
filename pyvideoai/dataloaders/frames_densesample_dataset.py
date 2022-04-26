@@ -94,6 +94,7 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
             assert test_num_ensemble_views > 0, f'Unsupported {test_num_ensemble_views = }'
             self.test_num_ensemble_views = test_num_ensemble_views
         elif test_ensemble_mode == 'fixed_stride':   # 'fixed_stride'
+            assert isinstance(test_ensemble_stride, int)
             assert test_ensemble_stride > 0, f'Unsupported {test_ensemble_stride = }'
             self.test_ensemble_stride = test_ensemble_stride
         else:
@@ -265,7 +266,6 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
                 "Does not support {} mode".format(self.mode)
             )
 
-
         num_video_frames = self._end_frames[index] - self._start_frames[index] + 1
         if self.mode == 'test' and self.test_ensemble_mode == 'fixed_stride':
             frame_indices = utils.strided_frame_indices(num_video_frames, self.num_frames, self.sampling_rate, clip_idx = temporal_sample_index, stride = self.test_ensemble_stride,
@@ -274,6 +274,9 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
             frame_indices = utils.dense_frame_indices(num_video_frames, self.num_frames, self.sampling_rate, clip_idx = temporal_sample_index, num_clips = self._num_temporal_crops[index],
                     num_neighbours = 1 if self.flow is None else self.flow_neighbours)
         frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
+
+        if any(idx < self._start_frames[index] or idx > self._end_frames[index] for idx in frame_indices):
+            raise NotImplementedError(f'Implementation is wrong. Trying to sample {frame_indices} but range of the segment is {self._start_frames[index]} to {self._end_frames[index]}.')
 
         if self.flow == 'rr':
             frame_paths_x = [self._path_to_frames[index].format(flow_direction=self.flow_folder_x, frame=frame_idx) for frame_idx in frame_indices]
@@ -301,7 +304,11 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
         # T H W C -> C T H W.
         frames = frames.permute(3, 0, 1, 2)
         # Perform data augmentation.
-        frames, scale_factor_width, scale_factor_height, x_offset, y_offset, is_flipped = utils.spatial_sampling(
+        if self.mode == 'test' and self.test_num_spatial_crops != 3:
+            spatial_sampling_func = utils.spatial_sampling_5
+        else:
+            spatial_sampling_func = utils.spatial_sampling
+        frames, scale_factor_width, scale_factor_height, x_offset, y_offset, is_flipped = spatial_sampling_func(
             frames,
             spatial_idx=spatial_sample_index,
             min_scale=min_scale,

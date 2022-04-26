@@ -36,9 +36,9 @@ def get_scheduler_type(scheduler):
     if scheduler is None:
         return 'none'
     elif isinstance(scheduler, ReduceLROnPlateau):
-        return 'plateau' 
+        return 'plateau'
     elif isinstance(scheduler, ReduceLROnPlateauMultiple):
-        return 'plateau_multiple' 
+        return 'plateau_multiple'
     else:
         if isinstance(scheduler, GradualWarmupScheduler):
             if isinstance(scheduler.after_scheduler, ReduceLROnPlateau):
@@ -46,7 +46,7 @@ def get_scheduler_type(scheduler):
             elif isinstance(scheduler.after_scheduler, ReduceLROnPlateauMultiple):
                 return 'plateau_multiple'
         else:
-            return 'others' 
+            return 'others'
 
 def train_iter(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_amp, amp_scaler, data, data_unpack_func, train_metrics, batch_size, speed = 'standard', start_time=None, it=None, total_iters=None, sample_seen=None, total_samples=None, loss_accum=None, rank = 0, world_size = 1, input_reshape_func = None, max_log_length=0, refresh_period=1):
     inputs, uids, labels, _ = data_unpack_func(data)#{{{
@@ -169,7 +169,7 @@ def train_epoch(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_
         dataloader (iterator): Mini-batch data iterator. Requires self.epoch_size variable.
         rank (int): Rank of the process in distributed training.
         world_size (int): Total number of processes in distributed training.
-    
+
     Returns:
         tuple: sample_seen, total_samples, loss, elapsed_time
     """
@@ -255,7 +255,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
         world_size (int): Total number of processes in distributed training.
         scheduler (torch scheduler): Only needed when the scheduler is ReduceLROnPlateau, and using one clip eval.
         PAD_VALUE (int): The value to be padded when each process has different number of batch size. These padded value will be removed anyway after all gathering.
-    
+
     Returns:
         tuple: sample_seen, total_samples, loss, elapsed_time, eval_log_str
     """
@@ -380,7 +380,7 @@ def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best
                         uids = uids_gathered[no_pad_row_mask]
                         labels = labels_gathered[no_pad_row_mask]
                         outputs = outputs_gathered[no_pad_row_mask]
-                    
+
                 # Communicate other data
                 for tensor in [curr_batch_size, batch_loss_accum]:
                     dist.reduce(tensor, dst=0)
@@ -514,7 +514,7 @@ def test_epoch_DALI(model, criterion, dataloader, data_unpack_func, num_classes,
         rank (int): Rank of the process in distributed training.
         world_size (int): Total number of processes in distributed training.
         PAD_VALUE (int): The value to be padded when each process has different number of batch size. These padded value will be removed anyway after all gathering.
-    
+
     Returns:
         tuple: sample_seen, total_samples, loss, acc, vid_acc_top1, vid_acc_top5, elapsed_time, video_metrics (VideoMetrics)
     """
@@ -597,7 +597,7 @@ def test_epoch_DALI(model, criterion, dataloader, data_unpack_func, num_classes,
                     uids = uids_gathered[no_pad_row_mask]
                     labels = labels_gathered[no_pad_row_mask]
                     outputs = outputs_gathered[no_pad_row_mask]
-                    
+
                 # Communicate other data
                 for tensor in [curr_batch_size, batch_loss_accum, batch_correct]:
                     dist.reduce(tensor, dst=0)
@@ -617,7 +617,7 @@ def test_epoch_DALI(model, criterion, dataloader, data_unpack_func, num_classes,
 
             if rank == 0:
                 # accuracy
-                num_correct_preds += batch_correct 
+                num_correct_preds += batch_correct
 
                 # video accuracy top1, top5
                 video_metrics.add_clip_predictions(uids, outputs, labels, apply_activation='softmax')
@@ -657,11 +657,11 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
     Args:
         model: PyTorch model
         dataloader (iterator): Mini-batch data iterator. Requires self.epoch_size and self.num_iters variable.
-        data_unpack_func: Should return (inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': temporal_idx})
+        data_unpack_func: Should return (inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': temporal_idx, 'frame_indices': frame_indices})
         rank (int): Rank of the process in distributed training.
         world_size (int): Total number of processes in distributed training.
         PAD_VALUE (int): The value to be padded when each process has different number of batch size. These padded value will be removed anyway after all gathering.
-    
+
     Returns:
         tuple: sample_seen, total_samples, elapsed_time, eval_log_str
     """
@@ -692,6 +692,7 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
                     'clip_features': [],
                     'spatial_indices': [],
                     'temporal_indices': [],
+                    'frame_indices': [],
                     }
 
         if world_size > 1:
@@ -707,7 +708,8 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
             inputs, uids, labels, extra_info = data_unpack_func(data)
             spatial_idx = extra_info['spatial_idx']
             temporal_idx = extra_info['temporal_idx']
-            
+            frame_indices = extra_info['frame_indices']
+
             inputs, uids, labels, spatial_idx, temporal_idx, curr_batch_size = misc.data_to_gpu(inputs, uids, labels, spatial_idx, temporal_idx)
 
             perform_forward = it < num_iters - 1 or last_batch_size > 0     # not last batch or last batch size is at least 1
@@ -720,6 +722,7 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
                 uids = uids[:last_batch_size]
                 spatial_idx = spatial_idx[:last_batch_size]
                 temporal_idx = temporal_idx[:last_batch_size]
+                frame_indices = frame_indices[:last_batch_size]
 
                 curr_batch_size = torch.LongTensor([last_batch_size]).to(cur_device, non_blocking=True)
 
@@ -738,6 +741,7 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
                 uids = nn.functional.pad(uids, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
                 spatial_idx = nn.functional.pad(spatial_idx, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
                 temporal_idx = nn.functional.pad(temporal_idx, (0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                frame_indices = nn.functional.pad(frame_indices, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
 
                 if labels.dim() == 2:
                     # multilabel
@@ -754,7 +758,13 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
                     outputs = nn.functional.pad(outputs, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
 
                 # Communicate with the padded data
-                (uids_gathered,labels_gathered,outputs_gathered,spatial_idx_gathered, temporal_idx_gathered) = du.all_gather([uids, labels, outputs, spatial_idx, temporal_idx])
+                (uids_gathered,
+                        labels_gathered,
+                        outputs_gathered,
+                        spatial_idx_gathered,
+                        temporal_idx_gathered,
+                        frame_indices_gathered,
+                        ) = du.all_gather([uids, labels, outputs, spatial_idx, temporal_idx, frame_indices])
 
                 if rank == 0:
                     # Remove padding from the received data
@@ -772,7 +782,8 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
                     outputs = outputs_gathered[no_pad_row_mask]
                     spatial_idx = spatial_idx_gathered[no_pad_row_mask]
                     temporal_idx = temporal_idx_gathered[no_pad_row_mask]
-                    
+                    frame_indices = frame_indices_gathered[no_pad_row_mask]
+
                 # Communicate other data
                 dist.reduce(curr_batch_size, dst=0)
 
@@ -786,6 +797,7 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
                 feature_data['clip_features'].append(np.array(outputs.cpu()))
                 feature_data['spatial_indices'].append(np.array(spatial_idx.cpu()))
                 feature_data['temporal_indices'].append(np.array(temporal_idx.cpu()))
+                feature_data['frame_indices'].append(np.array(frame_indices.cpu()))
 
                 elapsed_time = time.time() - start_time
                 #eta = int((total_samples-sample_seen) * elapsed_time / sample_seen)
