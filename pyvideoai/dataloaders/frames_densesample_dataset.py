@@ -27,14 +27,26 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
             train_jitter_min=256, train_jitter_max=320,
             train_horizontal_flip=True,
             test_scale=256,
-            test_num_ensemble_views: int | str = 10,
+            test_ensemble_mode: str = 'fixed_crops',
+            test_num_ensemble_views: int = 10,
+            test_ensemble_stride: int = None,
             test_num_spatial_crops: int = 3,
             crop_size = 224, mean = [0.485, 0.456, 0.406], std = [0.229, 0.224, 0.225],
             normalise = True,           # divide pixels by 255
             bgr = False,
             greyscale = False,
             path_prefix = "",
-            num_retries = 10):
+            num_retries = 10,
+            flow = None,        # If 'RG', treat R and G channels as u and v. Discard B.
+                                # If 'RR', load two greyscale images and use R channel only.
+                                #     Need to define flow_folder_x and flow_folder_y,
+                                #     and the path in CSV needs to have {flow_direction}
+                                #     which will be replaced to the definitions.
+            flow_neighbours = 5,    # How many flow frames to stack.
+            flow_folder_x = 'u',
+            flow_folder_y = 'v',    # These are only needed for flow='RR'
+            video_id_to_label: dict = None,     # Pass a dictionary of mapping video ID to labels, and it will ignore the label in the CSV and get labels from here. Useful when using unsupported label types such as soft labels.
+            ):
         """
         Construct the video loader with a given csv file. The format of
         the csv file is:
@@ -49,12 +61,15 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
             mode (string): Options includes `train`, or `test` mode.
                 For the train mode, the data loader will sample one clip per video.
                 For the test mode, the data loader will sample multiple clips per video.
+            test_ensemble_mode: 'fixed_crops', or 'fixed_stride'.
+                'fixed_crops' will sample fixed number of temporal crops per segment.
+                'fixed_stride' will sample videos in fixed stride.
             test_num_ensemble_views: If int type, sample fixed number of temperal views
                 per segment no matter how long the segment is.
-                Set it to 'most_frames' if you want it to return most frames.
-                For example, when frame range is [0, 20] and num_frames=8, it will sample
-                clips with frame number [0, 1, 2, 3, 4, 5, 6, 7] and [8, 9, 10, 11, 12, 13, 14].
-                It won't sample [15, 16, 17, 18, 19, 20].
+            test_ensemble_stride: When `test_ensemble_mode` is 'fixed_stride', this is the stride of the sliding window.
+                For example, when frame range is [0, 20], num_frames=8, sampling_rate=1 and test_ensemble_stride=4 it will sample
+                clips with frame number [0, 1, 2, 3, 4, 5, 6, 7], [4, 5, 6, 7, 8, 9, 10, 11], [8, 9, 10, 11, 12, 13, 14, 15], and [12, 13, 14, 15, 16, 17, 18, 19].
+                (Note it won't sample frame 20.)
                 If it can't sample 1 clip, it will still sample 1 clip by duplicating the last frame.
         """
         # Only support train, and test mode.
@@ -62,6 +77,7 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
             "train",
             "test",
         ], "Split '{}' not supported".format(mode)
+
         self._csv_file = csv_file
         self._path_prefix = path_prefix
         self._num_retries = num_retries
@@ -74,11 +90,15 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
         self.num_frames = num_frames
         self.sampling_rate = sampling_rate
 
-        if isinstance(test_num_ensemble_views, str):
-            assert test_num_ensemble_views in ['most_frames'], f'Unsupported {test_num_ensemble_views = }'
-        else:
+        if test_ensemble_mode == 'fixed_crops':
             assert test_num_ensemble_views > 0, f'Unsupported {test_num_ensemble_views = }'
-        self.test_num_ensemble_views = test_num_ensemble_views
+            self.test_num_ensemble_views = test_num_ensemble_views
+        elif test_ensemble_mode == 'fixed_stride':   # 'fixed_stride'
+            assert test_ensemble_stride > 0, f'Unsupported {test_ensemble_stride = }'
+            self.test_ensemble_stride = test_ensemble_stride
+        else:
+            raise ValueError(f'Unknown {test_ensemble_mode = }')
+        self.test_ensemble_mode = test_ensemble_mode
 
         assert test_num_spatial_crops in [1, 3], "1 for centre, 3 for centre and left,right/top,bottom"
         self.test_num_spatial_crops = test_num_spatial_crops
@@ -100,6 +120,31 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
         self.bgr = bgr
         self.greyscale = greyscale
 
+        if flow is None:
+            self.flow = None
+        else:
+            # string
+            self.flow = flow.lower()
+            self.flow_neighbours = flow_neighbours
+
+            if self.flow == 'rg':
+                assert len(mean) in [1, 2]
+                assert len(std)  in [1, 2]
+                assert not greyscale, 'For optical flow RG data, it is impossible to use greyscale.'
+                assert not bgr, 'For optical flow RG data, it is impossible to use BGR channel ordering.'
+            elif self.flow == 'rr':
+                assert len(mean) in [1, 2]
+                assert len(std)  in [1, 2]
+                assert not greyscale, 'For optical flow RR data, it is impossible to use greyscale. It actually just uses R channels and ignore the rest.'
+                assert not bgr, 'For optical flow RR data, it is impossible to use BGR channel ordering.'
+                self.flow_folder_x = flow_folder_x
+                self.flow_folder_y = flow_folder_y
+            else:
+                raise ValueError(f'Not recognised flow format: {self.flow}. Choose one of RG (use red and green channels), RR (two greyscale images representing x and y directions)')
+
+        self.video_id_to_label = video_id_to_label
+        if video_id_to_label is not None:
+            logger.info('video_id_to_label is provided. It will replace the labels in the CSV file.')
 
         logger.info("Constructing video dataset {}...".format(mode))
         self._construct_loader()
@@ -144,11 +189,17 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
                     num_temporal_crops = 1
                 else:
                     num_spatial_crops = self.test_num_spatial_crops
-                    if self.test_num_ensemble_views == 'most_frames':
-                        num_temporal_crops = (end_frame - start_frame + 1) // self.num_frames
-                        if num_temporal_crops == 0:
+                    if self.test_ensemble_mode == 'fixed_stride':
+                        num_frames_segment = end_frame - start_frame + 1
+                        if self.flow is None:
+                            sample_span = (self.num_frames - 1) * self.sampling_rate + 1
+                        else:
+                            sample_span = (self.num_frames - 1) * self.sampling_rate + self.flow_neighbours
+
+                        num_temporal_crops = (num_frames_segment - sample_span) // self.test_ensemble_stride + 1
+                        if num_temporal_crops <= 0:
                             num_temporal_crops = 1
-                    else:   # int
+                    else:
                         num_temporal_crops = self.test_num_ensemble_views
 
                 for spatial_idx in range(num_spatial_crops):
@@ -216,24 +267,32 @@ class FramesDensesampleDataset(torch.utils.data.Dataset):
 
 
         num_video_frames = self._end_frames[index] - self._start_frames[index] + 1
-        frame_indices = utils.dense_frame_indices(num_video_frames, self.num_frames, self.sampling_rate, clip_idx = temporal_sample_index, num_clips = self._num_temporal_crops[index])
+        if self.mode == 'test' and self.test_ensemble_mode == 'fixed_stride':
+            frame_indices = utils.strided_frame_indices(num_video_frames, self.num_frames, self.sampling_rate, clip_idx = temporal_sample_index, stride = self.test_ensemble_stride,
+                    num_neighbours = 1 if self.flow is None else self.flow_neighbours)
+        else:
+            frame_indices = utils.dense_frame_indices(num_video_frames, self.num_frames, self.sampling_rate, clip_idx = temporal_sample_index, num_clips = self._num_temporal_crops[index],
+                    num_neighbours = 1 if self.flow is None else self.flow_neighbours)
         frame_indices = [idx+self._start_frames[index] for idx in frame_indices]     # add offset (frame number start)
 
-        try:
-            # {frame:05d} format (new)
-            frame_paths = [self._path_to_frames[index].format(frame=frame_idx) for frame_idx in frame_indices]
-        except IndexError:
-            # {:05d} format (old)
-            frame_paths = [self._path_to_frames[index].format(frame_idx) for frame_idx in frame_indices]
+        if self.flow == 'rr':
+            frame_paths_x = [self._path_to_frames[index].format(flow_direction=self.flow_folder_x, frame=frame_idx) for frame_idx in frame_indices]
+            frame_paths_y = [self._path_to_frames[index].format(flow_direction=self.flow_folder_y, frame=frame_idx) for frame_idx in frame_indices]
+            frames_x = utils.retry_load_images(frame_paths_x, retry=self._num_retries, backend='pytorch', bgr=False, greyscale=False)
+            frames_y = utils.retry_load_images(frame_paths_y, retry=self._num_retries, backend='pytorch', bgr=False, greyscale=False)
+            frames = torch.cat((frames_x[...,0:1], frames_y[...,0:1]), dim=-1)
+        else:
+            try:
+                # {frame:05d} format (new)
+                frame_paths = [self._path_to_frames[index].format(frame=frame_idx) for frame_idx in frame_indices]
+            except IndexError:
+                # {:05d} format (old)
+                frame_paths = [self._path_to_frames[index].format(frame_idx) for frame_idx in frame_indices]
 
-#        # make sure to close the images to avoid memory leakage.
-#        frames = [0] * len(frame_paths)
-#        for i, frame_path in enumerate(frame_paths):
-#            with Image.open(frame_path) as frame:
-#                frames[i] = np.array(frame)
-        #frames = [np.array(Image.open(frame_path)) for frame_path in frame_paths]
-        frames = utils.retry_load_images(frame_paths, retry=self._num_retries, backend='pytorch', bgr=self.bgr, greyscale=self.greyscale)
-        #frames = torch.as_tensor(np.stack(frames))
+            frames = utils.retry_load_images(frame_paths, retry=self._num_retries, backend='pytorch', bgr=self.bgr, greyscale=self.greyscale)
+            if self.flow == 'rg':
+                frames = frames[..., 0:2]   # Use R and G as u and v (x,y). Discard B channel.
+
 
         # Perform color normalization.
         frames = utils.tensor_normalize(

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 
 
 import logging
@@ -194,7 +195,7 @@ def spatial_sampling_5(
             )
         else:
             scale_factor_width = scale_factor_height = None
-            
+
         frames, _, x_offset, y_offset = transform.uniform_crop_5(frames, crop_size, spatial_idx % 5)
         if spatial_idx >= 5:
             frames, _ = transform.horizontal_flip(frames)
@@ -258,17 +259,20 @@ def pack_pathway_output(cfg, frames):
     return frame_list
 
 
-def dense_frame_indices(num_video_frames, num_sample_frames, sampling_rate, clip_idx, num_clips, tight=True):
+def _add_neighbour_frames(frame_indices: list[int], num_neighbours: int) -> list[int]:
+    return [idx + n for idx in frame_indices for n in range(num_neighbours)]
+
+
+def strided_frame_indices(num_video_frames, num_sample_frames, sampling_rate, clip_idx, stride, tight=True, num_neighbours=1):
     """
     params:
         tight (bool): if True, even for sampling_rate > 1, the last frame can be sampled.
                         if False, last {sampling_rate-1} frames are not sampled.
     """
-    assert -1 <= clip_idx < num_clips, f"Wrong clip_idx given: {clip_idx}"
-
     if tight:
-        sample_span = (num_sample_frames-1) * sampling_rate + 1          # e.g. 8x4 -> 29 frames span
+        sample_span = (num_sample_frames-1) * sampling_rate + num_neighbours          # e.g. 8x4 -> 29 frames span
     else:
+        assert num_neighbours == 1, 'Not implemented'
         sample_span = num_sample_frames * sampling_rate                  # e.g. 8x4 -> 32 frames span
     video_frame_indices = list(range(num_video_frames))
     if num_video_frames < sample_span:
@@ -278,7 +282,34 @@ def dense_frame_indices(num_video_frames, num_sample_frames, sampling_rate, clip
         num_video_frames *= num_repeats     # equal to: len(video_frame_indices)
 
     # from now on, num_video_frames >= sample_span
-    
+    start_idx = stride * clip_idx
+    sampled_frame_indices = [video_frame_indices[idx] for idx in range(start_idx, start_idx+sample_span, sampling_rate)]
+
+    return _add_neighbour_frames(sampled_frame_indices, num_neighbours)
+
+
+def dense_frame_indices(num_video_frames, num_sample_frames, sampling_rate, clip_idx, num_clips, tight=True, num_neighbours=1):
+    """
+    params:
+        tight (bool): if True, even for sampling_rate > 1, the last frame can be sampled.
+                        if False, last {sampling_rate-1} frames are not sampled.
+    """
+    assert -1 <= clip_idx < num_clips, f"Wrong clip_idx given: {clip_idx}"
+
+    if tight:
+        sample_span = (num_sample_frames-1) * sampling_rate + num_neighbours          # e.g. 8x4 -> 29 frames span  (with num_neighbours=1)
+    else:
+        assert num_neighbours == 1, 'Not implemented'
+        sample_span = num_sample_frames * sampling_rate                  # e.g. 8x4 -> 32 frames span
+    video_frame_indices = list(range(num_video_frames))
+    if num_video_frames < sample_span:
+        num_repeats = sample_span // num_video_frames if sample_span % num_video_frames == 0 else sample_span // num_video_frames + 1
+        logger.debug(f"Cannot sample {sample_span:d} frames from {num_video_frames:d}. Duplicating the frames {num_repeats} times.")
+        video_frame_indices = list(itertools.chain.from_iterable(itertools.repeat(x, num_repeats) for x in video_frame_indices))
+        num_video_frames *= num_repeats     # equal to: len(video_frame_indices)
+
+    # from now on, num_video_frames >= sample_span
+
     start_idx_choices = list(range(num_video_frames - sample_span + 1))
     if clip_idx == -1:
         # random temporal sampling
@@ -286,7 +317,7 @@ def dense_frame_indices(num_video_frames, num_sample_frames, sampling_rate, clip
     else:
         if num_clips == 1:
             # sample the middle clip for 1 clip sampling
-            start_idx = len(start_idx_choices) // 2   
+            start_idx = len(start_idx_choices) // 2
         else:
             # sample the whole temporal coverage (include clip starting from frame 0 and the last frame possible)
             start_idx = round((len(start_idx_choices)-1) / (num_clips-1) * clip_idx)
@@ -295,7 +326,7 @@ def dense_frame_indices(num_video_frames, num_sample_frames, sampling_rate, clip
 
     #assert len(sampled_frame_indices) == num_sample_frames
 
-    return sampled_frame_indices
+    return _add_neighbour_frames(sampled_frame_indices, num_neighbours)
 
 
 
@@ -333,7 +364,7 @@ def sparse_frame_indices(num_input_frames, num_output_frames, uniform=True, num_
         sampled_frame_indices = [video_frame_indices[idx] for idx in frame_indices]
 
     # Add neighbours
-    return [idx + n for idx in sampled_frame_indices for n in range(num_neighbours)]
+    return _add_neighbour_frames(sampled_frame_indices, num_neighbours)
 
 
 # num_input_frames = num_frames
@@ -431,4 +462,3 @@ def TDN_sample_indices(num_input_frames, num_output_frames, mode='train', new_le
 #                    p += 1
 
     return frames_idx
-
