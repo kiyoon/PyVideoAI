@@ -486,16 +486,18 @@ last_activation = 'softmax'   # or, you can pass a callable function like `torch
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
+from pyvideoai.metrics.mAP import Clip_mAPMetric
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
 from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
 from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
 from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
-from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set
+from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set, get_singlemultilabel
 from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict
 video_id_to_multilabel = read_multilabel()
 _, epic_video_id_to_label = get_verb_uid2label_dict(dataset_cfg.annotations_root)
 holdout_video_id_to_label = get_val_holdout_set(epic_video_id_to_label, video_id_to_multilabel)
+video_id_to_singlemultilabel = get_singlemultilabel(epic_video_id_to_label, video_id_to_multilabel)
 
 best_metric = ClipAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval')
 metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
@@ -513,6 +515,11 @@ metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
             ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
             ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
             ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
