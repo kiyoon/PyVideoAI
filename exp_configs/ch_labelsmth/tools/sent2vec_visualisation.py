@@ -4,7 +4,7 @@ import dataset_configs
 import sklearn.metrics
 import numpy as np
 import pandas as pd
-import os 
+import os
 
 DATASET = 'epic55_verb'
 #model_type = 'sent2vec'
@@ -48,7 +48,7 @@ elif model_type == 'word2vec':
 
     class_keys = filtered_class_keys
 
-    embeddings = model[class_keys] 
+    embeddings = model[class_keys]
 
 else:
     raise ValueError(f'model_type is wrong.')
