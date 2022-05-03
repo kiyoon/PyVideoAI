@@ -5,6 +5,7 @@ from pyvideoai.dataloaders import FramesSparsesampleDataset, VideoSparsesampleDa
 #from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
+from pyvideoai.utils.losses.softlabel import MaskedSoftlabelRegressionLoss
 from pyvideoai.utils import loader
 from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss, MinRegressionCombinationLoss
 from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
@@ -65,6 +66,7 @@ sample_index_code = 'pyvideoai'
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
 loss_type = 'mince'     # mince / maskce / minregcomb / maskproselflc
+                        # mask_binary_ce
 
 l2_norm = True
 save_features = True
@@ -90,6 +92,8 @@ def get_criterion(split):
             return MinCEMultilabelLoss()
         elif loss_type == 'maskce':
             return MaskedCrossEntropy()
+        elif loss_type == 'mask_binary_ce':
+            return MaskedSoftlabelRegressionLoss()
         elif loss_type == 'minregcomb':
             return MinRegressionCombinationLoss()
         elif loss_type == 'maskproselflc':
@@ -122,7 +126,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
 
         data_unpack_func = get_data_unpack_func(feature_extract_split)
         input_reshape_func = get_input_reshape_func(feature_extract_split)
-        feature_data, _, _, _, eval_log_str = extract_features(model_cfg.feature_extract_model(train_kit["model"]), train_testmode_dataloader, data_unpack_func, dataset_cfg.num_classes, feature_extract_split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
+        feature_data, _, _, _, eval_log_str = extract_features(model_cfg.feature_extract_model(train_kit["model"], 'features'), train_testmode_dataloader, data_unpack_func, dataset_cfg.num_classes, feature_extract_split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
         # feature_data['video_ids'] feature_data['labels'] feature_data['clip_features']
 
         if rank == 0:
