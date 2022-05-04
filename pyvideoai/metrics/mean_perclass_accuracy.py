@@ -1,6 +1,5 @@
 import torch
-import numpy as np
-from .metric import Metric, AverageMetric
+from .metric import Metric
 
 
 
@@ -16,7 +15,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
     def clean_data(self):
         super().clean_data()
         self.num_seen_samples = None
-        self.num_true_positives = None 
+        self.num_true_positives = None
 
 
 
@@ -25,7 +24,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         if video_ids is None:
             return      # sometimes, after filtering the samples, there can be no samples to do anything.
 
-        assert labels.dim() in [1,2], f'target has to be 1D or 2D tensor but got {target.dim()}-D.'
+        assert labels.dim() in [1,2], f'labels has to be 1D or 2D tensor but got {labels.dim()}-D.'
         if labels.dim() == 2:
             # Convert 2D one-hot label to 1D label
             labels = labels.argmax(dim=1)
@@ -73,7 +72,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         if self.split == 'train':
             prefix = ''
@@ -93,7 +92,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         return self.logging_msg_iter()
 
@@ -101,7 +100,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
     def plot_legend_labels(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         if self.exclude_classes_less_sample_than == 1:
             suffix = ''
@@ -121,7 +120,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
     def plot_file_basenames(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
         if self.exclude_classes_less_sample_than == 1:
@@ -130,7 +129,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
             suffix = f'_{self.exclude_classes_less_sample_than}+'
         return f'mean_perclass_accuracy{suffix}'
 
-    
+
     @staticmethod
     def is_better(value_1, value_2):
         """Metric comparison function
@@ -141,8 +140,7 @@ class ClipMeanPerclassAccuracyMetric(Metric):
         return:
             True if value_1 is better. False if value_2 is better or they're equal.
         """
-        return value_1 > value_2 
+        return value_1 > value_2
 
     def __len__(self):
         return sum(self.num_seen_samples)
-

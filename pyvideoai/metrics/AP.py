@@ -124,11 +124,40 @@ def compute_multiple_aps(groundtruth, predictions, false_negatives=None):
 
 
 # CATER implementation
-def mAP_from_AP(AP):
-    mAP = np.mean([el for el in AP if el >= 0])
+# Kiyoon addition: only include if many samples.
+def mAP_from_AP(AP, class_include_mask = None):
+    if class_include_mask is None:
+        mAP = np.mean([el for el in AP if el >= 0])
+    else:
+        assert len(AP) == len(class_include_mask)
+        mAP = np.mean([el for el, include in zip(AP, class_include_mask) if include and el >= 0])
 
     return mAP
 
-def mAP(labels, preds):
+
+def get_classes_to_include_mask(labels, exclude_classes_less_sample_than = 1):
+    assert exclude_classes_less_sample_than >= 1
+    num_classes = labels.shape[1]
+    num_samples = [0] * num_classes
+
+    for label in labels:
+        for idx, gt in enumerate(label):
+            if gt == 1:
+                num_samples[idx] += 1
+            elif gt == 0:
+                pass
+            else:
+                raise ValueError(f'label include not 0 or 1 value: {gt}')
+
+    return [num_sample >= exclude_classes_less_sample_than for num_sample in num_samples]
+
+
+def mAP(labels, preds, exclude_classes_less_sample_than = 1):
+    assert exclude_classes_less_sample_than >= 1
+    if exclude_classes_less_sample_than > 1:
+        class_include_mask = get_classes_to_include_mask(labels, exclude_classes_less_sample_than)
+    else:
+        class_include_mask = None
+
     AP = compute_multiple_aps(labels, preds)
-    return mAP_from_AP(AP)
+    return mAP_from_AP(AP, class_include_mask)
