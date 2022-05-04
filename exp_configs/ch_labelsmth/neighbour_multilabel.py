@@ -68,6 +68,16 @@ base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size
 loss_type = 'mince'     # mince / maskce / minregcomb / maskproselflc
                         # mask_binary_ce
 
+# Neighbour search settings for pseudo labelling
+# int
+num_neighbours = 10
+thr = 0.2
+# If you want the parameters to be different per class.
+# dictionary with key being class index, with size num_classes.
+# If key not found, use the default setting above.
+num_neighbours_per_class = {}
+thr_per_class = {}
+
 l2_norm = True
 save_features = True
 
@@ -135,26 +145,50 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
                 feature_data['clip_features'] = np.mean(feature_data['clip_features'], axis=1)
 
             assert feature_data['clip_features'].shape[1] == 2048
-            kn = 10
-            thr = 0.2
-            with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
-                nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], kn, l2_norm=l2_norm)
-            #neighbours_ids = []
-            soft_labels = []
-            target_ids = feature_data['video_ids']
-            source_ids = feature_data['video_ids']
 
-            for target_idx, target_id in enumerate(target_ids):
-                #n_ids = [source_ids[x] for x in features_neighbours[target_idx]]
-                sl = nc_freq[target_idx]
-                sl = sl / sl.sum()
-                #neighbours_ids.append(n_ids)
-                soft_labels.append(sl)
+            soft_labels_per_num_neighbour = {}    # key: num_neighbours
+            set_num_neighbours = set(num_neighbours_per_class) | set(num_neighbours)
+            for num_neighbour in set_num_neighbours:
+                with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
+                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbours, l2_norm=l2_norm)
+                #neighbours_ids = []
+                soft_label = []
+                target_ids = feature_data['video_ids']
+                source_ids = feature_data['video_ids']
 
-            #neighbours_ids = np.array(neighbours_ids)
-            soft_labels = np.array(soft_labels)
+                for target_idx, target_id in enumerate(target_ids):
+                    #n_ids = [source_ids[x] for x in features_neighbours[target_idx]]
+                    sl = nc_freq[target_idx]
+                    sl = sl / sl.sum()
+                    #neighbours_ids.append(n_ids)
+                    soft_label.append(sl)
 
-            multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
+                #neighbours_ids = np.array(neighbours_ids)
+                soft_labels_per_num_neighbour[num_neighbour] = np.array(soft_label)
+
+            # generate multilabels
+            # For each class, use different soft labels generated with different num_neighbours and thr.
+            #multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
+            multilabels = []
+            for target_idx, singlelabel in enumerate(feature_data['labels']):
+                if singlelabel in num_neighbours_per_class:
+                    soft_label = soft_labels_per_num_neighbour[num_neighbours_per_class[singlelabel]][target_idx]
+                else:
+                    soft_label = soft_labels_per_num_neighbour[num_neighbours][target_idx]
+
+                if singlelabel in thr_per_class:
+                    th = thr_per_class[singlelabel]
+                else:
+                    th = thr
+
+                multilabel = (soft_label > th).astype(int)
+                multilabel[singlelabel] = 1
+                multilabels.append(multilabel)
+
+            multilabels = np.stack(multilabels)
+            assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
+
+            # format multilabels properly based on loss
             if loss_type in ['maskce', 'maskproselflc']:
                 logger.info('Turning multilabels to mask out sign (-1) and including one single label')
                 multilabels = -multilabels      # negative numbers mean masks. Mask out the relevant verbs.
@@ -167,7 +201,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
                 logger.info(f"Saving features, neighbours, and multilabels to {os.path.join(exp.predictions_dir, 'features_neighbours')}")
                 os.makedirs(os.path.join(exp.predictions_dir, 'features_neighbours'), exist_ok = True)
 
-                feature_data['kn'] = kn
+                feature_data['kn'] = num_neighbours
                 feature_data['thr'] = thr
                 feature_data['nc_freq'] = nc_freq
                 feature_data['multilabels'] = multilabels
