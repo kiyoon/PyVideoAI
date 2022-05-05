@@ -443,7 +443,7 @@ def train(args):
         if early_stopping_flag:
             logger.info("Early stopping triggered.")
             if rank == 0:
-                exp.tg_send_text_with_expname(f'Early stopping triggered.')
+                exp.tg_send_text_with_expname('Early stopping triggered.')
         else:
             if rank == 0:
                 if args.wandb_project is not None:
@@ -451,17 +451,19 @@ def train(args):
                         f'View W&B project at {wandb.run.get_project_url()}\n'
                         f'View W&B run at {wandb.run.get_url()}'))
                 else:
-                    exp.tg_send_text_with_expname(f'Starting experiment..')
+                    exp.tg_send_text_with_expname('Starting experiment..')
 
             if hasattr(cfg, 'num_epochs'):
                 num_epochs = cfg.num_epochs() if callable(cfg.num_epochs) else cfg.num_epochs
                 logger.info(f'Training for maximum of {num_epochs} epochs')
             else:
-                logger.warning(f'cfg.num_epochs not specified. By default it will train for 1000 epochs or until early stopping is triggered. args.num_epochs is deprecated and must not be used.')
+                logger.warning('cfg.num_epochs not specified. By default it will train for 1000 epochs or until early stopping is triggered. args.num_epochs is deprecated and must not be used.')
                 num_epochs = 1000
 
             for epoch in range(start_epoch, num_epochs):
+                epoch_start_script_start_time = 0.
                 if hasattr(cfg, "epoch_start_script"):
+                    epoch_start_script_start_time = time.time()
                     # structurise
                     train_kit = {}
                     train_kit["model"] = model
@@ -482,6 +484,8 @@ def train(args):
                     data_unpack_funcs = train_kit["data_unpack_funcs"]
                     input_reshape_funcs = train_kit["input_reshape_funcs"]
 
+                    epoch_start_script_elapsed_time = time.time() - epoch_start_script_start_time
+
                 # Shuffle the dataset.
                 loader.shuffle_dataset(train_dataloader, epoch, args.seed)
 
@@ -491,6 +495,7 @@ def train(args):
 
                 sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterions['train'], clip_grad_max_norm, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
                 if rank == 0:#{{{
+                    elapsed_time += epoch_start_script_elapsed_time     # Include epoch start script as training time
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
                     wandb_stat = {'Loss/train': loss, 'Runtime_sec/train': elapsed_time, 'Sample_seen/train': sample_seen, 'Total_samples/train': total_samples}
                     get_tensorboard_writer('train').add_scalar('Loss', loss, epoch)
