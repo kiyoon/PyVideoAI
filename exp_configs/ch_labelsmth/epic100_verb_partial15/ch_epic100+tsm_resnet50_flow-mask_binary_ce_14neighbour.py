@@ -5,3 +5,5 @@ loss_type = 'mask_binary_ce'
 
 num_neighbours = 14
 thr = 0.2
+
+l2_norm = False

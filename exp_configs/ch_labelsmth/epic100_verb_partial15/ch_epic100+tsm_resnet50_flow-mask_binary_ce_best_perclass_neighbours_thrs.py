@@ -10,3 +10,5 @@ thr = 0.2
 
 num_neighbours_per_class = best_num_neighbours_per_class
 thr_per_class = best_thr_per_class
+
+l2_norm = False

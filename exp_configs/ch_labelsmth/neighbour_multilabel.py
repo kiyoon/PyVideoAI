@@ -147,10 +147,10 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
             assert feature_data['clip_features'].shape[1] == 2048
 
             soft_labels_per_num_neighbour = {}    # key: num_neighbours
-            set_num_neighbours = set(num_neighbours_per_class) | set(num_neighbours)
+            set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
             for num_neighbour in set_num_neighbours:
                 with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
-                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbours, l2_norm=l2_norm)
+                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
                 #neighbours_ids = []
                 soft_label = []
                 target_ids = feature_data['video_ids']
