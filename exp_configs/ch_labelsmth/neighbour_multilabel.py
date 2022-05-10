@@ -4,8 +4,7 @@ import pickle
 from pyvideoai.dataloaders import FramesSparsesampleDataset, VideoSparsesampleDataset, GulpSparsesampleDataset
 #from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
-from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
-from pyvideoai.utils.losses.softlabel import MaskedSoftlabelRegressionLoss
+from pyvideoai.utils.losses.softlabel import MaskedBinaryCrossEntropyLoss
 from pyvideoai.utils import loader
 from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss, MinRegressionCombinationLoss
 from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
@@ -103,7 +102,7 @@ def get_criterion(split):
         elif loss_type == 'maskce':
             return MaskedCrossEntropy()
         elif loss_type == 'mask_binary_ce':
-            return MaskedSoftlabelRegressionLoss()
+            return MaskedBinaryCrossEntropyLoss()
         elif loss_type == 'minregcomb':
             return MinRegressionCombinationLoss()
         elif loss_type == 'maskproselflc':
@@ -189,11 +188,13 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
             assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
 
             # format multilabels properly based on loss
-            if loss_type in ['maskce', 'maskproselflc']:
+            if loss_type in ['maskce', 'maskproselflc', 'mask_binary_ce']:
                 logger.info('Turning multilabels to mask out sign (-1) and including one single label')
                 multilabels = -multilabels      # negative numbers mean masks. Mask out the relevant verbs.
                 for idx, label in enumerate(feature_data['labels']):
                     multilabels[idx, label] = 1     # Make the actual single label GT the only label.
+            elif loss_type.lower().startswith('mask'):
+                logger.error(f'You are using the mask loss {loss_type} but the labels are not in mask format!!')
             else:
                 logger.info('Including all multilabels and singlelabel')
 

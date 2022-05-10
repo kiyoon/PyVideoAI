@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from torch import nn
 from .loss import k_one_hot
 class SoftlabelRegressionLoss(nn.Module):
@@ -51,6 +52,39 @@ class MaskedSoftlabelRegressionLoss(nn.Module):
             target_prob = target_prob[mask]
 
             loss = (target_prob * torch.log(pred+self.eps)) + ((1 - target_prob) * torch.log(1-pred+self.eps))
+            loss = -loss.sum()
+            losses.append(loss)
+
+        return sum(losses) / len(losses)
+
+
+class MaskedBinaryCrossEntropyLoss(nn.Module):
+    """Same as MaskedSoftlabelRegressionLoss
+    but numerically stable.
+    """
+    def __init__(self):
+        super().__init__()
+
+
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor):
+        """
+        Inputs:
+            inputs: logits of shape (N, C).
+            targets: targets of shape (N, C). Values lower than zero are considered as mask.
+
+        Outputs:
+            Loss: a scalar tensor, normalised by N.
+        """
+        assert targets.shape == inputs.shape
+
+        #preds = torch.sigmoid(inputs)
+        losses = []
+        for input_logits, target_prob in zip(inputs, targets):
+            mask = target_prob >= 0. - self.eps
+            input_logits = input_logits[mask]
+            target_prob = target_prob[mask]
+
+            loss = (target_prob * F.logsigmoid(input_logits)) + ((1 - target_prob) * F.logsigmoid(-input_logits))
             loss = -loss.sum()
             losses.append(loss)
 
