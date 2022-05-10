@@ -1,7 +1,7 @@
 import os
 import pickle
 
-from pyvideoai.dataloaders import FramesSparsesampleDataset, VideoSparsesampleDataset, GulpSparsesampleDataset
+from pyvideoai.dataloaders import FramesSparsesampleDataset, FramesDensesampleDataset, VideoSparsesampleDataset, GulpSparsesampleDataset
 from pyvideoai.utils.losses.proselflc import ProSelfLC
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
@@ -24,7 +24,7 @@ def batch_size():
     '''
     if input_type == 'RGB_video':
         divide_batch_size = 1
-    elif input_type == 'flow':
+    elif input_type in ['flow', 'denseflow']:
         divide_batch_size = 4       # For optical flow, you read 5 times as many frames, so it will be a bottleneck if you use too big batch size.
     elif input_type in ['gulp_rgb', 'gulp_flow']:
         divide_batch_size = 1
@@ -226,26 +226,25 @@ def get_input_reshape_func(split):
     return _dataloader_shape_to_model_input_shape
 
 
-def _unpack_data(data):
+def _sparse_unpack_data(data):
     '''
     From dataloader returning values to (inputs, uids, labels, [reserved]) format
     '''
-    inputs, uids, labels, spatial_idx, _, _ = data
-    return inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': -1 *torch.ones_like(labels)}
+    inputs, uids, labels, spatial_idx, _, frame_indices = data
+    return inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': -1 *torch.ones_like(labels), 'frame_indices': frame_indices}
 
+def _dense_unpack_data(data):
+    '''
+    From dataloader returning values to (inputs, uids, labels, [reserved]) format
+    '''
+    inputs, uids, labels, spatial_idx, temporal_idx, _, frame_indices = data
+    return inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': temporal_idx, 'frame_indices': frame_indices}
 
 def get_data_unpack_func(split):
-    '''
-    if split == 'train':
-        return _unpack_data
-    elif split == 'val':
-        return _unpack_data
-    elif split == 'multicropval':
-        return _unpack_data
+    if split == 'multicropval_strided':
+        return _dense_unpack_data
     else:
-        assert False, 'unknown split'
-    '''
-    return _unpack_data
+        return _sparse_unpack_data
 
 
 def _get_torch_dataset(csv_path, split, class_balanced_sampling):
@@ -310,6 +309,34 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
                 flow_folder_y = flow_folder_y,
                 video_id_to_label = video_id_to_label,
                 )
+    elif input_type == 'denseflow':     # dense ensemble
+        path_prefix=dataset_cfg.flowframes_dir
+        flow = 'RR'
+        flow_neighbours = 5
+        flow_folder_x = 'u'
+        flow_folder_y = 'v'
+        _test_num_spatial_crops = 1
+        return FramesDensesampleDataset(csv_path, mode,
+                input_frame_length,
+                sampling_rate=1,
+                test_ensemble_mode = 'fixed_stride',
+                test_ensemble_stride = 4,
+                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
+                train_horizontal_flip=dataset_cfg.horizontal_flip,
+                test_scale = _test_scale,
+                test_num_spatial_crops=_test_num_spatial_crops,
+                crop_size=crop_size,
+                mean = model_cfg.input_mean,
+                std = model_cfg.input_std,
+                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
+                greyscale=False,
+                path_prefix=path_prefix,
+                flow = flow,
+                flow_neighbours = flow_neighbours,
+                flow_folder_x = flow_folder_x,
+                flow_folder_y = flow_folder_y,
+                video_id_to_label = video_id_to_label,
+                )
     elif input_type == 'gulp_rgb':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_rgb_dirname[split])
 
@@ -359,6 +386,8 @@ def get_torch_dataset(split, class_balanced_sampling=False):
     if input_type == 'RGB_video':
         split_dir = dataset_cfg.video_split_file_dir
     elif input_type == 'flow':
+        split_dir = dataset_cfg.flowframes_split_file_dir
+    elif input_type == 'denseflow':
         split_dir = dataset_cfg.flowframes_split_file_dir
     elif input_type == 'gulp_rgb':
         split_dir = dataset_cfg.gulp_rgb_split_file_dir

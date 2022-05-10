@@ -283,7 +283,7 @@ def strided_frame_indices(num_video_frames, num_sample_frames, sampling_rate, cl
 
     # from now on, num_video_frames >= sample_span
     start_idx = stride * clip_idx
-    sampled_frame_indices = [video_frame_indices[idx] for idx in range(start_idx, start_idx+sample_span, sampling_rate)]
+    sampled_frame_indices = [video_frame_indices[idx] for idx in range(start_idx, start_idx+sampling_rate*num_sample_frames, sampling_rate)]
 
     return _add_neighbour_frames(sampled_frame_indices, num_neighbours)
 
@@ -322,7 +322,7 @@ def dense_frame_indices(num_video_frames, num_sample_frames, sampling_rate, clip
             # sample the whole temporal coverage (include clip starting from frame 0 and the last frame possible)
             start_idx = round((len(start_idx_choices)-1) / (num_clips-1) * clip_idx)
 
-    sampled_frame_indices = [video_frame_indices[idx] for idx in range(start_idx, start_idx+sample_span, sampling_rate)]
+    sampled_frame_indices = [video_frame_indices[idx] for idx in range(start_idx, start_idx+sampling_rate*num_sample_frames, sampling_rate)]
 
     #assert len(sampled_frame_indices) == num_sample_frames
 
