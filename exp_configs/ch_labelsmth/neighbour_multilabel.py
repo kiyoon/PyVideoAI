@@ -5,6 +5,7 @@ from pyvideoai.dataloaders import FramesSparsesampleDataset, VideoSparsesampleDa
 #from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.softlabel import SoftlabelRegressionLoss
+from pyvideoai.utils.losses.softlabel import MaskedSoftlabelRegressionLoss
 from pyvideoai.utils import loader
 from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss, MinRegressionCombinationLoss
 from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
@@ -65,6 +66,17 @@ sample_index_code = 'pyvideoai'
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
 loss_type = 'mince'     # mince / maskce / minregcomb / maskproselflc
+                        # mask_binary_ce
+
+# Neighbour search settings for pseudo labelling
+# int
+num_neighbours = 10
+thr = 0.2
+# If you want the parameters to be different per class.
+# dictionary with key being class index, with size num_classes.
+# If key not found, use the default setting above.
+num_neighbours_per_class = {}
+thr_per_class = {}
 
 l2_norm = True
 save_features = True
@@ -90,6 +102,8 @@ def get_criterion(split):
             return MinCEMultilabelLoss()
         elif loss_type == 'maskce':
             return MaskedCrossEntropy()
+        elif loss_type == 'mask_binary_ce':
+            return MaskedSoftlabelRegressionLoss()
         elif loss_type == 'minregcomb':
             return MinRegressionCombinationLoss()
         elif loss_type == 'maskproselflc':
@@ -122,7 +136,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
 
         data_unpack_func = get_data_unpack_func(feature_extract_split)
         input_reshape_func = get_input_reshape_func(feature_extract_split)
-        feature_data, _, _, _, eval_log_str = extract_features(model_cfg.feature_extract_model(train_kit["model"]), train_testmode_dataloader, data_unpack_func, dataset_cfg.num_classes, feature_extract_split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
+        feature_data, _, _, _, eval_log_str = extract_features(model_cfg.feature_extract_model(train_kit["model"], 'features'), train_testmode_dataloader, data_unpack_func, dataset_cfg.num_classes, feature_extract_split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
         # feature_data['video_ids'] feature_data['labels'] feature_data['clip_features']
 
         if rank == 0:
@@ -131,26 +145,50 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
                 feature_data['clip_features'] = np.mean(feature_data['clip_features'], axis=1)
 
             assert feature_data['clip_features'].shape[1] == 2048
-            kn = 10
-            thr = 0.2
-            with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
-                nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], kn, l2_norm=l2_norm)
-            #neighbours_ids = []
-            soft_labels = []
-            target_ids = feature_data['video_ids']
-            source_ids = feature_data['video_ids']
 
-            for target_idx, target_id in enumerate(target_ids):
-                #n_ids = [source_ids[x] for x in features_neighbours[target_idx]]
-                sl = nc_freq[target_idx]
-                sl = sl / sl.sum()
-                #neighbours_ids.append(n_ids)
-                soft_labels.append(sl)
+            soft_labels_per_num_neighbour = {}    # key: num_neighbours
+            set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
+            for num_neighbour in set_num_neighbours:
+                with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
+                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
+                #neighbours_ids = []
+                soft_label = []
+                target_ids = feature_data['video_ids']
+                source_ids = feature_data['video_ids']
 
-            #neighbours_ids = np.array(neighbours_ids)
-            soft_labels = np.array(soft_labels)
+                for target_idx, target_id in enumerate(target_ids):
+                    #n_ids = [source_ids[x] for x in features_neighbours[target_idx]]
+                    sl = nc_freq[target_idx]
+                    sl = sl / sl.sum()
+                    #neighbours_ids.append(n_ids)
+                    soft_label.append(sl)
 
-            multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
+                #neighbours_ids = np.array(neighbours_ids)
+                soft_labels_per_num_neighbour[num_neighbour] = np.array(soft_label)
+
+            # generate multilabels
+            # For each class, use different soft labels generated with different num_neighbours and thr.
+            #multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
+            multilabels = []
+            for target_idx, singlelabel in enumerate(feature_data['labels']):
+                if singlelabel in num_neighbours_per_class:
+                    soft_label = soft_labels_per_num_neighbour[num_neighbours_per_class[singlelabel]][target_idx]
+                else:
+                    soft_label = soft_labels_per_num_neighbour[num_neighbours][target_idx]
+
+                if singlelabel in thr_per_class:
+                    th = thr_per_class[singlelabel]
+                else:
+                    th = thr
+
+                multilabel = (soft_label > th).astype(int)
+                multilabel[singlelabel] = 1
+                multilabels.append(multilabel)
+
+            multilabels = np.stack(multilabels)
+            assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
+
+            # format multilabels properly based on loss
             if loss_type in ['maskce', 'maskproselflc']:
                 logger.info('Turning multilabels to mask out sign (-1) and including one single label')
                 multilabels = -multilabels      # negative numbers mean masks. Mask out the relevant verbs.
@@ -163,7 +201,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
                 logger.info(f"Saving features, neighbours, and multilabels to {os.path.join(exp.predictions_dir, 'features_neighbours')}")
                 os.makedirs(os.path.join(exp.predictions_dir, 'features_neighbours'), exist_ok = True)
 
-                feature_data['kn'] = kn
+                feature_data['kn'] = num_neighbours
                 feature_data['thr'] = thr
                 feature_data['nc_freq'] = nc_freq
                 feature_data['multilabels'] = multilabels
@@ -482,16 +520,18 @@ last_activation = 'softmax'   # or, you can pass a callable function like `torch
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
+from pyvideoai.metrics.mAP import Clip_mAPMetric
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
 from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
 from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
 from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
-from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set
+from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set, get_singlemultilabel
 from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict
 video_id_to_multilabel = read_multilabel()
 _, epic_video_id_to_label = get_verb_uid2label_dict(dataset_cfg.annotations_root)
 holdout_video_id_to_label = get_val_holdout_set(epic_video_id_to_label, video_id_to_multilabel)
+video_id_to_singlemultilabel = get_singlemultilabel(epic_video_id_to_label, video_id_to_multilabel)
 
 best_metric = ClipAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval')
 metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
@@ -509,6 +549,13 @@ metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
             ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
             ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
             ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            Clip_mAPMetric(activation='sigmoid', exclude_classes_less_sample_than=20, video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            Clip_mAPMetric(activation='sigmoid', exclude_classes_less_sample_than=20, video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
