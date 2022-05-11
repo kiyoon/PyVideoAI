@@ -80,7 +80,7 @@ class MaskedBinaryCrossEntropyLoss(nn.Module):
         #preds = torch.sigmoid(inputs)
         losses = []
         for input_logits, target_prob in zip(inputs, targets):
-            mask = target_prob >= 0. - self.eps
+            mask = target_prob >= 0. - 1e-6
             input_logits = input_logits[mask]
             target_prob = target_prob[mask]
 
