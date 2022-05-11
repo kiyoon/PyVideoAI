@@ -41,6 +41,12 @@ loss_type = 'crossentropy'  # crossentropy, labelsmooth, proselflc, focal
                             # entropy_maximise
                             # mask_binary_ce
 
+loss_types_pseudo_generation = ['maskce', 'mask_binary_ce', 'maskproselflc',
+            'pseudo_single_binary_ce',
+            ]
+loss_types_masked_pseudo = ['maskce', 'mask_binary_ce', 'maskproselflc',
+        ]
+
 # Neighbour search settings for pseudo labelling
 # int
 num_neighbours = 10
@@ -75,9 +81,7 @@ def generate_train_pseudo_labels():
     world_size = get_world_size()
     input_feature_dim = get_input_feature_dim()
 
-    if loss_type in ['maskce', 'mask_binary_ce', 'maskproselflc',
-            'pseudo_single_binary_ce',
-            ]:
+    if loss_type in loss_types_pseudo_generation:
         if rank == 0:
             if feature_input_type == 'RGB':
                 feature_pickle_path = dataset_cfg.RGB_features_pickle_path['train']
@@ -195,7 +199,7 @@ def generate_train_pseudo_labels():
             assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
 
             # format multilabels properly based on loss
-            if loss_type in ['maskce', 'maskproselflc']:
+            if loss_type in loss_types_masked_pseudo:
                 logger.info('Turning multilabels to mask out sign (-1) and including one single label')
                 multilabels = -multilabels      # negative numbers mean masks. Mask out the relevant verbs.
                 for idx, label in enumerate(feature_data['labels']):
@@ -474,19 +478,45 @@ last_activation = 'softmax'   # or, you can pass a callable function like `torch
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
+from pyvideoai.metrics.mAP import Clip_mAPMetric
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
 from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
 from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
-from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric
-from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel
+from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
+from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set, get_singlemultilabel
+from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict
 video_id_to_multilabel = read_multilabel()
-best_metric = ClipAccuracyMetric(topk=(1,5))
-metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(), ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'])],
-        'val': [best_metric, ClipMeanPerclassAccuracyMetric(), ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail']),
-            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip'),
-            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip'),
+_, epic_video_id_to_label = get_verb_uid2label_dict(dataset_cfg.annotations_root)
+holdout_video_id_to_label = get_val_holdout_set(epic_video_id_to_label, video_id_to_multilabel)
+video_id_to_singlemultilabel = get_singlemultilabel(epic_video_id_to_label, video_id_to_multilabel)
+
+best_metric = ClipAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval')
+metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
+            ClipMeanPerclassAccuracyMetric(exclude_classes_less_sample_than=20),
+            ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'])],
+        'val': [best_metric,
+            ClipAccuracyMetric(topk=(5,), video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
+            ClipMeanPerclassAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
+            ClipMeanPerclassAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval', exclude_classes_less_sample_than=20),
+            ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
+            ClipAccuracyMetric(topk=(1,5)),
+            ClipMeanPerclassAccuracyMetric(),
+            ClipMeanPerclassAccuracyMetric(exclude_classes_less_sample_than=20),
+            ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail']),
+            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            Clip_mAPMetric(activation='sigmoid', exclude_classes_less_sample_than=20, video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
+            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            Clip_mAPMetric(activation='sigmoid', exclude_classes_less_sample_than=20, video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
             ],
+        'traindata_testmode': [ClipAccuracyMetric()],
+        'trainpartialdata_testmode': [ClipAccuracyMetric()],
         'multicropval': [ClipAccuracyMetric(), VideoAccuracyMetric(topk=(1,5), activation=last_activation)],
         }
 
