@@ -461,7 +461,6 @@ def train(args):
                 num_epochs = 1000
 
             for epoch in range(start_epoch, num_epochs):
-                epoch_start_script_start_time = 0.
                 if hasattr(cfg, "epoch_start_script"):
                     epoch_start_script_start_time = time.time()
                     # structurise
@@ -485,6 +484,8 @@ def train(args):
                     input_reshape_funcs = train_kit["input_reshape_funcs"]
 
                     epoch_start_script_elapsed_time = time.time() - epoch_start_script_start_time
+                else:
+                    epoch_start_script_elapsed_time = 0.
 
                 # Shuffle the dataset.
                 loader.shuffle_dataset(train_dataloader, epoch, args.seed)

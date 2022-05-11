@@ -42,7 +42,7 @@ class MaskedSoftlabelRegressionLoss(nn.Module):
         Outputs:
             Loss: a scalar tensor, normalised by N.
         """
-        assert targets.shape == inputs.shape
+        assert targets.shape == inputs.shape, f'Unexpected shapes. {inputs.shape = } and {targets.shape = }'
 
         preds = torch.sigmoid(inputs)
         losses = []
@@ -75,7 +75,7 @@ class MaskedBinaryCrossEntropyLoss(nn.Module):
         Outputs:
             Loss: a scalar tensor, normalised by N.
         """
-        assert targets.shape == inputs.shape
+        assert targets.shape == inputs.shape, f'Unexpected shapes. {inputs.shape = } and {targets.shape = }'
 
         #preds = torch.sigmoid(inputs)
         losses = []

@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 from pyvideoai.utils.losses.proselflc import ProSelfLC
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
+from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
 from pyvideoai.utils.losses.softlabel import MaskedBinaryCrossEntropyLoss
 from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits, WeakAssumeNegativeLossWithLogits, BinaryLabelSmoothLossWithLogits, BinaryNegativeLabelSmoothLossWithLogits, EntropyMaximiseLossWithLogits, BinaryFocalLossWithLogits
 from kornia.losses import FocalLoss
@@ -33,7 +34,6 @@ def val_batch_size():
     return batch_size() if callable(batch_size) else batch_size
 
 feature_input_type = 'RGB'          # RGB / flow / concat_RGB_flow
-#train_label_type = '5neighbours'    # epic100_original, 5neighbours
 loss_type = 'crossentropy'  # crossentropy, labelsmooth, proselflc, focal
                             # maskce
                             # pseudo_single_binary_ce
@@ -57,7 +57,7 @@ thr = 0.2
 num_neighbours_per_class = {}
 thr_per_class = {}
 
-l2_norm = True
+l2_norm = False
 
 
 #clip_grad_max_norm = 20
@@ -76,81 +76,88 @@ import pyvideoai.utils.distributed as du
 from exp_configs.ch_labelsmth.epic100_verb.features_study import get_neighbours
 import exp_configs
 
+def get_features(split):
+    input_feature_dim = get_input_feature_dim()
+    if feature_input_type == 'RGB':
+        feature_pickle_path = dataset_cfg.RGB_features_pickle_path[split]
+        logger.info(f'Generating train pseudo labels using {feature_input_type} features at: {feature_pickle_path}')
+
+        with open(feature_pickle_path, 'rb') as f:
+            d = pickle.load(f)
+
+        video_ids, labels, features = d['video_ids'], d['labels'], d['clip_features']
+        if features.shape[1] != input_feature_dim:
+            # features are not averaged. Average now
+            features = np.mean(features, axis=1)
+
+    elif feature_input_type == 'flow':
+        feature_pickle_path = dataset_cfg.flow_features_pickle_path[split]
+        logger.info(f'Generating train pseudo labels using {feature_input_type} features at: {feature_pickle_path}')
+
+        with open(feature_pickle_path, 'rb') as f:
+            d = pickle.load(f)
+
+        video_ids, labels, features = d['video_ids'], d['labels'], d['clip_features']
+        if features.shape[1] != input_feature_dim:
+            # features are not averaged. Average now
+            features = np.mean(features, axis=1)
+
+
+    elif feature_input_type == 'concat_RGB_flow':
+        RGB_feature_pickle_path = dataset_cfg.RGB_features_pickle_path[split]
+        flow_feature_pickle_path = dataset_cfg.flow_features_pickle_path[split]
+        logger.info(f'Generating train pseudo labels using {feature_input_type} features at: {RGB_feature_pickle_path} and {flow_feature_pickle_path}')
+
+        with open(RGB_feature_pickle_path, 'rb') as f:
+            d = pickle.load(f)
+
+        RGB_video_ids, RGB_labels, RGB_features = d['video_ids'], d['labels'], d['clip_features']
+        if RGB_features.shape[1] != 2048:
+            # features are not averaged. Average now
+            RGB_features = np.mean(RGB_features, axis=1)
+
+        with open(flow_feature_pickle_path, 'rb') as f:
+            d = pickle.load(f)
+
+        flow_video_ids, flow_labels, flow_features = d['video_ids'], d['labels'], d['clip_features']
+        assert RGB_video_ids.shape[0] == RGB_labels.shape[0] == RGB_features.shape[0] == flow_video_ids.shape[0] == flow_labels.shape[0] == flow_features.shape[0]
+
+        if flow_features.shape[1] != 2048:
+            # features are not averaged. Average now
+            flow_features = np.mean(flow_features, axis=1)
+
+        # Concatenate RGB and flow features.
+        flow_video_id_to_idx = {}
+        for idx, video_id in enumerate(flow_video_ids):
+            assert video_id not in flow_video_id_to_idx
+            flow_video_id_to_idx[video_id] = idx
+
+        # Loop over RGB features and find flow features. The array ordering may be different.
+        concat_RGB_flow_features = np.zeros((RGB_features.shape[0], input_feature_dim), dtype=RGB_features.dtype)
+        for idx, (video_id, RGB_feature) in enumerate(zip(RGB_video_ids, RGB_features)):
+            flow_idx = flow_video_id_to_idx[video_id]
+            concat_feature = np.concatenate((RGB_feature, flow_features[flow_idx]))
+            concat_RGB_flow_features[idx] = concat_feature
+
+        video_ids, labels, features = RGB_video_ids, RGB_labels, concat_RGB_flow_features
+
+    else:
+        raise ValueError(f'Not recognised {feature_input_type = }')
+
+    assert features.shape[1] == input_feature_dim
+    assert video_ids.shape[0] == labels.shape[0] == features.shape[0]
+
+    return video_ids, labels, features
+
+
 def generate_train_pseudo_labels():
     rank = get_rank()
     world_size = get_world_size()
     input_feature_dim = get_input_feature_dim()
 
+    video_ids, labels, features = get_features('train')
     if loss_type in loss_types_pseudo_generation:
         if rank == 0:
-            if feature_input_type == 'RGB':
-                feature_pickle_path = dataset_cfg.RGB_features_pickle_path['train']
-                logger.info(f'Generating train pseudo labels using {feature_input_type} features at: {feature_pickle_path}')
-
-                with open(feature_pickle_path, 'rb') as f:
-                    d = pickle.load(f)
-
-                video_ids, labels, features = d['video_ids'], d['labels'], d['clip_features']
-                if features.shape[1] != input_feature_dim:
-                    # features are not averaged. Average now
-                    features = np.mean(features, axis=1)
-
-            elif feature_input_type == 'flow':
-                feature_pickle_path = dataset_cfg.flow_features_pickle_path['train']
-                logger.info(f'Generating train pseudo labels using {feature_input_type} features at: {feature_pickle_path}')
-
-                with open(feature_pickle_path, 'rb') as f:
-                    d = pickle.load(f)
-
-                video_ids, labels, features = d['video_ids'], d['labels'], d['clip_features']
-                if features.shape[1] != input_feature_dim:
-                    # features are not averaged. Average now
-                    features = np.mean(features, axis=1)
-
-
-            elif feature_input_type == 'concat_RGB_flow':
-                RGB_feature_pickle_path = dataset_cfg.RGB_features_pickle_path['train']
-                flow_feature_pickle_path = dataset_cfg.flow_features_pickle_path['train']
-                logger.info(f'Generating train pseudo labels using {feature_input_type} features at: {RGB_feature_pickle_path} and {flow_feature_pickle_path}')
-
-                with open(RGB_feature_pickle_path, 'rb') as f:
-                    d = pickle.load(f)
-
-                RGB_video_ids, RGB_labels, RGB_features = d['video_ids'], d['labels'], d['clip_features']
-                if RGB_features.shape[1] != 2048:
-                    # features are not averaged. Average now
-                    RGB_features = np.mean(RGB_features, axis=1)
-
-                with open(flow_feature_pickle_path, 'rb') as f:
-                    d = pickle.load(f)
-
-                flow_video_ids, flow_labels, flow_features = d['video_ids'], d['labels'], d['clip_features']
-                assert RGB_video_ids.shape[0] == RGB_labels.shape[0] == RGB_features.shape[0] == flow_video_ids.shape[0] == flow_labels.shape[0] == flow_features.shape[0]
-
-                if flow_features.shape[1] != 2048:
-                    # features are not averaged. Average now
-                    flow_features = np.mean(flow_features, axis=1)
-
-                # Concatenate RGB and flow features.
-                flow_video_id_to_idx = {}
-                for idx, video_id in enumerate(flow_video_ids):
-                    assert video_id not in flow_video_id_to_idx
-                    flow_video_id_to_idx[video_id] = idx
-
-                # Loop over RGB features and find flow features. The array ordering may be different.
-                concat_RGB_flow_features = np.zeros((RGB_features.shape[0], input_feature_dim), dtype=float)
-                for idx, video_id, RGB_feature in enumerate(zip(RGB_video_ids, RGB_features)):
-                    flow_idx = flow_video_id_to_idx[video_id]
-                    concat_feature = np.concatenate((RGB_feature, flow_features[flow_idx]))
-                    concat_RGB_flow_features[idx] = concat_feature
-
-                video_ids, labels, features = RGB_video_ids, RGB_labels, concat_RGB_flow_features
-
-            else:
-                raise ValueError(f'Not recognised {feature_input_type = }')
-
-            assert features.shape[1] == input_feature_dim
-            assert video_ids.shape[0] == labels.shape[0] == features.shape[0]
             feature_data = {'video_ids': video_ids,
                     'labels': labels,
                     'clip_features': features,
@@ -238,18 +245,15 @@ def generate_train_pseudo_labels():
         # Update video_id_to_label
         logger.info(f'New {multilabels = }')
         logger.info(f'For video IDs = {source_ids}')
-        video_id_to_label = {}
-        for video_id, label in zip(source_ids, multilabels):
-            video_id_to_label[video_id] = label
 
-        return video_id_to_label
+        return source_ids, multilabels, features
 
     elif loss_type.lower().startswith('mask') or loss_type.lower().startswith('pseudo'):
         logger.error(f'loss_type is {loss_type} but not generating pseudo labels?')
-        return None
+        return video_ids, labels, features
     else:
         logger.info('NOT generating pseudo labels')
-        return None
+        return video_ids, labels, features
 
 
 
@@ -298,7 +302,15 @@ def get_criterion(split):
     elif loss_type == 'entropy_maximise':
         return EntropyMaximiseLossWithLogits()
     elif loss_type == 'mask_binary_ce':
-        return MaskedBinaryCrossEntropyLoss()
+        if split == 'train':
+            return MaskedBinaryCrossEntropyLoss()
+        else:
+            return AssumeNegativeLossWithLogits()
+    elif loss_type == 'maskce':
+        if split == 'train':
+            return MaskedCrossEntropy()
+        else:
+            return torch.nn.CrossEntropyLoss()
     else:
         return ValueError(f'Wrong loss type: {loss_type}')
 
@@ -411,40 +423,10 @@ def get_data_unpack_func(split):
 def get_torch_dataset(split):
 
     if split == 'train':
-
-        if train_label_type == '5neighbours':
-            softlabel_pickle_path = '/home/kiyoon/storage/tsm_flow_neigh/5-neighbours-from-features_epoch_0009_traindata_testmode_oneclip.pkl'
-            with open(softlabel_pickle_path, 'rb') as f:
-                d = pickle.load(f)
-            video_ids_soft, soft_labels = d['query_ids'], d['soft_labels']
-            sort_idx = np.argsort(video_ids_soft)
-
-            video_ids_soft = video_ids_soft[sort_idx]
-            labels = soft_labels[sort_idx]
-
-            feature_pickle_path = '/home/kiyoon/storage/experiments_ais2/experiments_labelsmooth/epic100_verb/ch_epic100.tsm_resnet50_flow/onehot/version_002/predictions/features_epoch_0009_traindata_testmode_oneclip.pkl'
-            with open(feature_pickle_path, 'rb') as f:
-                d = pickle.load(f)
-
-            video_ids, features = d['video_ids'], d['clip_features']
-            sort_idx = np.argsort(video_ids)
-            video_ids = video_ids[sort_idx]
-            features = features[sort_idx]
-
-            assert np.all(video_ids == video_ids_soft)
-        elif train_label_type == 'epic100_original':
-            feature_pickle_path = '/home/kiyoon/storage/experiments_ais2/experiments_labelsmooth/epic100_verb/ch_epic100.tsm_resnet50_flow/onehot/version_002/predictions/features_epoch_0009_traindata_testmode_oneclip.pkl'
-            with open(feature_pickle_path, 'rb') as f:
-                d = pickle.load(f)
-
-            video_ids, labels, features = d['video_ids'], d['labels'], d['clip_features']
+        video_ids, labels, features = generate_train_pseudo_labels()
 
     elif split == 'val':
-        feature_pickle_path = '/home/kiyoon/storage/experiments_ais2/experiments_labelsmooth/epic100_verb/ch_epic100.tsm_resnet50_flow/onehot/version_002/predictions/features_epoch_0009_val_oneclip.pkl'
-        with open(feature_pickle_path, 'rb') as f:
-            d = pickle.load(f)
-
-        video_ids, labels, features = d['video_ids'], d['labels'], d['clip_features']
+        video_ids, labels, features = get_features('val')
 
     else:
         raise ValueError(f'Only train and val splits are supported. Got {split}')
