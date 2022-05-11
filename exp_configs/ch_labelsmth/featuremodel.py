@@ -20,6 +20,9 @@ num_epochs = int(os.getenv('VAI_NUM_EPOCHS', default=500))
 def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
+    return int(os.getenv('VAI_BATCHSIZE', 64))
+
+def val_batch_size():
     def default():
         devices=list(range(torch.cuda.device_count()))
         vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
@@ -28,10 +31,7 @@ def batch_size():
         elif vram > 10e+9:
             return 1024
         return 64
-    return int(os.getenv('VAI_BATCHSIZE', default()))
-
-def val_batch_size():
-    return batch_size() if callable(batch_size) else batch_size
+    return default()
 
 feature_input_type = 'RGB'          # RGB / flow / concat_RGB_flow
 loss_type = 'crossentropy'  # crossentropy, labelsmooth, proselflc, focal
