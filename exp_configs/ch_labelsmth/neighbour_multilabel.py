@@ -359,8 +359,8 @@ def _unpack_data(data):
     '''
     From dataloader returning values to (inputs, uids, labels, [reserved]) format
     '''
-    inputs, uids, labels, spatial_idx, _, _ = data
-    return inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': -1 *torch.ones_like(labels)}
+    inputs, uids, labels, spatial_idx, _, frame_indices = data
+    return inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': -1 *torch.ones_like(labels), 'frame_indices': frame_indices}
 
 
 def get_data_unpack_func(split):
