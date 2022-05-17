@@ -1,5 +1,4 @@
 import torch
-import numpy as np
 from .metric import Metric
 
 EPS = 1e-6
@@ -55,7 +54,7 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         if self.split == 'train':
             prefix = ''
@@ -70,7 +69,7 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         return self.logging_msg_iter()
 
@@ -78,14 +77,14 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
     def plot_legend_labels(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         if self.split == 'train':
-            return f'Training top1 multilabel accuracy'
+            return 'Training top1 multilabel accuracy'
         elif self.split == 'val':
-            return f'Validation top1 multilabel accuracy'
+            return 'Validation top1 multilabel accuracy'
         elif self.split == 'multicropval':
-            return f'Multicrop validation top1 multilabel accuracy'
+            return 'Multicrop validation top1 multilabel accuracy'
         else:
             return f'{self.split} top1 multilabel accuracy'
 
@@ -93,12 +92,12 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
     def plot_file_basenames(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
         return 'top1_multilabel_accuracy'
 
-    
+
     @staticmethod
     def is_better(value_1, value_2):
         """Metric comparison function
@@ -109,7 +108,7 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
         return:
             True if value_1 is better. False if value_2 is better or they're equal.
         """
-        return value_1 > value_2 
+        return value_1 > value_2
 
     def __len__(self):
         return self.num_seen_samples
@@ -144,7 +143,7 @@ class ClipTopkMultilabelAccuracyMetric(Metric):
             if num_labels + num_nonlabels != self.num_classes:
                 raise ValueError(('Label in Top-K Multilabel Accuracy metric has to be ones and zeros but got something else.\n'
                 f'Num_ones = {num_labels}, num_zeros = {num_nonlabels}, num_classes = {self.num_classes}'))
-            
+
             self.num_seen_samples += 1
             _, top_classes = torch.topk(pred, num_labels)
             for top_class in top_classes:
@@ -172,7 +171,7 @@ class ClipTopkMultilabelAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         if self.split == 'train':
             prefix = ''
@@ -187,7 +186,7 @@ class ClipTopkMultilabelAccuracyMetric(Metric):
         """
         Return:
             None to skip logging this metric
-            or a single str that combines all self.last_calculated_metrics 
+            or a single str that combines all self.last_calculated_metrics
         """
         return self.logging_msg_iter()
 
@@ -195,14 +194,14 @@ class ClipTopkMultilabelAccuracyMetric(Metric):
     def plot_legend_labels(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         if self.split == 'train':
-            return f'Training top-k multilabel accuracy'
+            return 'Training top-k multilabel accuracy'
         elif self.split == 'val':
-            return f'Validation top-k multilabel accuracy'
+            return 'Validation top-k multilabel accuracy'
         elif self.split == 'multicropval':
-            return f'Multicrop validation top-k multilabel accuracy'
+            return 'Multicrop validation top-k multilabel accuracy'
         else:
             return f'{self.split} top-k multilabel accuracy'
 
@@ -210,12 +209,12 @@ class ClipTopkMultilabelAccuracyMetric(Metric):
     def plot_file_basenames(self):
         """
         Return:
-            either tuple or a single str 
+            either tuple or a single str
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
         return 'topk_multilabel_accuracy'
 
-    
+
     @staticmethod
     def is_better(value_1, value_2):
         """Metric comparison function
@@ -226,8 +225,7 @@ class ClipTopkMultilabelAccuracyMetric(Metric):
         return:
             True if value_1 is better. False if value_2 is better or they're equal.
         """
-        return value_1 > value_2 
+        return value_1 > value_2
 
     def __len__(self):
         return self.num_seen_samples
-
