@@ -1,7 +1,5 @@
 import torch
 from .metric import Metric
-import logging
-logger = logging.getLogger(__name__)
 
 EPS = 1e-6
 
@@ -65,7 +63,6 @@ class ClipGroupedTop1MultilabelAccuracyMetric(Metric):
 
 
     def calculate_metrics(self):
-        logger.info(f'{self.num_seen_samples = }')
         self.last_calculated_metrics = tuple(tp / sample_count if sample_count > 0 else 0. for tp, sample_count in zip(self.num_true_positives, self.num_seen_samples))
 
 
