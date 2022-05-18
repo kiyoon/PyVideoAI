@@ -153,7 +153,6 @@ def get_features(split):
 def generate_train_pseudo_labels():
     rank = get_rank()
     world_size = get_world_size()
-    input_feature_dim = get_input_feature_dim()
 
     video_ids, labels, features = get_features('train')
     if loss_type in loss_types_pseudo_generation:
