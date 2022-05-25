@@ -49,7 +49,7 @@ def get_label_change_info(features_neighbours_dir):
 def main():
     parser = get_parser()
     args = parser.parse_args()
-    epochs, video_ids, gt_labels, pseudo_soft_labels= get_label_change_info(args.features_neighbours_dir)
+    epochs, video_ids, gt_labels, pseudo_soft_labels = get_label_change_info(args.features_neighbours_dir)
     
     verb_class_keys = EPIC100_get_class_keys(args.epic100_annotations_root, 'verb')
     _, video_id_to_narration_id = epic_narration_id_to_unique_id(args.epic100_annotations_root)  

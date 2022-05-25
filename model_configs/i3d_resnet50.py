@@ -1,5 +1,4 @@
 from pyvideoai.models.slowfast.video_model_builder import ResNetModel
-from torch import optim
 
 import torch.distributed as dist
 from pyvideoai.utils import loader

@@ -1,7 +1,6 @@
 from .task import Task
 from torch import nn
 
-from ..metrics import Metrics
 from ..metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 from ..metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 from ..metrics.mAP import Clip_mAPMetric, Video_mAPMetric
@@ -26,7 +25,7 @@ class SingleLabelClassificationTask(Task):
 
     def _default_predictions_gatherers(self, activation):
 
-        return {'val': ClipPredictionsGatherer(activation),
+        return {'val': ClipPredictionsGatherer(activation=activation),
                 'multicropval': VideoPredictionsGatherer(activation=activation),
                 }
 
@@ -39,15 +38,15 @@ class MultiLabelClassificationTask(Task):
         return 'sigmoid'
 
     def _default_metrics(self, activation):
-        best_metric = Clip_mAPMetric(activation)
-        metrics_dict = {'train': [Clip_mAPMetric(activation)],
+        best_metric = Clip_mAPMetric(activation=activation)
+        metrics_dict = {'train': [Clip_mAPMetric(activation=activation)],
                 'val': [best_metric],
-                'multicropval': [Clip_mAPMetric(activation), Video_mAPMetric(activation)],
+                'multicropval': [Clip_mAPMetric(activation=activation), Video_mAPMetric(activation=activation)],
                 }
         return best_metric, metrics_dict
 
     def _default_predictions_gatherers(self, activation):
 
-        return {'val': ClipPredictionsGatherer(activation),
-                'multicropval': VideoPredictionsGatherer(activation),
+        return {'val': ClipPredictionsGatherer(activation=activation),
+                'multicropval': VideoPredictionsGatherer(activation=activation),
                 }

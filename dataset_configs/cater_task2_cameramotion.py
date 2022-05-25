@@ -1,6 +1,4 @@
 import os
-import numpy as np
-import pandas as pd
 
 from video_datasets_api.cater.definitions import NUM_CLASSES_TASK2 as num_classes
 from video_datasets_api.cater.class_keys import class_keys_task2

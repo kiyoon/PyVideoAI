@@ -38,7 +38,7 @@ test_num_spatial_crops = 3
 input_channel_num=[3]   # RGB
 
 greyscale=False
-sampling_mode = 'RGB'   # RGB, TC, GreyST
+sampling_mode = 'RGB'   # RGB, TC, TCPlus2, GreyST
 base_learning_rate = 1e-5      # when batch_size == 1 and #GPUs == 1
 
 #### OPTIONAL
@@ -174,8 +174,18 @@ def _get_torch_dataset(csv_path, split):
         _test_scale = test_scale
         _test_num_ensemble_views = test_num_ensemble_views
         _test_num_spatial_crops = test_num_spatial_crops
+
+    if sampling_mode == 'GreyST':
+        sample_frame_length = input_frame_length * 3
+    elif sampling_mode == 'TCPlus2':
+        sample_frame_length = input_frame_length + 2
+    elif sampling_mode in ['TC', 'RGB']:
+        sample_frame_length = input_frame_length
+    else:
+        raise ValueError(f'Unknown {sampling_mode = }. Should be RGB, TC, TCPlus2, or GreyST')
+
     return FramesDensesampleDataset(csv_path, mode,
-            input_frame_length*3 if sampling_mode == 'GreyST' else input_frame_length, 
+            sample_frame_length, 
             input_sample_rate(),
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
             train_horizontal_flip=dataset_cfg.horizontal_flip,
@@ -185,7 +195,8 @@ def _get_torch_dataset(csv_path, split):
             std = [model_cfg.input_std[0]] if greyscale else model_cfg.input_std,
             normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
             greyscale=greyscale,
-            path_prefix=dataset_cfg.frames_dir)
+            path_prefix=dataset_cfg.frames_dir,
+            )
 
 def get_torch_dataset(split):
 
