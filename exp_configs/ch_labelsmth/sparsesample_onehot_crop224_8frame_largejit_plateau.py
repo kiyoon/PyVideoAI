@@ -241,7 +241,7 @@ def _dense_unpack_data(data):
     return inputs, uids, labels, {'spatial_idx': spatial_idx, 'temporal_idx': temporal_idx, 'frame_indices': frame_indices}
 
 def get_data_unpack_func(split):
-    if split == 'multicropval_strided':
+    if split in ['multicropval_strided', 'multicroptrain_strided']:
         return _dense_unpack_data
     else:
         return _sparse_unpack_data

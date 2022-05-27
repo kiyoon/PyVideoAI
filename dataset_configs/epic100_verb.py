@@ -32,8 +32,8 @@ frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 flowframes_split_file_dir = os.path.join(dataset_root, "splits_flowframes")
 gulp_rgb_split_file_dir = os.path.join(dataset_root, 'splits_gulp_rgb')
 gulp_flow_split_file_dir = os.path.join(dataset_root, 'splits_gulp_flow')
-split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv', 'traindata_testmode': 'train.csv', 'trainpartialdata_testmode': 'train_partial.csv', 'multicropval_strided': 'val.csv'}
-split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test', 'traindata_testmode': 'test', 'trainpartialdata_testmode': 'test', 'multicropval_strided': 'test'}
+split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv', 'traindata_testmode': 'train.csv', 'trainpartialdata_testmode': 'train_partial.csv', 'multicropval_strided': 'val.csv', 'multicroptrain_strided': 'train.csv'}
+split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test', 'traindata_testmode': 'test', 'trainpartialdata_testmode': 'test', 'multicropval_strided': 'test', 'multicroptrain_strided': 'test'}
 horizontal_flip = True
 
 

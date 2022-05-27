@@ -710,7 +710,7 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
             temporal_idx = extra_info['temporal_idx']
             frame_indices = extra_info['frame_indices']
 
-            inputs, uids, labels, spatial_idx, temporal_idx, curr_batch_size = misc.data_to_gpu(inputs, uids, labels, spatial_idx, temporal_idx)
+            inputs, uids, labels, spatial_idx, temporal_idx, frame_indices, curr_batch_size = misc.data_to_gpu(inputs, uids, labels, spatial_idx, temporal_idx, frame_indices)
 
             perform_forward = it < num_iters - 1 or last_batch_size > 0     # not last batch or last batch size is at least 1
 
