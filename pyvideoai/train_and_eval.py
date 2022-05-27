@@ -653,6 +653,7 @@ def test_epoch_DALI(model, criterion, dataloader, data_unpack_func, num_classes,
 
 def extract_features(model, dataloader, data_unpack_func, num_classes, split = 'val', rank = 0, world_size = 1, input_reshape_func = None, refresh_period = 1, PAD_VALUE = -1):
     """Extract features for all samples in the dataset.
+    Note that model can output multiple features in tuple.
 
     Args:
         model: PyTorch model
@@ -689,7 +690,7 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
 
             feature_data = {'video_ids': [],
                     'labels': [],
-                    'clip_features': [],
+                    'clip_features': None,  # model can output multiple features, hence should be list of lists
                     'spatial_indices': [],
                     'temporal_indices': [],
                     'frame_indices': [],
@@ -702,6 +703,8 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
 
         if rank == 0 :
             assert num_iters == total_iters, "Implementation error"
+
+        num_model_outputs: int = None       # To remember how many outputs model had.
 
         #for it in range(max_num_iters):
         for it, data in enumerate(dataloader):
@@ -732,6 +735,33 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
                     inputs = input_reshape_func(inputs)
                 outputs = model(inputs)
 
+                # update num_model_outputs, only the first time of iteration.
+                if num_model_outputs is None:
+                    if rank == 0:
+                        if isinstance(outputs, tuple):
+                            if world_size > 1:
+                                num_model_outputs_dist = torch.LongTensor([len(outputs)]).to(cur_device, non_blocking=True)
+                            else:
+                                num_model_outputs = len(outputs)
+                        else:
+                            if world_size > 1:
+                                num_model_outputs_dist = torch.LongTensor([1]).to(cur_device, non_blocking=True)
+                            else:
+                                num_model_outputs = 1
+
+                    else:
+                        num_model_outputs_dist = torch.LongTensor([-100]).to(cur_device, non_blocking=True)
+
+                    if world_size > 1:
+                        dist.broadcast(num_model_outputs_dist, 0)
+                        num_model_outputs = num_model_outputs_dist.item()
+
+                    if rank == 0:
+                        feature_data['clip_features'] = tuple([] for _ in range(num_model_outputs))
+
+                if num_model_outputs == 1:
+                    outputs = tuple(outputs, )
+
             # Gather data
             if world_size > 1:
                 (curr_batch_sizes,) = du.all_gather([curr_batch_size])
@@ -753,18 +783,19 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
                     raise NotImplementedError('Label with dim not 1 or 2 not expected.')
 
                 if curr_batch_size == 0:
-                    outputs = torch.ones((max_batch_size, num_classes), dtype=torch.float32, device=cur_device) * PAD_VALUE
+                    outputs = tuple(torch.ones((max_batch_size, num_classes), dtype=torch.float32, device=cur_device) * PAD_VALUE for _ in range(num_model_outputs))
                 else:
-                    outputs = nn.functional.pad(outputs, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE)
+                    outputs = tuple(nn.functional.pad(output, (0,0,0,max_batch_size-curr_batch_size), value=PAD_VALUE) for output in outputs)
 
                 # Communicate with the padded data
                 (uids_gathered,
                         labels_gathered,
-                        outputs_gathered,
                         spatial_idx_gathered,
                         temporal_idx_gathered,
                         frame_indices_gathered,
-                        ) = du.all_gather([uids, labels, outputs, spatial_idx, temporal_idx, frame_indices])
+                        ) = du.all_gather([uids, labels, spatial_idx, temporal_idx, frame_indices])
+                # outputs is a tuple of tensors
+                outputs_gathered = du.all_gather(outputs)
 
                 if rank == 0:
                     # Remove padding from the received data
@@ -779,7 +810,7 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
 #                    print(f'{temporal_idx_gathered.shape = }')
                     uids = uids_gathered[no_pad_row_mask]
                     labels = labels_gathered[no_pad_row_mask]
-                    outputs = outputs_gathered[no_pad_row_mask]
+                    outputs = tuple(output_gathered[no_pad_row_mask] for output_gathered in outputs_gathered)
                     spatial_idx = spatial_idx_gathered[no_pad_row_mask]
                     temporal_idx = temporal_idx_gathered[no_pad_row_mask]
                     frame_indices = frame_indices_gathered[no_pad_row_mask]
@@ -794,7 +825,8 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
 
                 feature_data['video_ids'].append(np.array(uids.cpu()))
                 feature_data['labels'].append(np.array(labels.cpu()))
-                feature_data['clip_features'].append(np.array(outputs.cpu()))
+                for output_idx, output in enumerate(outputs):
+                    feature_data['clip_features'][output_idx].append(np.array(output.cpu()))
                 feature_data['spatial_indices'].append(np.array(spatial_idx.cpu()))
                 feature_data['temporal_indices'].append(np.array(temporal_idx.cpu()))
                 feature_data['frame_indices'].append(np.array(frame_indices.cpu()))
@@ -836,7 +868,10 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
 
         # convert list[np.array] into huge numpy array
         for key in feature_data.keys():
-            feature_data[key] = np.concatenate(feature_data[key], axis=0)
+            if key == 'clip_features':
+                feature_data[key] = tuple(np.concatenate(feature_list, axis=0) for feature_list in feature_data[key])
+            else:
+                feature_data[key] = np.concatenate(feature_data[key], axis=0)
 
     if rank != 0:
         feature_data = None
