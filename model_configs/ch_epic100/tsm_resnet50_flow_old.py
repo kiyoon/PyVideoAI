@@ -99,6 +99,28 @@ def feature_extract_model(model, featuremodel_name):
             else:
                 return imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
 
+    class FeatureLogitsExtractModel(Module):
+        def __init__(self, model, average_frames=False):
+            super().__init__()
+            self.model = model.model
+            if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+                self.model = self.model.module
+
+            self.average_frames = average_frames
+
+        def forward(self, x):
+            batch_size = x.shape[0]
+            imagenet_features = self.model.features(x)
+
+            # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
+            if self.average_frames:
+                return_features = torch.mean(imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:]), dim=1)
+            else:
+                return_features = imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
+
+            logits = self.model.logits(imagenet_features)[...,:NUM_VERB_CLASSES]
+
+            return return_features, logits
 
     if featuremodel_name == 'features':
         return FeatureExtractModel(model, average_frames=False)
@@ -114,30 +136,10 @@ def feature_extract_model(model, featuremodel_name):
             def forward(self, x):
                 return model(x)[...,:NUM_VERB_CLASSES]
         return LogitsExtractModel(model)
+    elif featuremodel_name == 'features_and_logits':
+        return FeatureLogitsExtractModel(model, average_frames=False)
     elif featuremodel_name == 'averaged_features_and_logits':
-        class FeatureLogitsExtractModel(Module):
-            def __init__(self, model, average_frames=False):
-                super().__init__()
-                self.model = model.model
-                if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
-                    self.model = self.model.module
-
-                self.average_frames = average_frames
-
-            def forward(self, x):
-                batch_size = x.shape[0]
-                imagenet_features = self.model.features(x)
-
-                # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
-                if self.average_frames:
-                    return_features = torch.mean(imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:]), dim=1)
-                else:
-                    return_features = imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
-
-                logits = self.model.logits(imagenet_features)[...,:NUM_VERB_CLASSES]
-
-                return return_features, logits
-        return FeatureLogitsExtractModel(model)
+        return FeatureLogitsExtractModel(model, average_frames=True)
     else:
         raise ValueError(f'Unknown feature model: {featuremodel_name}')
 
