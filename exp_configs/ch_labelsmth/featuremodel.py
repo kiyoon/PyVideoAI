@@ -49,6 +49,9 @@ loss_types_pseudo_generation = ['maskce', 'mask_binary_ce', 'maskproselflc',
 loss_types_masked_pseudo = ['maskce', 'mask_binary_ce', 'maskproselflc',
         ]
 
+# Pseudo label types
+pseudo_label_type = 'neighbours'    # neighbours, sent2vec,
+
 # Neighbour search settings for pseudo labelling
 # int
 num_neighbours = 10
@@ -62,6 +65,7 @@ thr_per_class = {}
 # When generating pseudo labels, always include labels from segments with temporal overlap
 add_temporal_overlap_as_pseudo_label = False
 temporal_overlap_csv_path = os.path.join(multi_label_ar.MODULE_DIR, '..', 'annotations', 'ek_100_train_overlapping', 'EK100_train_overlapping_extension=0.csv')
+
 
 l2_norm = False
 
@@ -161,73 +165,111 @@ def generate_train_pseudo_labels():
     world_size = get_world_size()
 
     video_ids, labels, features = get_features('train')
+    feature_data = {'video_ids': video_ids,
+            'labels': labels,
+            'clip_features': features,
+            }
+
     if loss_type in loss_types_pseudo_generation:
         if rank == 0:
-            if add_temporal_overlap_as_pseudo_label:
-                logger.info(f'Adding labels from temporal overlapped segments from file {temporal_overlap_csv_path}.')
-                df_temporal_overlap = pd.read_csv(temporal_overlap_csv_path)
-
-                def find_temporal_overlap_labels(video_id: int) -> list:
-                    """
-                    Return labels from temporally overlapping segments.
-                    """
-                    narration_id = dataset_cfg.narration_id_sorted[video_id]
-                    labels_b = df_temporal_overlap.label_b[df_temporal_overlap.a == narration_id]
-                    labels_a = df_temporal_overlap.label_a[df_temporal_overlap.b == narration_id]
-                    labels = set(labels_a) | set(labels_b)
-                    return list(labels)
-
-            feature_data = {'video_ids': video_ids,
-                    'labels': labels,
-                    'clip_features': features,
-                    }
-
-            soft_labels_per_num_neighbour = {}    # key: num_neighbours
-            set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
-            for num_neighbour in set_num_neighbours:
-                with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
-                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
-                #neighbours_ids = []
-                soft_label = []
-                target_ids = feature_data['video_ids']
-                source_ids = feature_data['video_ids']
-
-                for target_idx, target_id in enumerate(target_ids):
-                    #n_ids = [source_ids[x] for x in features_neighbours[target_idx]]
-                    sl = nc_freq[target_idx]
-                    sl = sl / sl.sum()
-                    #neighbours_ids.append(n_ids)
-                    soft_label.append(sl)
-
-                #neighbours_ids = np.array(neighbours_ids)
-                soft_labels_per_num_neighbour[num_neighbour] = np.array(soft_label)
-
-            # generate multilabels
-            # For each class, use different soft labels generated with different num_neighbours and thr.
-            #multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
-            multilabels = []
-            for target_idx, (video_id, singlelabel) in enumerate(zip(feature_data['video_ids'], feature_data['labels'])):
-                if singlelabel in num_neighbours_per_class:
-                    soft_label = soft_labels_per_num_neighbour[num_neighbours_per_class[singlelabel]][target_idx]
-                else:
-                    soft_label = soft_labels_per_num_neighbour[num_neighbours][target_idx]
-
-                if singlelabel in thr_per_class:
-                    th = thr_per_class[singlelabel]
-                else:
-                    th = thr
-
-                multilabel = (soft_label > th).astype(int)
-                multilabel[singlelabel] = 1
+            if pseudo_label_type == 'neighbours':
                 if add_temporal_overlap_as_pseudo_label:
-                    overlap_labels = find_temporal_overlap_labels(video_id)
-                    for overlap_label in overlap_labels:
-                        multilabel[overlap_label] = 1
+                    logger.info(f'Adding labels from temporal overlapped segments from file {temporal_overlap_csv_path}.')
+                    df_temporal_overlap = pd.read_csv(temporal_overlap_csv_path)
 
-                multilabels.append(multilabel)
+                    def find_temporal_overlap_labels(video_id: int) -> list:
+                        """
+                        Return labels from temporally overlapping segments.
+                        """
+                        narration_id = dataset_cfg.narration_id_sorted[video_id]
+                        labels_b = df_temporal_overlap.label_b[df_temporal_overlap.a == narration_id]
+                        labels_a = df_temporal_overlap.label_a[df_temporal_overlap.b == narration_id]
+                        labels = set(labels_a) | set(labels_b)
+                        return list(labels)
 
-            multilabels = np.stack(multilabels)
-            assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
+                soft_labels_per_num_neighbour = {}    # key: num_neighbours
+                set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
+                for num_neighbour in set_num_neighbours:
+                    with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
+                        nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
+                    #neighbours_ids = []
+                    soft_label = []
+                    target_ids = feature_data['video_ids']
+                    #source_ids = feature_data['video_ids']
+
+                    for target_idx, target_id in enumerate(target_ids):
+                        #n_ids = [source_ids[x] for x in features_neighbours[target_idx]]
+                        sl = nc_freq[target_idx]
+                        sl = sl / sl.sum()
+                        #neighbours_ids.append(n_ids)
+                        soft_label.append(sl)
+
+                    #neighbours_ids = np.array(neighbours_ids)
+                    soft_labels_per_num_neighbour[num_neighbour] = np.array(soft_label)
+
+                # generate multilabels
+                # For each class, use different soft labels generated with different num_neighbours and thr.
+                #multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
+                multilabels = []
+                for target_idx, (video_id, singlelabel) in enumerate(zip(feature_data['video_ids'], feature_data['labels'])):
+                    if singlelabel in num_neighbours_per_class:
+                        soft_label = soft_labels_per_num_neighbour[num_neighbours_per_class[singlelabel]][target_idx]
+                    else:
+                        soft_label = soft_labels_per_num_neighbour[num_neighbours][target_idx]
+
+                    if singlelabel in thr_per_class:
+                        th = thr_per_class[singlelabel]
+                    else:
+                        th = thr
+
+                    multilabel = (soft_label > th).astype(int)
+                    multilabel[singlelabel] = 1
+                    if add_temporal_overlap_as_pseudo_label:
+                        overlap_labels = find_temporal_overlap_labels(video_id)
+                        for overlap_label in overlap_labels:
+                            multilabel[overlap_label] = 1
+
+                    multilabels.append(multilabel)
+
+                multilabels = np.stack(multilabels)
+                assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
+
+
+            elif pseudo_label_type == 'sent2vec':
+                logger.info('Using sent2vec top5 labels as pseudo labels.')
+                sent2vec_top5_csv = os.path.join(multi_label_ar.MODULE_DIR, '..', 'notebooks', 'kiyoon', 'sent2vec', 'top3verbdef-bigrams-concat_wiki_twitter-top5perclass.csv')
+                sent2vec_top5_df = pd.read_csv(sent2vec_top5_csv)
+
+                verb_to_sent2vec_top5 = [[] for _ in range(dataset_cfg.num_classes)]
+                for index, row in sent2vec_top5_df.iterrows():
+                    assert index == dataset_cfg.class_keys_to_label_idx[row['class']]
+                    for k in range(1, 6):   # top 1, 2, 3, 4, 5
+                        top_verb, score = row[f'top{k}'].split(' ')
+                        if score == 'nan':
+                            continue
+
+                        verb_to_sent2vec_top5[index].append(dataset_cfg.class_keys_to_label_idx[top_verb])
+
+                multilabels = []
+                for target_idx, (video_id, singlelabel) in enumerate(zip(feature_data['video_ids'], feature_data['labels'])):
+                    multilabel = np.zeros(dataset_cfg.num_classes, dtype=int)
+                    for index in verb_to_sent2vec_top5[singlelabel]:
+                        multilabel[index] = 1
+                    multilabel[singlelabel] = 1
+
+                    if add_temporal_overlap_as_pseudo_label:
+                        overlap_labels = find_temporal_overlap_labels(video_id)
+                        for overlap_label in overlap_labels:
+                            multilabel[overlap_label] = 1
+
+                    multilabels.append(multilabel)
+
+                multilabels = np.stack(multilabels)
+                assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
+
+
+            else:
+                raise ValueError(f'{pseudo_label_type = } not recognised.')
 
             # format multilabels properly based on loss
             if loss_type in loss_types_masked_pseudo:
@@ -254,23 +296,23 @@ def generate_train_pseudo_labels():
 
             if rank != 0:
                 multilabels = np.zeros((num_samples,dataset_cfg.num_classes), dtype=int)
-                source_ids = np.zeros((num_samples), dtype=int)
+#                source_ids = np.zeros((num_samples), dtype=int)
 
             multilabels_dist = torch.from_numpy(multilabels).to(cur_device, non_blocking=True)
             dist.broadcast(multilabels_dist, 0)
 
-            video_ids_dist = torch.from_numpy(source_ids).to(cur_device, non_blocking=True)
-            dist.broadcast(video_ids_dist, 0)
+#            video_ids_dist = torch.from_numpy(source_ids).to(cur_device, non_blocking=True)
+#            dist.broadcast(video_ids_dist, 0)
 
             du.synchronize()
             multilabels = multilabels_dist.cpu().numpy()
-            source_ids = video_ids_dist.cpu().numpy()
+#            source_ids = video_ids_dist.cpu().numpy()
 
         # Update video_id_to_label
         logger.info(f'New {multilabels = }')
-        logger.info(f'For video IDs = {source_ids}')
+        logger.info(f'For video IDs = {video_ids}')
 
-        return source_ids, multilabels, features
+        return video_ids, multilabels, features
 
     elif loss_type.lower().startswith('mask') or loss_type.lower().startswith('pseudo'):
         logger.error(f'loss_type is {loss_type} but not generating pseudo labels?')
