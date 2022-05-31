@@ -1,6 +1,7 @@
 from pyvideoai.dataloaders.feature_dataset import FeatureDataset
 import pickle
 import numpy as np
+import pandas as pd
 from pyvideoai.utils.losses.proselflc import ProSelfLC
 #from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
 from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
@@ -10,6 +11,7 @@ from kornia.losses import FocalLoss
 from pyvideoai.utils.stdout_logger import OutputLogger
 import torch
 import os
+import multi_label_ar
 
 from pyvideoai.utils.distributed import get_rank, get_world_size
 
@@ -57,6 +59,10 @@ thr = 0.2
 num_neighbours_per_class = {}
 thr_per_class = {}
 
+# When generating pseudo labels, always include labels from segments with temporal overlap
+add_temporal_overlap_as_pseudo_label = False
+temporal_overlap_csv_path = os.path.join(multi_label_ar.MODULE_DIR, '..', 'annotations', 'ek_100_train_overlapping', 'EK100_train_overlapping_extension=0.csv')
+
 l2_norm = False
 
 
@@ -73,8 +79,7 @@ def get_input_feature_dim():
 
 import torch.distributed as dist
 import pyvideoai.utils.distributed as du
-from exp_configs.ch_labelsmth.epic100_verb.features_study import get_neighbours
-import exp_configs
+from multi_label_ar.neighbours import get_neighbours
 
 def get_features(split):
     input_feature_dim = get_input_feature_dim()
@@ -151,12 +156,27 @@ def get_features(split):
 
 
 def generate_train_pseudo_labels():
+
     rank = get_rank()
     world_size = get_world_size()
 
     video_ids, labels, features = get_features('train')
     if loss_type in loss_types_pseudo_generation:
         if rank == 0:
+            if add_temporal_overlap_as_pseudo_label:
+                logger.info(f'Adding labels from temporal overlapped segments from file {temporal_overlap_csv_path}.')
+                df_temporal_overlap = pd.read_csv(temporal_overlap_csv_path)
+
+                def find_temporal_overlap_labels(video_id: int) -> list:
+                    """
+                    Return labels from temporally overlapping segments.
+                    """
+                    narration_id = dataset_cfg.narration_id_sorted[video_id]
+                    labels_b = df_temporal_overlap.label_b[df_temporal_overlap.a == narration_id]
+                    labels_a = df_temporal_overlap.label_a[df_temporal_overlap.b == narration_id]
+                    labels = set(labels_a) | set(labels_b)
+                    return list(labels)
+
             feature_data = {'video_ids': video_ids,
                     'labels': labels,
                     'clip_features': features,
@@ -165,7 +185,7 @@ def generate_train_pseudo_labels():
             soft_labels_per_num_neighbour = {}    # key: num_neighbours
             set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
             for num_neighbour in set_num_neighbours:
-                with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
+                with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
                     nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
                 #neighbours_ids = []
                 soft_label = []
@@ -186,7 +206,7 @@ def generate_train_pseudo_labels():
             # For each class, use different soft labels generated with different num_neighbours and thr.
             #multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
             multilabels = []
-            for target_idx, singlelabel in enumerate(feature_data['labels']):
+            for target_idx, (video_id, singlelabel) in enumerate(zip(feature_data['video_ids'], feature_data['labels'])):
                 if singlelabel in num_neighbours_per_class:
                     soft_label = soft_labels_per_num_neighbour[num_neighbours_per_class[singlelabel]][target_idx]
                 else:
@@ -199,6 +219,11 @@ def generate_train_pseudo_labels():
 
                 multilabel = (soft_label > th).astype(int)
                 multilabel[singlelabel] = 1
+                if add_temporal_overlap_as_pseudo_label:
+                    overlap_labels = find_temporal_overlap_labels(video_id)
+                    for overlap_label in overlap_labels:
+                        multilabel[overlap_label] = 1
+
                 multilabels.append(multilabel)
 
             multilabels = np.stack(multilabels)
@@ -249,9 +274,13 @@ def generate_train_pseudo_labels():
 
     elif loss_type.lower().startswith('mask') or loss_type.lower().startswith('pseudo'):
         logger.error(f'loss_type is {loss_type} but not generating pseudo labels?')
+        if add_temporal_overlap_as_pseudo_label:
+            logger.error('Not generating pseudo labels. Cannot use add_temporal_overlap_as_pseudo_label.')
         return video_ids, labels, features
     else:
         logger.info('NOT generating pseudo labels')
+        if add_temporal_overlap_as_pseudo_label:
+            logger.error('Not generating pseudo labels. Cannot use add_temporal_overlap_as_pseudo_label.')
         return video_ids, labels, features
 
 

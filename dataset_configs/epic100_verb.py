@@ -25,6 +25,9 @@ annotations_root = os.path.join(dataset_root, 'epic-kitchens-100-annotations')
 narration_id_to_video_id, narration_id_sorted = epic_narration_id_to_unique_id(annotations_root)
 uid2label = get_verb_uid2label_dict(annotations_root, narration_id_to_video_id)
 class_keys = EPIC100_get_class_keys(annotations_root, 'verb')
+class_keys_to_label_idx = {}
+for label_idx, class_key in enumerate(class_keys):
+    class_keys_to_label_idx[class_key] = label_idx
 head_classes, tail_classes = get_head_tail_classes(annotations_root, 'verb')
 
 video_split_file_dir = os.path.join(dataset_root, "splits_video")
