@@ -50,7 +50,7 @@ loss_types_masked_pseudo = ['maskce', 'mask_binary_ce', 'maskproselflc',
         ]
 
 # Pseudo label types
-pseudo_label_type = 'neighbours'    # neighbours, sent2vec,
+pseudo_label_type = 'neighbours'    # neighbours, sent2vec, multilabel_cooccurance
 
 # Neighbour search settings for pseudo labelling
 # int
@@ -232,7 +232,6 @@ def generate_train_pseudo_labels():
                     multilabels.append(multilabel)
 
                 multilabels = np.stack(multilabels)
-                assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
 
 
             elif pseudo_label_type == 'sent2vec':
@@ -265,11 +264,51 @@ def generate_train_pseudo_labels():
                     multilabels.append(multilabel)
 
                 multilabels = np.stack(multilabels)
-                assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
+
+            elif pseudo_label_type == 'multilabel_cooccurance':
+                logger.info('Using multilabel co-occurance data to generate per-class pseudo labels.')
+                cooc_csv = os.path.join(multi_label_ar.MODULE_DIR, '..', 'notebooks', 'kiyoon', 'multilabel_cooccurance_normalised_20220427.csv')
+                cooc_df = pd.read_csv(cooc_csv)
+                cooc_df.set_index('key', inplace=True)
+
+                def thr_multilabel_cooccurance(df_cooc_normalised, thr):
+                    """
+                    Read multilabel_cooccurance_normalised_20220427.csv file and threshold for each class (row).
+                    For generating pseudo labels.
+                    Return: dict[str, list[str]]
+                    """
+                    ret_dict = {}
+                    for index, row in df_cooc_normalised.iterrows():
+                        ret_dict[row.name] = list(row[row > thr].keys())
+                    return ret_dict
+
+                cooc_thresholded = thr_multilabel_cooccurance(cooc_df, 0.5)
+
+                multilabels = []
+                for target_idx, (video_id, singlelabel) in enumerate(zip(feature_data['video_ids'], feature_data['labels'])):
+                    multilabel = np.zeros(dataset_cfg.num_classes, dtype=int)
+                    singlelabel_str = dataset_cfg.class_keys[singlelabel]
+
+                    if singlelabel_str in cooc_thresholded.keys():
+                        for label_str in cooc_thresholded[singlelabel_str]:
+                            multilabel[dataset_cfg.class_keys_to_label_idx[label_str]] = 1
+
+                    multilabel[singlelabel] = 1
+
+                    if add_temporal_overlap_as_pseudo_label:
+                        overlap_labels = find_temporal_overlap_labels(video_id)
+                        for overlap_label in overlap_labels:
+                            multilabel[overlap_label] = 1
+
+                    multilabels.append(multilabel)
+
+                multilabels = np.stack(multilabels)
 
 
             else:
                 raise ValueError(f'{pseudo_label_type = } not recognised.')
+
+            assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
 
             # format multilabels properly based on loss
             if loss_type in loss_types_masked_pseudo:
