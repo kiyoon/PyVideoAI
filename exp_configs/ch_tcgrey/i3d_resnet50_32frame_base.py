@@ -10,3 +10,7 @@ def batch_size():
     elif vram > 10e+9:
         return 8
     return 4
+
+# optional
+def load_pretrained(model):
+    model_cfg.load_pretrained_kinetics400(model, model_cfg.kinetics400_pretrained_path_32x2)

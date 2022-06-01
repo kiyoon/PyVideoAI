@@ -14,12 +14,12 @@ import os
 kinetics400_pretrained_path_32x2 = os.path.join(DATA_DIR, 'pretrained', 'kinetics400/i3d_resnet50/i3d_baseline_32x2_IN_pretrain_400k.pkl')
 kinetics400_pretrained_path_8x8 = os.path.join(DATA_DIR, 'pretrained', 'kinetics400/i3d_resnet50/I3D_8x8_R50.pkl')
 def load_pretrained_kinetics400(model, pretrained_path=kinetics400_pretrained_path_32x2):
-    world_size = dist.get_world_size() if dist.is_initialized() else 1
+    #world_size = dist.get_world_size() if dist.is_initialized() else 1
 
     cu.load_checkpoint(
         pretrained_path,
         model,
-        world_size > 1,
+        data_parallel = False,
         inflation=False,
         convert_from_caffe2=True)
 
