@@ -15,7 +15,7 @@ def get_parser():
     parser = argparse.ArgumentParser(description="Generate HMDB splits",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("video_dir", help="Path to the directory of video (Gulp) files")
-    parser.add_argument("output_dir", help="Directory to save train.txt and test.txt")
+    parser.add_argument("output_dir", help="Directory to save train.csv and test.csv")
     parser.add_argument("annotations_root_dir", type=str, help="Path to annotations root dir.")
     parser.add_argument("--mode", type=str, default='gulp', choices=['gulp', 'video', 'frames'], help="Dataset stored as gulp, videos or extracted frames?")
     parser.add_argument("--confusion", type=int, default=1, help="Add confusion to the dataset. If the value is 2 or bigger, it will assign more than 51 classes (102 classes for 2) and randomly assign train label. Test labels will be multi-label.")
@@ -48,9 +48,9 @@ if __name__ == '__main__':
 
     for split_num in range(1, 4):
         print(f'{split_num = }')
-        with open(os.path.join(args.output_dir, f'train{split_num}.txt'), 'w') as train_file:
+        with open(os.path.join(args.output_dir, f'train{split_num}.csv'), 'w') as train_file:
             train_file.write('0\n')
-            with open(os.path.join(args.output_dir, f'test{split_num}.txt'), 'w') as test_file:
+            with open(os.path.join(args.output_dir, f'test{split_num}.csv'), 'w') as test_file:
                 if args.confusion == 1:
                     test_file.write('0\n')
                 else:

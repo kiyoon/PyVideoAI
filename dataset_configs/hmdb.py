@@ -41,7 +41,11 @@ Optional but suggested to keep the format consistent.
 """
 dataset_root = os.path.join(DATA_DIR, 'hmdb51')
 frames_dir = os.path.join(dataset_root, "frames_q5")
+gulp_rgb_dirname = {'train': 'gulp_rgb', 'val': 'gulp_rgb', 'multicropval': 'gulp_rgb'}
+gulp_flow_dirname = {'train': 'gulp_flow', 'val': 'gulp_flow', 'multicropval': 'gulp_flow', 'trainpartialdata_testmode': 'gulp_flow', 'traindata_testmode': 'gulp_flow'}
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
+gulp_rgb_split_file_dir = os.path.join(dataset_root, 'splits_gulp_rgb')
+gulp_flow_split_file_dir = os.path.join(dataset_root, 'splits_gulp_flow')
 split_file_basename1 = {'train': 'train1.csv', 'val': 'test1.csv', 'multicropval': 'test1.csv'}
 split_file_basename2 = {'train': 'train2.csv', 'val': 'test2.csv', 'multicropval': 'test2.csv'}
 split_file_basename3 = {'train': 'train3.csv', 'val': 'test3.csv', 'multicropval': 'test3.csv'}
@@ -49,7 +53,7 @@ split_file_basename = split_file_basename1
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
 
 # Training settings
-horizontal_flip = True 
+horizontal_flip = True
 
 # Misc
 
@@ -78,8 +82,8 @@ def plot_confusion_matrix(df_confusion_matrix, shrink=False, vmin=0, vmax=1, cma
         plt.ylabel('Target', fontsize=50)
 
         # This sets the yticks "upright" with 0, as opposed to sideways with 90.
-        plt.yticks(fontsize=12, rotation=0) 
-        plt.xticks(fontsize=12, rotation=90) 
+        plt.yticks(fontsize=12, rotation=0)
+        plt.xticks(fontsize=12, rotation=90)
 
         # here set the colorbar labelsize by 50
         cbar = ax.collections[0].colorbar
@@ -97,8 +101,8 @@ def plot_confusion_matrix(df_confusion_matrix, shrink=False, vmin=0, vmax=1, cma
         plt.ylabel('Target', fontsize=20)
 
         # This sets the yticks "upright" with 0, as opposed to sideways with 90.
-        plt.yticks(fontsize=12, rotation=0) 
-        plt.xticks(fontsize=12, rotation=90) 
+        plt.yticks(fontsize=12, rotation=0)
+        plt.xticks(fontsize=12, rotation=90)
 
         # here set the colorbar labelsize by 20
         cbar = ax.collections[0].colorbar

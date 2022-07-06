@@ -1,6 +1,6 @@
 import torch
 from torch.nn import Module
-from torch import optim
+from torch import nn
 
 from pyvideoai.models.epic.tsm import TSM
 from pyvideoai.config import PYVIDEOAI_DIR
@@ -35,7 +35,6 @@ def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8, pretraine
 
 
     if pretrained == 'epic100':
-        device = torch.cuda.current_device()
         checkpoint = torch.load(pretrained_path, map_location='cpu')
         from collections import OrderedDict
         new_state_dict = OrderedDict()

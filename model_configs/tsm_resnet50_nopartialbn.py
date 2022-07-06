@@ -3,11 +3,10 @@ from torch import optim
 
 from pyvideoai.models.epic.tsm import TSM
 
-def load_model(num_classes, input_frame_length):
+def load_model(num_classes, input_frame_length, pretrained='imagenet'):
     class_counts = num_classes
     segment_count = input_frame_length
     base_model = 'resnet50'
-    pretrained = 'imagenet'
 
     model = TSM(class_counts, segment_count, 'RGB',
             base_model = base_model,
