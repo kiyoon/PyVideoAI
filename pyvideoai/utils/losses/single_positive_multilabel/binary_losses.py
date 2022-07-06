@@ -58,8 +58,8 @@ class BinaryLabelSmoothLossWithLogits(AssumeNegativeLossWithLogits):
 
 
     def forward(self, inputs: torch.Tensor, targets: torch.Tensor):
-        if targets.dim() != 1:
-            raise ValueError(f'Only support targets with positive integer labels, but got {targets.dim() = }')
+        #if targets.dim() != 1:
+        #    raise ValueError(f'Only support targets with positive integer labels, but got {targets.dim() = }')
 
         targets = k_one_hot(targets, inputs.size(-1), smoothing = self.smoothing, smooth_only_negatives=False)
 
@@ -73,8 +73,8 @@ class BinaryNegativeLabelSmoothLossWithLogits(BinaryLabelSmoothLossWithLogits):
     Label smoothing for only assumed negatives
     """
     def forward(self, inputs: torch.Tensor, targets: torch.Tensor):
-        if targets.dim() != 1:
-            raise ValueError(f'Only support targets with positive integer labels, but got {targets.dim() = }')
+        #if targets.dim() != 1:
+        #    raise ValueError(f'Only support targets with positive integer labels, but got {targets.dim() = }')
 
         targets = k_one_hot(targets, inputs.size(-1), smoothing = self.smoothing, smooth_only_negatives=True)
 

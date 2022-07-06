@@ -79,11 +79,29 @@ class OneHotCrossEntropyLoss(_WeightedLoss):
 
 def k_one_hot(targets:torch.Tensor, n_classes:int, smoothing=0.0, smooth_only_negatives = False):
     with torch.no_grad():
-        targets = torch.empty(size=(targets.size(0), n_classes),
-                              device=targets.device) \
-                              .fill_(smoothing / n_classes) \
-                              .scatter_(1, targets.data.unsqueeze(1), 1. if smooth_only_negatives else 1. - smoothing + smoothing / n_classes)
+        if targets.dim() == 1:
+            targets = torch.empty(size=(targets.size(0), n_classes),
+                                  device=targets.device) \
+                                  .fill_(smoothing / n_classes) \
+                                  .scatter_(1, targets.data.unsqueeze(1), 1. if smooth_only_negatives else 1. - smoothing + smoothing / n_classes)
+        elif targets.dim() == 2:
+            # WARNING: this is not an official way to do this. I made this so that there is no error when 2-d tensor is given.
+            # However, if the labels are multi-labels, it would be incorrect.
+            assert n_classes == targets.size(1), f'number of classes does not match with the tensor and the argument. {n_classes = } and {targets.size(1) = }'
+            if smooth_only_negatives:
+                # 0 -> smoothing/n_classes
+                # 1 -> 1
+                # f(x) = x + (1-x)*(smoothing/n_classes)
+                targets = targets + (1.-targets) * (smoothing/n_classes)
+            else:
+                # 0 -> smoothing/n_classes
+                # 1 -> 1 - smoothing + smoothing/n_classes
+                # f(x) = smoothing/n_classes + x*(1-smoothing)
+                targets = targets * (1. - smoothing) + smoothing/n_classes
+        else:
+            raise ValueError(f'targets.dim() should be 1 or 2 but got {targets.dim()}')
     return targets
+
 
 class LabelSmoothCrossEntropyLoss(OneHotCrossEntropyLoss):
     def __init__(self, weight=None, reduction='mean', smoothing=0.0):
