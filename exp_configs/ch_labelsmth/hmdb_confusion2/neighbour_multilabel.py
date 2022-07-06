@@ -15,7 +15,8 @@ import torch
 import numpy as np
 
 input_frame_length = 8
-input_type = 'RGB_video' # RGB_video / flow / gulp_rgb / gulp_flow
+input_type = 'gulp_rgb' # gulp_rgb / gulp_flow
+split_num = int(os.getenv('VAI_SPLITNUM', default=1))           # 1 / 2 / 3
 
 num_epochs = int(os.getenv('VAI_NUM_EPOCHS', default=500))
 
@@ -23,12 +24,8 @@ num_epochs = int(os.getenv('VAI_NUM_EPOCHS', default=500))
 def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
-    if input_type == 'RGB_video':
+    if input_type in ['gulp_rgb', 'gulp_flow']:
         divide_batch_size = 1
-    elif input_type == 'flow':
-        divide_batch_size = 4       # For optical flow, you read 5 times as many frames, so it will be a bottleneck if you use too big batch size.
-    elif input_type in ['gulp_rgb', 'gulp_flow']:
-        divide_batch_size = 2
     else:
         raise ValueError(f'Wrong input_type {input_type}')
 
@@ -54,17 +51,16 @@ val_num_spatial_crops = 1
 test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 
-train_classifier_balanced_retraining_epochs = 0     # How many epochs to re-train the classifier from random weights, in a class-balanced way, at the end. Bingyi Kang et al. 2020, (cRT)
 early_stop_patience = 20        # or None to turn off
 
-pretrained = 'epic100'          # epic100 / imagenet / random
+pretrained = 'imagenet'          # epic100 / imagenet / random
 
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
-loss_type = 'mince'     # mince / maskce / minregcomb / maskproselflc
+loss_type = 'mask_binary_ce'     # mince / maskce / minregcomb / maskproselflc
                         # mask_binary_ce / pseudo_single_binary_ce
 
 # Neighbour search settings for pseudo labelling
@@ -77,7 +73,7 @@ thr = 0.2
 num_neighbours_per_class = {}
 thr_per_class = {}
 
-l2_norm = True
+l2_norm = False
 save_features = True
 
 #proselflc_total_time = 2639 * 60 # 60 epochs
@@ -251,23 +247,23 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
         train_kit['train_dataloader'] = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size(), shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
 
 
-    if epoch >= num_epochs - train_classifier_balanced_retraining_epochs:
-        # freeze base model parameters
-        # model state dict doesn't save requires_grad parameters.
-        # When resuming, it has to be re-done. That's why we just call it every epoch.
-        logger.info(f'Classifier re-training with balanced samples (cRT) for the last {train_classifier_balanced_retraining_epochs} epochs.')
-        logger.info(f'cRT: freezing base model')
-        train_kit['model'] = model_cfg.freeze_base_model(train_kit['model'])
-
-        logger.info(f'cRT: switching to a balanced dataloader')
-        train_dataset = get_torch_dataset('train', class_balanced_sampling=True)
-        train_sampler = DistributedSampler(train_dataset) if world_size > 1 else None
-        train_kit['train_dataloader'] = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size(), shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
-
-    if epoch == num_epochs - train_classifier_balanced_retraining_epochs:
-        # re-initialise classifier weights
-        logger.info(f'cRT: re-initialising classifier weights')
-        train_kit['model'] = model_cfg.initialise_classifier(train_kit['model'])
+#    if epoch >= num_epochs - train_classifier_balanced_retraining_epochs:
+#        # freeze base model parameters
+#        # model state dict doesn't save requires_grad parameters.
+#        # When resuming, it has to be re-done. That's why we just call it every epoch.
+#        logger.info(f'Classifier re-training with balanced samples (cRT) for the last {train_classifier_balanced_retraining_epochs} epochs.')
+#        logger.info(f'cRT: freezing base model')
+#        train_kit['model'] = model_cfg.freeze_base_model(train_kit['model'])
+#
+#        logger.info(f'cRT: switching to a balanced dataloader')
+#        train_dataset = get_torch_dataset('train', class_balanced_sampling=True)
+#        train_sampler = DistributedSampler(train_dataset) if world_size > 1 else None
+#        train_kit['train_dataloader'] = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size(), shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
+#
+#    if epoch == num_epochs - train_classifier_balanced_retraining_epochs:
+#        # re-initialise classifier weights
+#        logger.info(f'cRT: re-initialising classifier weights')
+#        train_kit['model'] = model_cfg.initialise_classifier(train_kit['model'])
 
 
 
@@ -383,8 +379,6 @@ def get_data_unpack_func(split):
 def _get_torch_dataset(csv_path, split, class_balanced_sampling):
     mode = dataset_cfg.split2mode[split]
 
-
-
     if split.startswith('multicrop'):
         _test_scale = test_scale
         _test_num_spatial_crops = test_num_spatial_crops
@@ -392,53 +386,9 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
         _test_scale = val_scale
         _test_num_spatial_crops = val_num_spatial_crops
 
-    if split == 'train':
-        global video_id_to_label
-    else:
-        video_id_to_label = None
+    video_id_to_label = None
 
-    if input_type == 'RGB_video':
-        path_prefix = dataset_cfg.video_dir
-        return VideoSparsesampleDataset(csv_path, mode,
-                input_frame_length,
-                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
-                train_horizontal_flip=dataset_cfg.horizontal_flip,
-                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
-                crop_size=crop_size,
-                mean = model_cfg.input_mean,
-                std = model_cfg.input_std,
-                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
-                greyscale=False,
-                path_prefix=path_prefix,
-                sample_index_code=sample_index_code,
-                video_id_to_label = video_id_to_label,
-                )
-
-    elif input_type == 'flow':
-        path_prefix=dataset_cfg.flowframes_dir
-        flow = 'RR'
-        flow_neighbours = 5
-        flow_folder_x = 'u'
-        flow_folder_y = 'v'
-        return FramesSparsesampleDataset(csv_path, mode,
-                input_frame_length,
-                train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
-                train_horizontal_flip=dataset_cfg.horizontal_flip,
-                test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
-                crop_size=crop_size,
-                mean = model_cfg.input_mean,
-                std = model_cfg.input_std,
-                normalise = model_cfg.input_normalise, bgr=model_cfg.input_bgr,
-                greyscale=False,
-                path_prefix=path_prefix,
-                sample_index_code=sample_index_code,
-                flow = flow,
-                flow_neighbours = flow_neighbours,
-                flow_folder_x = flow_folder_x,
-                flow_folder_y = flow_folder_y,
-                video_id_to_label = video_id_to_label,
-                )
-    elif input_type == 'gulp_rgb':
+    if input_type == 'gulp_rgb':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_rgb_dirname[split])
 
         return GulpSparsesampleDataset(csv_path, mode,
@@ -481,20 +431,24 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
         raise ValueError(f'Wrong input_type {input_type}')
 
 
-def get_torch_dataset(split, class_balanced_sampling=False):
-    if input_type == 'RGB_video':
-        split_dir = dataset_cfg.video_split_file_dir
-    elif input_type == 'flow':
-        split_dir = dataset_cfg.flowframes_split_file_dir
-    elif input_type == 'gulp_rgb':
+def get_torch_dataset(split):
+    if input_type == 'gulp_rgb':
         split_dir = dataset_cfg.gulp_rgb_split_file_dir
     elif input_type == 'gulp_flow':
         split_dir = dataset_cfg.gulp_flow_split_file_dir
     else:
         raise ValueError(f'Wrong input_type {input_type}')
-    csv_path = os.path.join(split_dir, dataset_cfg.split_file_basename[split])
 
-    return _get_torch_dataset(csv_path, split, class_balanced_sampling)
+    if split_num == 1:
+        csv_path = os.path.join(split_dir, dataset_cfg.split_file_basename1[split])
+    elif split_num == 2:
+        csv_path = os.path.join(split_dir, dataset_cfg.split_file_basename2[split])
+    elif split_num == 3:
+        csv_path = os.path.join(split_dir, dataset_cfg.split_file_basename3[split])
+    else:
+        raise ValueError(f'Wrong {split_num = }')
+
+    return _get_torch_dataset(csv_path, split)
 
 
 
@@ -530,36 +484,15 @@ from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMet
 from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
 from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
 from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
-from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set, get_singlemultilabel
-from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict
-video_id_to_multilabel = read_multilabel()
-_, epic_video_id_to_label = get_verb_uid2label_dict(dataset_cfg.annotations_root)
-holdout_video_id_to_label = get_val_holdout_set(epic_video_id_to_label, video_id_to_multilabel)
-video_id_to_singlemultilabel = get_singlemultilabel(epic_video_id_to_label, video_id_to_multilabel)
 
-best_metric = ClipAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval')
+best_metric = ClipMultilabelAccuracyMetric()
 metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
             ClipMeanPerclassAccuracyMetric(exclude_classes_less_sample_than=20),
-            ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'])],
+            ],
         'val': [best_metric,
-            ClipAccuracyMetric(topk=(5,), video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
-            ClipMeanPerclassAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
-            ClipMeanPerclassAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval', exclude_classes_less_sample_than=20),
-            ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
-            ClipAccuracyMetric(topk=(1,5)),
-            ClipMeanPerclassAccuracyMetric(),
-            ClipMeanPerclassAccuracyMetric(exclude_classes_less_sample_than=20),
-            ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail']),
-            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            Clip_mAPMetric(activation='sigmoid', exclude_classes_less_sample_than=20, video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            Clip_mAPMetric(activation='sigmoid', exclude_classes_less_sample_than=20, video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipTop1MultilabelAccuracyMetric(),
+            ClipTopkMultilabelAccuracyMetric(),
+            Clip_mAPMetric(activation='sigmoid'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
