@@ -85,8 +85,8 @@ def k_one_hot(targets:torch.Tensor, n_classes:int, smoothing=0.0, smooth_only_ne
                                   .fill_(smoothing / n_classes) \
                                   .scatter_(1, targets.data.unsqueeze(1), 1. if smooth_only_negatives else 1. - smoothing + smoothing / n_classes)
         elif targets.dim() == 2:
-            # WARNING: this is not an official way to do this. I made this so that there is no error when 2-d tensor is given.
-            # However, if the labels are multi-labels, it would be incorrect.
+            # WARNING: it only works correctly with single labels even though it's 2D tensor.
+            # If the labels are multi-labels, it would be incorrect.
             assert n_classes == targets.size(1), f'number of classes does not match with the tensor and the argument. {n_classes = } and {targets.size(1) = }'
             if smooth_only_negatives:
                 # 0 -> smoothing/n_classes
