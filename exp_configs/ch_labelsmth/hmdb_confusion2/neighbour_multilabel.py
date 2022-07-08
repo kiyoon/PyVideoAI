@@ -143,6 +143,9 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
         # feature_data['video_ids'] feature_data['labels'] feature_data['clip_features']
 
         if rank == 0:
+            # feature will be tuple just in case there are many features returning from the model. This case, it's only one feature.
+            feature_data['clip_features'] = feature_data['clip_features'][0]
+
             if feature_data['clip_features'].shape[1] == input_frame_length:
                 # features are not averaged. Average now
                 feature_data['clip_features'] = np.mean(feature_data['clip_features'], axis=1)
@@ -153,7 +156,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
             set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
             for num_neighbour in set_num_neighbours:
                 with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
-                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
+                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, n_classes=dataset_cfg.num_classes, l2_norm=l2_norm)
                 #neighbours_ids = []
                 soft_label = []
                 target_ids = feature_data['video_ids']
@@ -381,7 +384,7 @@ def get_data_unpack_func(split):
     return _unpack_data
 
 
-def _get_torch_dataset(csv_path, split, class_balanced_sampling):
+def _get_torch_dataset(csv_path, split):
     mode = dataset_cfg.split2mode[split]
 
     if split.startswith('multicrop'):
@@ -391,7 +394,10 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
         _test_scale = val_scale
         _test_num_spatial_crops = val_num_spatial_crops
 
-    video_id_to_label = None
+    if split == 'train':
+        global video_id_to_label
+    else:
+        video_id_to_label = None
 
     if input_type == 'gulp_rgb':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_rgb_dirname[split])
@@ -400,7 +406,6 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
                 input_frame_length, gulp_dir_path,
                 train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
                 train_horizontal_flip=dataset_cfg.horizontal_flip,
-                train_class_balanced_sampling=class_balanced_sampling,
                 test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
                 crop_size=crop_size,
                 mean = model_cfg.input_mean,
@@ -419,7 +424,6 @@ def _get_torch_dataset(csv_path, split, class_balanced_sampling):
                 input_frame_length, gulp_dir_path,
                 train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
                 train_horizontal_flip=dataset_cfg.horizontal_flip,
-                train_class_balanced_sampling=class_balanced_sampling,
                 test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,
                 crop_size=crop_size,
                 mean = model_cfg.input_mean,

@@ -1,4 +1,5 @@
 import torch
+from torch.nn import Module
 from torch import optim
 
 from pyvideoai.models.epic.tsm import TSM
@@ -34,23 +35,34 @@ def get_optim_policies(model):
     # return model.parameters()     # no policies
     return model.get_optim_policies()
 
-# If you need to extract features, use this. It can be defined in model_cfg too.
+# If you need to extract features, use this. It can be defined in exp_configs too.
 def feature_extract_model(model, featuremodel_name):
     if featuremodel_name == 'features':
-        from torch.nn import Module
         class FeatureExtractModel(Module):
             def __init__(self, model):
                 super().__init__()
                 self.model = model
+                if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+                    self.is_ddp = True
+                else:
+                    self.is_ddp = False
+
             def forward(self, x):
                 batch_size = x.shape[0]
-                imagenet_features = self.model.features(x)
+                if self.is_ddp:
+                    imagenet_features = self.model.module.features(x)
+                else:
+                    imagenet_features = self.model.features(x)
                 # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
                 # Average over frames
                 #return torch.mean(imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:]), dim=1)
                 return imagenet_features.view(batch_size, imagenet_features.shape[0] // batch_size, *imagenet_features.shape[1:])
 
+
         return FeatureExtractModel(model)
+
+    elif featuremodel_name == 'logits':
+        return model
     else:
         raise ValueError(f'Unknown feature model: {featuremodel_name}')
 

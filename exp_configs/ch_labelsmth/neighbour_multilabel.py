@@ -142,6 +142,9 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
         # feature_data['video_ids'] feature_data['labels'] feature_data['clip_features']
 
         if rank == 0:
+            # feature will be tuple just in case there are many features returning from the model. This case, it's only one feature.
+            feature_data['clip_features'] = feature_data['clip_features'][0]
+
             if feature_data['clip_features'].shape[1] == input_frame_length:
                 # features are not averaged. Average now
                 feature_data['clip_features'] = np.mean(feature_data['clip_features'], axis=1)
@@ -152,7 +155,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
             set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
             for num_neighbour in set_num_neighbours:
                 with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
-                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
+                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, n_classes=dataset_cfg.num_classes, l2_norm=l2_norm)
                 #neighbours_ids = []
                 soft_label = []
                 target_ids = feature_data['video_ids']
