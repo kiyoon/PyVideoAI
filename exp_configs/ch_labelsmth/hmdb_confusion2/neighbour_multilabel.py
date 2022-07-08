@@ -399,7 +399,7 @@ def _get_torch_dataset(csv_path, split):
 
     if split == 'train':
         if use_ideal_train_labels:
-            assert dataset_cfg.__name__ == 'ch_beta.hmdb_confusion2', f'Wrong dataset {dataset_cfg.__name__} for the option use_ideal_train_labels.'
+            assert dataset_cfg.__name__ == 'dataset_configs.ch_beta.hmdb_confusion2', f'Wrong dataset {dataset_cfg.__name__} for the option use_ideal_train_labels.'
             assert dataset_cfg.num_classes == 102
 
             orig_num_classes = 51
@@ -428,9 +428,10 @@ def _get_torch_dataset(csv_path, split):
                     onehot_labels[pseudo_label] = 1
                 else:
                     raise ValueError(f'Not recognised {mode = }')
+                return onehot_labels
 
 
-            video_id_to_label = {}
+            video_id_to_label_final = {}
 
             with open(csv_path, "r") as f:
                 _ = int(f.readline())
@@ -438,6 +439,8 @@ def _get_torch_dataset(csv_path, split):
                 for clip_idx, key_label in enumerate(f.read().splitlines()):
                     assert len(key_label.split()) == 5
                     gulp_key, video_id, label, start_frame, end_frame = key_label.split()
+                    video_id = int(video_id)
+                    label = int(label)
 
                     if loss_type in ['maskce', 'maskproselflc', 'mask_binary_ce']:
                         onehot_labels = construct_onehot_with_pseudo(dataset_cfg.num_classes, label, find_another_label(label), 'mask')
@@ -446,12 +449,13 @@ def _get_torch_dataset(csv_path, split):
                     else:
                         onehot_labels = construct_onehot_with_pseudo(dataset_cfg.num_classes, label, find_another_label(label), 'multi')
 
-                    video_id_to_label[video_id] = onehot_labels
+                    video_id_to_label_final[video_id] = onehot_labels
 
         else:
             global video_id_to_label
+            video_id_to_label_final = video_id_to_label
     else:
-        video_id_to_label = None
+        video_id_to_label_final = None
 
     if input_type == 'gulp_rgb':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_rgb_dirname[split])
@@ -468,7 +472,7 @@ def _get_torch_dataset(csv_path, split):
                 greyscale=False,
                 sample_index_code=sample_index_code,
                 processing_backend = 'pil',
-                video_id_to_label = video_id_to_label,
+                video_id_to_label = video_id_to_label_final,
                 )
     elif input_type == 'gulp_flow':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_flow_dirname[split])
@@ -488,7 +492,7 @@ def _get_torch_dataset(csv_path, split):
                 processing_backend = 'pil',
                 flow = 'grey',
                 flow_neighbours = flow_neighbours,
-                video_id_to_label = video_id_to_label,
+                video_id_to_label = video_id_to_label_final,
                 )
     else:
         raise ValueError(f'Wrong input_type {input_type}')
