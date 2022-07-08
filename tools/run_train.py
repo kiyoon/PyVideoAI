@@ -24,6 +24,7 @@ def add_train_args(parser):
     parser.add_argument("-B", "--telegram_bot_idx", type=int, default=0, help="Which Telegram bot to use defined in key.ini?")
     parser.add_argument("-WP", "--wandb_project", help="Weights & Biases (wandb.ai) project name. Assigning this argument enables the Weights & Biases visualisation service. Make sure you install wandb and call `wandb login` before you use.")
     parser.add_argument("-WR", "--wandb_run_id", help="To resume, specify the run ID of Weights & Biases (wandb.ai)")
+    parser.add_argument("-WUM", "--wandb_upload_models", default='best_and_last', choices=['best_and_last', 'no'], help="Upload models to Weights & Biases (wandb.ai)")
     parser.add_argument("-w", "--dataloader_num_workers", type=int, default=4, help="num_workers for PyTorch Dataset loader.")
     parser.add_argument("-r", "--refresh_period", type=int, default=1, help="How many iterations until printing stats. Increase this if stdio is your bottleneck (such as Slurm printing to network file).")
     parser.add_argument("-v", "--version", type=str, default='auto', help="Experiment version (`auto` or integer). `auto` chooses the last version when resuming from the last, otherwise creates new version.")

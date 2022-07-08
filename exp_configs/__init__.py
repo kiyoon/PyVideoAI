@@ -1,7 +1,6 @@
-import os, sys
+import os
 import importlib
 import importlib.util
-import glob
 
 import dataset_configs
 import model_configs
@@ -48,7 +47,7 @@ def _get_file_name(dataset_name: str, model_name: str, experiment_name: str, cha
 
 exec_relative_code = '''
 import os
-def _exec_relative_(python_path):    
+def _exec_relative_(python_path):
     """
     Dynamically import (exec) base config code.
     Only relative path should be used, and it will find correct config base recursively.
@@ -57,7 +56,7 @@ def _exec_relative_(python_path):
     _exec_paths_.append(base_config_path)
     with open(base_config_path, 'r') as f:
         config_code = f.read()
-        
+
     _current_dir_stack_.append(os.path.dirname(python_path))
     exec(config_code, globals())    # Adding globals() will make the new variables accessible after the call.
     _current_dir_stack_.pop()
@@ -72,7 +71,7 @@ def load_cfg(dataset_name, model_name, experiment_name, dataset_channel='', mode
     3. Add `_exec_relative_()` in the module.
     4. Exec module (exp_config)
         a. Note that `_exec_relative_` can be called. It'll recursively find correct config and exec' them.
-            
+
     Therefore, in the cfg object, you can access `dataset_cfg`, `model_cfg`, `_exec_relative_(python_path)`.
     """
     # Create an empty module

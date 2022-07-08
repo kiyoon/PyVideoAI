@@ -125,17 +125,36 @@ def train(args):
             if args.wandb_project is not None:
                 with OutputLogger('wandb', input='stderr'):
                     import wandb
-                    wandb_dir = os.path.join(exp.experiment_dir)
+                    wandb_rootdir = exp.experiment_dir
                     wandb_config = args.__dict__
 
                     if args.wandb_run_id is None:
-                        wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project,
-                            name=exp.full_exp_name)
+                        wandb_dir = os.path.join(exp.experiment_dir, 'wandb')
+                        if os.path.isdir(wandb_dir):
+                            # If this directory exists before initialising, it means you're resuming the experiment.
+                            wandb_run_dirname = [filename for filename in os.listdir(wandb_dir) if filename.startswith("run-")]
+                            assert len(wandb_run_dirname) == 1, f'No run or more than one W&B runs detected in a single experiment folder: {wandb_dir}'
+                            wandb_run_dirname = wandb_run_dirname[0]
+                            wandb_run_id = wandb_run_dirname.split('-')[-1]
+                            logger.info(f'You are resuming the experiment. We will resume W&B on run ID: {wandb_run_id} as well.')
+                            wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project, id=wandb_run_id, resume='must')
+                        else:
+                            wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project,
+                                name=exp.full_exp_name)
                     else:
-                        wandb.init(dir=wandb_dir, config=wandb_config, project=args.wandb_project, id=args.wandb_run_id, resume='must')
+                        wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project, id=args.wandb_run_id, resume='must')
                     logger.info((f'Weights & Biases initialised.\n'
                         f'View project at {wandb.run.get_project_url()}\n'
                         f'View run at {wandb.run.get_url()}'))
+
+                    wandb_details = {}
+                    wandb_details['entity'] = wandb.run.entity()
+                    wandb_details['id'] = wandb.run.id()
+                    wandb_details['project'] = wandb.run.project()
+                    wandb_details['name'] = wandb.run.name()
+
+                    with open(os.path.join(exp.logs_dir, 'wandb.json'), 'w') as f:
+                        json.dump(wandb_details, f, sort_keys=False, indent=4)
 
 
             # save configs
@@ -679,6 +698,13 @@ def train(args):
                         os.remove(best_symlink_path)
                     os.symlink(best_model_name, best_symlink_path)  # first argument not full path -> make relative symlink
 
+                    # Also make the last model symlink
+                    last_model_name = exp.checkpoints_format.format(epoch)
+                    last_symlink_path = os.path.join(exp.weights_dir, 'last.pth')
+                    if os.path.islink(last_symlink_path):
+                        os.remove(last_symlink_path)
+                    os.symlink(last_model_name, last_symlink_path)  # first argument not full path -> make relative symlink
+
 
                 if hasattr(cfg, 'early_stopping_condition'):
                     if world_size > 1:
@@ -703,6 +729,18 @@ def train(args):
                     exp.tg_send_text_with_expname((f'Finished training.\n'
                         f'View W&B project at {wandb.run.get_project_url()}\n'
                         f'View W&B run at {wandb.run.get_url()}'))
+
+                    logs_artifact = wandb.Artifact('logs', type='logs')
+                    logs_artifact.add_dir(exp.logs_dir)
+                    wandb.log_artifact(logs_artifact)
+
+                    if args.wandb_upload_models == 'best_and_last':
+                        best_model_artifact = wandb.Artifact('best', type='weights')
+                        best_model_artifact.add_file(os.path.join(exp.weights_dir, best_model_name))
+                        wandb.log_artifact(best_model_artifact)
+                        last_model_artifact = wandb.Artifact('last', type='weights')
+                        last_model_artifact.add_file(os.path.join(exp.weights_dir, last_model_name))
+                        wandb.log_artifact(last_model_artifact)
                 else:
                     exp.tg_send_text_with_expname('Finished training.')
 
