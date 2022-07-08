@@ -125,6 +125,9 @@ import exp_configs
 train_testmode_dataloader = None
 video_id_to_label = None
 def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
+    if use_ideal_train_labels:
+        return
+
     global train_testmode_dataloader
     if train_testmode_dataloader is None or epoch % 5 == 0:
         if 'partial' in dataset_cfg.__name__:
@@ -395,7 +398,58 @@ def _get_torch_dataset(csv_path, split):
         _test_num_spatial_crops = val_num_spatial_crops
 
     if split == 'train':
-        global video_id_to_label
+        if use_ideal_train_labels:
+            assert dataset_cfg.__name__ == 'ch_beta.hmdb_confusion2', f'Wrong dataset {dataset_cfg.__name__} for the option use_ideal_train_labels.'
+            assert dataset_cfg.num_classes == 102
+
+            orig_num_classes = 51
+
+            def find_another_label(label):
+                # 0 -> 51
+                # 1 -> 52
+                # 51 -> 0
+                # 52 -> 1
+                if label < orig_num_classes:
+                    return label + orig_num_classes
+                elif label < dataset_cfg.num_classes:
+                    return label % orig_num_classes
+                else:
+                    raise ValueError(f'Wrong {label = }')
+
+            def construct_onehot_with_pseudo(num_classes, ground_truth, pseudo_label, mode='mask'):
+                """
+                mode (str): mask, multi
+                """
+                onehot_labels = np.zeros(num_classes, dtype=int)
+                onehot_labels[ground_truth] = 1
+                if mode == 'mask':
+                    onehot_labels[pseudo_label] = -1
+                elif mode == 'multi':
+                    onehot_labels[pseudo_label] = 1
+                else:
+                    raise ValueError(f'Not recognised {mode = }')
+
+
+            video_id_to_label = {}
+
+            with open(csv_path, "r") as f:
+                _ = int(f.readline())
+
+                for clip_idx, key_label in enumerate(f.read().splitlines()):
+                    assert len(key_label.split()) == 5
+                    gulp_key, video_id, label, start_frame, end_frame = key_label.split()
+
+                    if loss_type in ['maskce', 'maskproselflc', 'mask_binary_ce']:
+                        onehot_labels = construct_onehot_with_pseudo(dataset_cfg.num_classes, label, find_another_label(label), 'mask')
+                    elif loss_type.lower().startswith('mask'):
+                        raise ValueError(f'You are using the mask loss {loss_type} but the labels are not in mask format!!')
+                    else:
+                        onehot_labels = construct_onehot_with_pseudo(dataset_cfg.num_classes, label, find_another_label(label), 'multi')
+
+                    video_id_to_label[video_id] = onehot_labels
+
+        else:
+            global video_id_to_label
     else:
         video_id_to_label = None
 
