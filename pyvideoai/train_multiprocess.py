@@ -148,10 +148,10 @@ def train(args):
                         f'View run at {wandb.run.get_url()}'))
 
                     wandb_details = {}
-                    wandb_details['entity'] = wandb.run.entity()
-                    wandb_details['id'] = wandb.run.id()
-                    wandb_details['project'] = wandb.run.project()
-                    wandb_details['name'] = wandb.run.name()
+                    wandb_details['entity'] = wandb.run.entity
+                    wandb_details['id'] = wandb.run.id
+                    wandb_details['project'] = wandb.run.project
+                    wandb_details['name'] = wandb.run.name
 
                     with open(os.path.join(exp.logs_dir, 'wandb.json'), 'w') as f:
                         json.dump(wandb_details, f, sort_keys=False, indent=4)
