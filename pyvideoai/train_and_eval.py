@@ -760,7 +760,7 @@ def extract_features(model, dataloader, data_unpack_func, num_classes, split = '
                         feature_data['clip_features'] = tuple([] for _ in range(num_model_outputs))
 
                 if num_model_outputs == 1:
-                    outputs = tuple(outputs, )
+                    outputs = tuple([outputs])  # if you convert directly like tuple(outputs,), it will split the tensor batch dimension into tuple. This case, we want the tuple size to be 1.
 
             # Gather data
             if world_size > 1:

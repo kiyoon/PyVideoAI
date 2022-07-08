@@ -41,16 +41,16 @@ Optional but suggested to keep the format consistent.
 """
 dataset_root = os.path.join(DATA_DIR, 'hmdb51')
 frames_dir = os.path.join(dataset_root, "frames_q5")
-gulp_rgb_dirname = {'train': 'gulp_rgb', 'val': 'gulp_rgb', 'multicropval': 'gulp_rgb'}
+gulp_rgb_dirname = {'train': 'gulp_rgb', 'val': 'gulp_rgb', 'multicropval': 'gulp_rgb', 'trainpartialdata_testmode': 'gulp_flow', 'traindata_testmode': 'gulp_flow'}
 gulp_flow_dirname = {'train': 'gulp_flow', 'val': 'gulp_flow', 'multicropval': 'gulp_flow', 'trainpartialdata_testmode': 'gulp_flow', 'traindata_testmode': 'gulp_flow'}
 frames_split_file_dir = os.path.join(dataset_root, "splits_frames")
 gulp_rgb_split_file_dir = os.path.join(dataset_root, 'splits_gulp_rgb')
 gulp_flow_split_file_dir = os.path.join(dataset_root, 'splits_gulp_flow')
-split_file_basename1 = {'train': 'train1.csv', 'val': 'test1.csv', 'multicropval': 'test1.csv'}
-split_file_basename2 = {'train': 'train2.csv', 'val': 'test2.csv', 'multicropval': 'test2.csv'}
-split_file_basename3 = {'train': 'train3.csv', 'val': 'test3.csv', 'multicropval': 'test3.csv'}
+split_file_basename1 = {'train': 'train1.csv', 'val': 'test1.csv', 'multicropval': 'test1.csv', 'traindata_testmode': 'train1.csv'}
+split_file_basename2 = {'train': 'train2.csv', 'val': 'test2.csv', 'multicropval': 'test2.csv', 'traindata_testmode': 'train2.csv'}
+split_file_basename3 = {'train': 'train3.csv', 'val': 'test3.csv', 'multicropval': 'test3.csv', 'traindata_testmode': 'train3.csv'}
 split_file_basename = split_file_basename1
-split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
+split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test', 'traindata_testmode': 'test'}
 
 # Training settings
 horizontal_flip = True
