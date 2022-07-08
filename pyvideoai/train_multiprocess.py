@@ -21,6 +21,8 @@ import time
 
 from .utils import distributed as du
 import json
+import yaml
+from yaml.loader import SafeLoader
 from .utils import misc
 from .utils.stdout_logger import OutputLogger
 from .utils.distributed import check_random_seed_in_sync
@@ -132,12 +134,27 @@ def train(args):
                         wandb_dir = os.path.join(exp.experiment_dir, 'wandb')
                         if os.path.isdir(wandb_dir):
                             # If this directory exists before initialising, it means you're resuming the experiment.
-                            wandb_run_dirname = [filename for filename in os.listdir(wandb_dir) if filename.startswith("run-")]
-                            assert len(wandb_run_dirname) == 1, f'No run or more than one W&B runs detected in a single experiment folder: {wandb_dir}'
-                            wandb_run_dirname = wandb_run_dirname[0]
-                            wandb_run_id = wandb_run_dirname.split('-')[-1]
+                            wandb_run_ids = [filename.split('-')[-1] for filename in os.listdir(wandb_dir) if filename.startswith("run-")]
+                            assert len(set(wandb_run_ids)) == 1, f'No run or more than one W&B runs detected in a single experiment folder: {wandb_dir}'
+                            wandb_run_id = wandb_run_ids[0]
                             logger.info(f'You are resuming the experiment. We will resume W&B on run ID: {wandb_run_id} as well.')
-                            wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project, id=wandb_run_id, resume='must')
+                            # Detect project name automatically.
+                            wandb_run_dirs = sorted([filename for filename in os.listdir(wandb_dir) if filename.startswith("run-")])
+                            wandb_run_dir = wandb_run_dirs[-1]
+                            wandb_run_config_path = os.path.join(wandb_dir, wandb_run_dir, 'files', 'config.yaml')
+                            with open(wandb_run_config_path, 'r') as f:
+                                wandb_run_config = yaml.load(f, Loader=SafeLoader)
+                            wandb_run_project = wandb_run_config['wandb_project']['value']
+
+                            if wandb_run_project != args.wandb_project:
+                                logger.warning(f'W&B project name for the previous run ({wandb_run_project}) is different from {args.wandb_project = }. args will be first tried and if fails we will use the previous name.')
+                                try:
+                                    wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project, id=wandb_run_id, resume='must')
+                                except wandb.errors.UsageError:
+                                    logger.error(f'W&B project name {args.wandb_project = } did not work. Trying {wandb_run_project}.')
+                                    wandb.init(dir=wandb_rootdir, config=wandb_config, project=wandb_run_project, id=wandb_run_id, resume='must')
+                            else:
+                                wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project, id=wandb_run_id, resume='must')
                         else:
                             wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project,
                                 name=exp.full_exp_name)
