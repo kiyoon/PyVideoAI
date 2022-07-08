@@ -76,6 +76,11 @@ thr_per_class = {}
 l2_norm = False
 save_features = True
 
+# If True, bypass neighbour search pseudo-label generation.
+# Instead, use ideal labels.
+# Only works in hmdb_confusion2 dataset
+use_ideal_train_labels = False
+
 #proselflc_total_time = 2639 * 60 # 60 epochs
 #proselflc_total_time = 263 * 40 # 60 epochs
 def proselflc_total_time():
