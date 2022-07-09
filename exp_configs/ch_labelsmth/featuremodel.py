@@ -71,7 +71,7 @@ l2_norm = False
 
 
 #clip_grad_max_norm = 20
-learning_rate = float(os.getenv('VAI_LR', 5e-6))      # when batch_size == 1 and #GPUs == 1
+learning_rate = float(os.getenv('VAI_LR', 5e-6))
 
 
 def get_input_feature_dim():
