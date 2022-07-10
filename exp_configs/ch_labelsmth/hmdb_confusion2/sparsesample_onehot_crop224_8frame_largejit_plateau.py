@@ -16,7 +16,7 @@ input_frame_length = 8
 input_type = 'gulp_rgb' # gulp_rgb / gulp_flow
 split_num = int(os.getenv('VAI_SPLITNUM', default=1))           # 1 / 2 / 3
 
-num_epochs = int(os.getenv('VAI_NUM_EPOCHS', default=500))
+num_epochs = int(os.getenv('VAI_NUM_EPOCHS', default=1000))
 
 #batch_size = 8  # per process (per GPU)
 def batch_size():
