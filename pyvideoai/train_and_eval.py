@@ -239,7 +239,8 @@ def train_epoch(model, optimiser, scheduler, criterion, clip_grad_max_norm, use_
 
         logger.info(write_str)
 
-    return sample_seen, total_samples, loss, elapsed_time#}}}
+    lr_epoch_end = lr
+    return sample_seen, total_samples, loss, elapsed_time, lr_epoch_end#}}}
 
 
 def eval_epoch(model, criterion, dataloader, data_unpack_func, val_metrics, best_metric, num_classes, split = 'val', rank = 0, world_size = 1, input_reshape_func = None, scheduler=None, refresh_period = 1, PAD_VALUE = -1):

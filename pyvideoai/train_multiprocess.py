@@ -532,15 +532,16 @@ def train(args):
                     print()
                     logger.info("Epoch %d/%d" % (epoch, num_epochs-1))
 
-                sample_seen, total_samples, loss, elapsed_time = train_epoch(model, optimiser, scheduler, criterions['train'], clip_grad_max_norm, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
+                sample_seen, total_samples, loss, elapsed_time, lr_epoch_end = train_epoch(model, optimiser, scheduler, criterions['train'], clip_grad_max_norm, use_amp, amp_scaler, train_dataloader, data_unpack_funcs['train'], metrics['train'], args.training_speed, rank, world_size, input_reshape_func=input_reshape_funcs['train'], refresh_period=args.refresh_period)
                 if rank == 0:#{{{
                     elapsed_time += epoch_start_script_elapsed_time     # Include epoch start script as training time
                     curr_stat = {'epoch': epoch, 'train_runtime_sec': elapsed_time, 'train_loss': loss}
-                    wandb_stat = {'Loss/train': loss, 'Runtime_sec/train': elapsed_time, 'Sample_seen/train': sample_seen, 'Total_samples/train': total_samples}
+                    wandb_stat = {'Loss/train': loss, 'Runtime_sec/train': elapsed_time, 'Sample_seen/train': sample_seen, 'Total_samples/train': total_samples, 'LR/epoch_end': lr_epoch_end}
                     get_tensorboard_writer('train').add_scalar('Loss', loss, epoch)
                     get_tensorboard_writer('train').add_scalar('Runtime_sec', elapsed_time, epoch)
                     get_tensorboard_writer('train').add_scalar('Sample_seen', sample_seen, epoch)
                     get_tensorboard_writer('train').add_scalar('Total_samples', total_samples, epoch)
+                    get_tensorboard_writer('train').add_scalar('LR_epoch_end', lr_epoch_end, epoch)
 
                     for metric in metrics['train']:
                         tensorboard_tags = metric.tensorboard_tags()
