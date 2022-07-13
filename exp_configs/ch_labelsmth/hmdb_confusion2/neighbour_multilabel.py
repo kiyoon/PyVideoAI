@@ -539,7 +539,7 @@ Recommeded to change this settings in model_configs
 ## For both train & val
 Changing last_activation and leaving metrics/predictions_gatherers commented out will still change the default metrics and predictions_gatherers' activation function
 """
-last_activation = 'softmax'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
+last_activation = 'sigmoid'   # or, you can pass a callable function like `torch.nn.Softmax(dim=1)`
 
 """
 ## For training, (tools/run_train.py)
