@@ -9,12 +9,15 @@ import dataset_configs, model_configs, exp_configs
 from . import config
 
 import json
+import yaml
+from yaml.loader import SafeLoader
 
 from .utils import loader
 from torch.utils.data.distributed import DistributedSampler
 
 from .utils import distributed as du
 from .utils import misc
+from .utils.stdout_logger import OutputLogger
 from .train_and_eval import eval_epoch
 
 # Version checking
@@ -75,6 +78,33 @@ def evaluation(args):
             logger.info(f"PyTorch=={torch.__version__}")
             logger.info(f"PyVideoAI=={__version__}")
             logger.info(f"Experiment folder: {exp.experiment_dir} on host {socket.gethostname()}")
+
+            # Enable Weights & Biases visualisation service.
+            if args.wandb:
+                with OutputLogger('wandb', input='stderr'):
+                    import wandb
+                    wandb_rootdir = exp.experiment_dir
+
+                    wandb_dir = os.path.join(exp.experiment_dir, 'wandb')
+                    if not os.path.isdir(wandb_dir):
+                        raise FileNotFoundError(f'{wandb_dir} does not exist. Resuming W&B failed.')
+
+                    wandb_run_ids = [filename.split('-')[-1] for filename in os.listdir(wandb_dir) if filename.startswith("run-")]
+                    assert len(set(wandb_run_ids)) == 1, f'No run or more than one W&B runs detected in a single experiment folder: {wandb_dir}'
+                    wandb_run_id = wandb_run_ids[0]
+                    logger.info(f'You are resuming the experiment. We will resume W&B on run ID: {wandb_run_id} as well.')
+                    # Detect project name automatically.
+                    wandb_run_dirs = sorted([filename for filename in os.listdir(wandb_dir) if filename.startswith("run-")])
+                    wandb_run_dir = wandb_run_dirs[-1]
+                    wandb_run_config_path = os.path.join(wandb_dir, wandb_run_dir, 'files', 'config.yaml')
+                    with open(wandb_run_config_path, 'r') as f:
+                        wandb_run_config = yaml.load(f, Loader=SafeLoader)
+                    wandb_run_project = wandb_run_config['wandb_project']['value']
+
+                    wandb.init(dir=wandb_rootdir, project=wandb_run_project, id=wandb_run_id, resume='must')
+                    logger.info((f'Resuming Weights & Biases run.\n'
+                        f'View project at {wandb.run.get_project_url()}\n'
+                        f'View run at {wandb.run.get_url()}'))
 
             # save configs
 #            exp.dump_args(args)
@@ -185,6 +215,24 @@ def evaluation(args):
             if load_epoch is not None and load_epoch >= 0:
                 logger.info(f'Updating exp--summary.csv line with {curr_stat}.')
                 exp.update_summary_line(curr_stat)
+
+                if args.wandb:
+                    if args.load_epoch == -1:
+                        epochname = 'epoch_last'
+                    elif args.load_epoch == -2:
+                        epochname = 'epoch_best'
+                    else:
+                        epochname = f'epoch_{load_epoch:04d}'
+
+                    for key, val in curr_stat.items():
+                        if key == 'epoch':
+                            key = f'{split}_epoch'
+
+                        key = f'{epochname}-{key}'
+
+                        wandb.run.summary[key] = val
+
+
             else:
                 logger.info(f'epoch {load_epoch} is not supported. Not updating the summary.csv line.')
 
@@ -201,6 +249,11 @@ def evaluation(args):
                 print("Saving predictions to: " + predictions_file_path)
                 with open(predictions_file_path, 'wb') as f:
                     pickle.dump({'video_predictions': video_predictions, 'video_labels': video_labels, 'video_ids': video_ids}, f, pickle.HIGHEST_PROTOCOL)
+
+                if args.wandb:
+                    predictions_artifact = wandb.Artifact('predictions', type='predictions')
+                    predictions_artifact.add_file(predictions_file_path)
+                    wandb.log_artifact(predictions_artifact)
 
 
 
