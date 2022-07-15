@@ -4,14 +4,14 @@ from .metric import Metric
 
 
 
-class ClipIOUMultilabelAccuracyMetric(Metric):
+class ClipIOUAccuracyMetric(Metric):
     """
     Multi-label accuracy defined as the proportion of the predicted correct labels
     to the total number (predicted and actual) of labels for that instance.
     Defined in (Sorower, 2010).
     """
     def __init__(self, activation = 'sigmoid', threshold = 0.5, **kwargs):
-        super().__init__(activation, **kwargs)
+        super().__init__(activation=activation, **kwargs)
         self.threshold = threshold
 
     def clean_data(self):
@@ -42,11 +42,11 @@ class ClipIOUMultilabelAccuracyMetric(Metric):
 
 
     def tensorboard_tags(self):
-        return 'IOU multilabel accuracy'
+        return 'IOU accuracy'
 
 
     def get_csv_fieldnames(self):
-        return f'{self.split}_iou_multilabel_accuracy'
+        return f'{self.split}_iou_accuracy'
 
 
     def logging_msg_iter(self):
@@ -60,7 +60,7 @@ class ClipIOUMultilabelAccuracyMetric(Metric):
         else:
             prefix = f'{self.split}_'
 
-        message = f'{prefix}ioumultiacc: {self.last_calculated_metrics:.4f}'
+        message = f'{prefix}iouacc: {self.last_calculated_metrics:.4f}'
         return message
 
 
@@ -79,13 +79,13 @@ class ClipIOUMultilabelAccuracyMetric(Metric):
             either tuple or a single str
         """
         if self.split == 'train':
-            return 'Training IOU multilabel accuracy'
+            return 'Training IOU accuracy'
         elif self.split == 'val':
-            return 'Validation IOU multilabel accuracy'
+            return 'Validation IOU accuracy'
         elif self.split == 'multicropval':
-            return 'Multicrop validation IOU multilabel accuracy'
+            return 'Multicrop validation IOU accuracy'
         else:
-            return f'{self.split} IOU multilabel accuracy'
+            return f'{self.split} IOU accuracy'
 
 
     def plot_file_basenames(self):
@@ -94,7 +94,7 @@ class ClipIOUMultilabelAccuracyMetric(Metric):
             either tuple or a single str
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
-        return 'iou_multilabel_accuracy'
+        return 'iou_accuracy'
 
 
     @staticmethod
@@ -122,7 +122,7 @@ class ClipF1MeasureMetric(Metric):
     Defined in (Sorower, 2010).
     """
     def __init__(self, activation = 'sigmoid', threshold = 0.5, **kwargs):
-        super().__init__(activation, **kwargs)
+        super().__init__(activation=activation, **kwargs)
         self.threshold = threshold
 
     def clean_data(self):
@@ -171,7 +171,7 @@ class ClipF1MeasureMetric(Metric):
         else:
             prefix = f'{self.split}_'
 
-        message = f'{prefix}ioumultiacc: {self.last_calculated_metrics:.4f}'
+        message = f'{prefix}f1: {self.last_calculated_metrics:.4f}'
         return message
 
 
