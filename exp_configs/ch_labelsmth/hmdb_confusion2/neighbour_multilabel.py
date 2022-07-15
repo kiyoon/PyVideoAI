@@ -545,6 +545,7 @@ last_activation = 'sigmoid'   # or, you can pass a callable function like `torch
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
+from pyvideoai.metrics import ClipIOUAccuracyMetric, ClipF1MeasureMetric
 from pyvideoai.metrics.mAP import Clip_mAPMetric
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
@@ -560,6 +561,8 @@ metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
             ClipTop1MultilabelAccuracyMetric(),
             ClipTopkMultilabelAccuracyMetric(),
             Clip_mAPMetric(activation='sigmoid'),
+            ClipIOUAccuracyMetric(activation='sigmoid'),
+            ClipF1MeasureMetric(activation='sigmoid'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
