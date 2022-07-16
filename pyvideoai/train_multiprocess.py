@@ -149,17 +149,17 @@ def train(args):
                             if wandb_run_project != args.wandb_project:
                                 logger.warning(f'W&B project name for the previous run ({wandb_run_project}) is different from {args.wandb_project = }. args will be first tried and if fails we will use the previous name.')
                                 try:
-                                    wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project, id=wandb_run_id, resume='must')
+                                    wandb.init(dir=wandb_rootdir, config=wandb_config, entity=args.wandb_entity, project=args.wandb_project, id=wandb_run_id, resume='must')
                                 except wandb.errors.UsageError:
                                     logger.error(f'W&B project name {args.wandb_project = } did not work. Trying {wandb_run_project}.')
-                                    wandb.init(dir=wandb_rootdir, config=wandb_config, project=wandb_run_project, id=wandb_run_id, resume='must')
+                                    wandb.init(dir=wandb_rootdir, config=wandb_config, entity=args.wandb_entity, project=wandb_run_project, id=wandb_run_id, resume='must')
                             else:
-                                wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project, id=wandb_run_id, resume='must')
+                                wandb.init(dir=wandb_rootdir, config=wandb_config, entity=args.wandb_entity, project=args.wandb_project, id=wandb_run_id, resume='must')
                         else:
-                            wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project,
+                            wandb.init(dir=wandb_rootdir, config=wandb_config, entity=args.wandb_entity, project=args.wandb_project,
                                 name=exp.full_exp_name)
                     else:
-                        wandb.init(dir=wandb_rootdir, config=wandb_config, project=args.wandb_project, id=args.wandb_run_id, resume='must')
+                        wandb.init(dir=wandb_rootdir, config=wandb_config, entity=args.wandb_entity, project=args.wandb_project, id=args.wandb_run_id, resume='must')
                     logger.info((f'Weights & Biases initialised.\n'
                         f'View project at {wandb.run.get_project_url()}\n'
                         f'View run at {wandb.run.get_url()}'))

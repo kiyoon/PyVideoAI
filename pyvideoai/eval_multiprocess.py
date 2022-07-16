@@ -101,7 +101,7 @@ def evaluation(args):
                         wandb_run_config = yaml.load(f, Loader=SafeLoader)
                     wandb_run_project = wandb_run_config['wandb_project']['value']
 
-                    wandb.init(dir=wandb_rootdir, project=wandb_run_project, id=wandb_run_id, resume='must')
+                    wandb.init(dir=wandb_rootdir, entity=args.wandb_entity, project=wandb_run_project, id=wandb_run_id, resume='must')
                     logger.info((f'Resuming Weights & Biases run.\n'
                         f'View project at {wandb.run.get_project_url()}\n'
                         f'View run at {wandb.run.get_url()}'))
