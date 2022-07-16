@@ -192,7 +192,12 @@ def evaluation(args):
         criterion = cfg.dataset_cfg.task.get_criterion(cfg, split)
 
         if rank == 0:
-            exp.tg_send_text_with_expname('Starting evaluation..')
+            if args.wandb:
+                exp.tg_send_text_with_expname((f'Starting evaluation..\n'
+                    f'View W&B project at {wandb.run.get_project_url()}\n'
+                    f'View W&B run at {wandb.run.get_url()}'))
+            else:
+                exp.tg_send_text_with_expname('Starting evaluation..')
 
         _, _, loss, elapsed_time, eval_log_str = eval_epoch(model, criterion, val_dataloader, data_unpack_func, metrics[split], None, cfg.dataset_cfg.num_classes, split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
 
