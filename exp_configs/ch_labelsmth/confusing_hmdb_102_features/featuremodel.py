@@ -499,19 +499,18 @@ from pyvideoai.metrics import ClipIOUAccuracyMetric, ClipF1MeasureMetric
 from pyvideoai.metrics.mAP import Clip_mAPMetric
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
-from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
 from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
 from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
 
-best_metric = ClipMultilabelAccuracyMetric()
+best_metric = ClipIOUAccuracyMetric(activation='sigmoid')
 metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
             ClipMeanPerclassAccuracyMetric(exclude_classes_less_sample_than=20),
             ],
-        'val': [best_metric,
+        'val': [ClipMultilabelAccuracyMetric(),
             ClipTop1MultilabelAccuracyMetric(),
             ClipTopkMultilabelAccuracyMetric(),
             Clip_mAPMetric(activation='sigmoid'),
-            ClipIOUAccuracyMetric(activation='sigmoid'),
+            best_metric,
             ClipF1MeasureMetric(activation='sigmoid'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
