@@ -626,8 +626,8 @@ metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
 how to gather predictions when --save_predictions is set
 """
 from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
-predictions_gatherers = {'val': ClipPredictionsGatherer(last_activation),
-        'multicropval': VideoPredictionsGatherer(last_activation),
+predictions_gatherers = {'val': ClipPredictionsGatherer(),
+        'multicropval': VideoPredictionsGatherer(),
         }
 
 """How will you plot"""
