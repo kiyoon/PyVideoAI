@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 import numpy as np
 
-from video_datasets_api.wray_multiverb.beoid import NUM_CLASSES_FILTERED as num_classes
-from video_datasets_api.wray_multiverb.beoid import read_all_annotations_filtered
-from video_datasets_api.wray_multiverb.beoid import Wray_verb_class_keys_filtered as class_keys
+from video_datasets_api.wray_multiverb.beoid import NUM_CLASSES_THRESHOLDED as num_classes
+from video_datasets_api.wray_multiverb.beoid import read_all_annotations_thresholded
+from video_datasets_api.wray_multiverb.beoid import Wray_verb_class_keys_thresholded as class_keys
 
 from pyvideoai.config import DATA_DIR
 
@@ -18,11 +18,11 @@ task = SingleLabelClassificationTask()
 # Paths
 dataset_root = os.path.join(DATA_DIR, 'BEOID')
 gulp_rgb_dir = os.path.join(dataset_root, 'gulp_rgb')
+gulp_flow_dir = os.path.join(dataset_root, 'gulp_flow')
 wray_annotations_root = os.path.join(DATA_DIR, 'Multi-Verb-Labels')
 beoid_annotations_root = os.path.join(dataset_root, 'Annotations')
 
-BEOID_all_videos = read_all_annotations_filtered(wray_annotations_root, beoid_annotations_root)
-video_id_to_singleverb: dict[int, int] = {video_info.clip_id: video_info.wray_verblabel_idx for video_info in BEOID_all_videos}
+BEOID_all_videos = read_all_annotations_thresholded(wray_annotations_root, beoid_annotations_root)
 video_id_to_multiverb: dict[int, np.array] = {}
 for video_info in BEOID_all_videos:
     label_array = np.zeros(num_classes, dtype=float)
@@ -31,6 +31,7 @@ for video_info in BEOID_all_videos:
     video_id_to_multiverb[video_info.clip_id] = label_array
 
 gulp_rgb_split_file_dir = os.path.join(dataset_root, 'wray_splits_gulp_rgb')
+gulp_flow_split_file_dir = os.path.join(dataset_root, 'wray_splits_gulp_flow')
 split_file_basename_format = {'train': 'train{}.csv', 'val': 'val{}.csv', 'multicropval': 'val{}.csv', 'traindata_testmode': 'train{}.csv'}
 split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test', 'traindata_testmode': 'test'}
 horizontal_flip = True

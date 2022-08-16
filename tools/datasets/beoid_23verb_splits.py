@@ -3,7 +3,7 @@ from pathlib import Path
 import random
 from collections import OrderedDict
 
-from video_datasets_api.wray_multiverb.beoid import read_all_annotations, BEOIDMultiVerb23Label
+from video_datasets_api.wray_multiverb.beoid import read_all_annotations_filtered, BEOIDMultiVerb23Label
 
 
 parser = argparse.ArgumentParser(
@@ -29,7 +29,7 @@ parser.add_argument("--seed", default=12)
 def main(args):
     assert 1 < args.train_ratio < 100
     random.seed(args.seed)
-    segments_info = read_all_annotations(str(args.wray_annotations_root_dir), str(args.BEOID_annotations_root_dir))
+    segments_info = read_all_annotations_filtered(str(args.wray_annotations_root_dir), str(args.BEOID_annotations_root_dir))
     verb_to_segments: dict[int, list[BEOIDMultiVerb23Label]] = {}
     for segment_info in segments_info:
         verb = segment_info.wray_verblabel_idx
