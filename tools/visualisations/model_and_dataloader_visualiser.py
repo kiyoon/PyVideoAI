@@ -154,9 +154,9 @@ def main():
                         writer.add_video('dataloader_gif', video_tensorboard, global_step=idx)
                         writer.add_text('dataloader_gif', caption, global_step=idx)
 
-                if not args.video_ids:
-                    # only one iteration
-                    break
+            if args.video_ids is None:
+                # only one iteration
+                break
 
 
         if args.telegram:
