@@ -1,6 +1,5 @@
 from pyvideoai.models.slowfast.video_model_builder import ResNetModel
 
-import torch.distributed as dist
 from pyvideoai.utils import loader
 
 def load_model(num_classes, input_frame_length, crop_size=224, input_channel_num=[3]):
@@ -44,4 +43,3 @@ input_normalise = False
 input_bgr = False
 input_mean = [114.75, 114.75, 114.75]
 input_std = [57.375, 57.375, 57.375]
-

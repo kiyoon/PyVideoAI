@@ -1,0 +1,1 @@
+from .swin_transformer_with_head import SwinTransformer3DWithHead
