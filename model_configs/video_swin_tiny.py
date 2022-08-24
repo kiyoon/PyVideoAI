@@ -8,6 +8,7 @@ It will load the Kinetics-400 pre-trained model smoothly.
 """
 import os
 import torch
+from torch.nn import Module
 from pyvideoai.models.video_swin import SwinTransformer3DWithHead
 from pyvideoai.config import DATA_DIR
 from pyvideoai.utils.loader import model_load_state_dict_nostrict
@@ -44,6 +45,9 @@ def load_pretrained_kinetics400(model, pretrained_path=kinetics400_pretrained_pa
     model_load_state_dict_nostrict(model, checkpoint['state_dict'])
 
 
+def get_optim_policies(model):
+    return model.parameters()     # no policies
+
 
 def model_input_shape_to_NTHWC(inputs):
     # N, C, T, H, W -> N, T, H, W, C
@@ -51,6 +55,39 @@ def model_input_shape_to_NTHWC(inputs):
 
 def NCTHW_to_model_input_shape(inputs):
     return inputs
+
+
+# If you need to extract features, use this. It can be defined in exp_configs too.
+def feature_extract_model(model, featuremodel_name):
+    if featuremodel_name == 'features':
+        class FeatureExtractModel(Module):
+            def __init__(self, model):
+                super().__init__()
+                self.model = model
+                if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+                    self.is_ddp = True
+                else:
+                    self.is_ddp = False
+
+            def forward(self, x):
+                #batch_size = x.shape[0]
+                if self.is_ddp:
+                    backbone_features = self.model.module.features(x)
+                else:
+                    backbone_features = self.model.features(x)
+                # It considers frames are image batch. Disentangle so you get actual video batch and number of frames.
+                # Average over frames, width and height.
+                # (N, C, T, H, W)
+                # Use average pool 3D?
+                return torch.mean(torch.mean(torch.mean(backbone_features, dim=-1), dim=-1), dim=-1)
+
+
+        return FeatureExtractModel(model)
+
+    elif featuremodel_name == 'logits':
+        return model
+    else:
+        raise ValueError(f'Unknown feature model: {featuremodel_name}')
 
 
 ddp_find_unused_parameters = False

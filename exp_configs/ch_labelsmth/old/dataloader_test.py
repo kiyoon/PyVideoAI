@@ -71,8 +71,8 @@ def _get_torch_dataset(csv_path, split):
     else:
         raise ValueError(f'Wrong input_type {input_type}')
 
-    return FramesSparsesampleDataset(csv_path, mode, 
-            _input_frame_length, 
+    return FramesSparsesampleDataset(csv_path, mode,
+            _input_frame_length,
             train_jitter_min = train_jitter_min, train_jitter_max=train_jitter_max,
             train_horizontal_flip=dataset_cfg.horizontal_flip,
             test_scale = _test_scale, test_num_spatial_crops=_test_num_spatial_crops,

@@ -41,7 +41,7 @@ class EmbeddingDistanceLoss(torch.nn.Module):
         super().__init__()
 
         self.num_classes = embeddings.shape[0]
-        
+
         self.embedding_pdist = sklearn.metrics.pairwise_distances(embeddings)  # shape (C, C)
 
     def forward(self, pred_probs: Tensor, target_probs: Tensor) -> Tensor:
@@ -69,5 +69,3 @@ class EmbeddingDistanceLoss(torch.nn.Module):
 
 def get_criterion(split):
     return EmbeddingDistanceLoss(sent2vec_embeddings)
-
-

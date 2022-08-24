@@ -189,9 +189,12 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
 
 def load_model():
     if pretrained is not None:
-        return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, pretrained=pretrained)
+        return model_cfg.load_model(num_classes = dataset_cfg.num_classes,
+                input_frame_length = input_frame_length,
+                pretrained=pretrained)
     else:
-        return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length)
+        return model_cfg.load_model(num_classes = dataset_cfg.num_classes,
+                input_frame_length = input_frame_length)
 
 # If you need to extract features, use this. It can be defined in model_cfg too.
 #def feature_extract_model(model):
