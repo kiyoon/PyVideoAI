@@ -284,12 +284,11 @@ how to calculate metrics
 """
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
 from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
-from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set, get_singlemultilabel
+from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multiverb, get_val_holdout_set
 from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict
-video_id_to_multilabel = read_multilabel()
+video_id_to_multilabel = read_multiverb(dataset_cfg.narration_id_to_video_id)
 _, epic_video_id_to_label = get_verb_uid2label_dict(dataset_cfg.annotations_root)
 holdout_video_id_to_label = get_val_holdout_set(epic_video_id_to_label, video_id_to_multilabel)
-video_id_to_singlemultilabel = get_singlemultilabel(epic_video_id_to_label, video_id_to_multilabel)
 
 best_metric = ClipAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval')
 metrics = {'train': [ClipAccuracyMetric(),
