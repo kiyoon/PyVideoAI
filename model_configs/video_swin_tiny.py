@@ -13,10 +13,15 @@ from pyvideoai.models.video_swin import SwinTransformer3DWithHead
 from pyvideoai.config import DATA_DIR
 from pyvideoai.utils.loader import model_load_state_dict_nostrict
 
+import logging
+logger = logging.getLogger(__name__)
 
 def load_model(num_classes, input_channel_num=3, input_frame_length=None, crop_size=None):
-    assert input_frame_length is None, 'This model does not require input_frame_length. It will give you the same output shape regardless of the length.'
-    assert crop_size is None, 'This model does not require crop_size. It will give you the same output shape regardless of the length.'
+    if input_frame_length is not None:
+        logger.warning('This model does not require input_frame_length. It will give you the same output shape regardless of the length.')
+    if crop_size is not None:
+        logger.warning('This model does not require crop_size. It will give you the same output shape regardless of the length.')
+
     model = SwinTransformer3DWithHead(num_classes = num_classes,
                 patch_size=(2,4,4),
                 in_chans=input_channel_num,
