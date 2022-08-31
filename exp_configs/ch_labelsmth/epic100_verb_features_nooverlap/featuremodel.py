@@ -144,6 +144,27 @@ def get_features(split):
     assert features.shape[1] == input_feature_dim
     assert video_ids.shape[0] == labels.shape[0] == features.shape[0]
 
+    logger.info(f'{video_ids.shape[0]} samples in {split = } before filtering samples.')
+
+    # Keep only the videos according to the CSV.
+    keep_video_ids = []
+
+    split_file = os.path.join(dataset_cfg.gulp_rgb_split_file_dir, dataset_cfg.split_file_basename[split])
+    logger.info(f'Reading {split_file} to get the video IDs to keep.')
+    with open(split_file, 'r') as f:
+        lines = f.readlines()
+
+    for line in lines[1:]:
+        video_id = int(line.split(' ')[1])
+        keep_video_ids.append(video_id)
+
+    mask = np.isin(video_ids, keep_video_ids)
+    video_ids = video_ids[mask]
+    labels = labels[mask]
+    features = features[mask]
+
+    logger.info(f'{video_ids.shape[0]} samples in {split = } after filtering samples.')
+
     return video_ids, labels, features
 
 
