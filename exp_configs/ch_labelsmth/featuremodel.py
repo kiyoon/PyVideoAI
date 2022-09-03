@@ -62,6 +62,10 @@ thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.2))
 num_neighbours_per_class = {}
 thr_per_class = {}
 
+# Use pre-computed neighbour information if available. Otherwise, compute and cache.
+use_neighbour_cache = os.getenv('VAI_USE_NEIGHBOUR_CACHE', 'False') == 'True'
+
+
 # When generating pseudo labels, always include labels from segments with temporal overlap
 add_temporal_overlap_as_pseudo_label = False
 temporal_overlap_csv_path = os.path.join(multi_label_ar.MODULE_DIR, '..', 'annotations', 'ek_100_train_overlapping', 'EK100_train_overlapping_extension=0.csv')
@@ -195,8 +199,25 @@ def generate_train_pseudo_labels():
                 soft_labels_per_num_neighbour = {}    # key: num_neighbours
                 set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
                 for num_neighbour in set_num_neighbours:
-                    with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
-                        nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
+                    if use_neighbour_cache:
+                        neighbour_cache_dir = os.path.join(dataset_cfg.dataset_root, 'neighbour_cache', feature_input_type)
+                        neighbour_cache_file = os.path.join(neighbour_cache_dir, f'{num_neighbours=},{thr=},{l2_norm=}.pkl')
+                        os.makedirs(neighbour_cache_dir, exist_ok=True)
+
+                        if os.path.isfile(neighbour_cache_file):
+                            logger.info(f'Loading neighbour from cache file: {neighbour_cache_file}')
+                            with open(neighbour_cache_file, 'rb') as f:
+                                nc_freq = pickle.load(f)
+                        else:
+                            with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
+                                nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
+                            logger.info(f'Caching neighbour information to file: {neighbour_cache_file}')
+                            with open(neighbour_cache_file, 'wb') as f:
+                                pickle.dump(nc_freq, f)
+
+                    else:
+                        with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
+                            nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
                     #neighbours_ids = []
                     soft_label = []
                     target_ids = feature_data['video_ids']
