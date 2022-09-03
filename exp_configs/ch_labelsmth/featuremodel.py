@@ -54,8 +54,8 @@ pseudo_label_type = 'neighbours'    # neighbours, sent2vec, multilabel_cooccuran
 
 # Neighbour search settings for pseudo labelling
 # int
-num_neighbours = 10
-thr = 0.2
+num_neighbours = int(os.getenv('VAI_NUM_NEIGHBOURS', 10))
+thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.2))
 # If you want the parameters to be different per class.
 # dictionary with key being class index, with size num_classes.
 # If key not found, use the default setting above.
@@ -173,6 +173,11 @@ def generate_train_pseudo_labels():
     if loss_type in loss_types_pseudo_generation:
         if rank == 0:
             if pseudo_label_type == 'neighbours':
+                logger.info(f'Pseudo label: {num_neighbours = }')
+                logger.info(f'Pseudo label: {thr = }')
+                logger.info(f'Pseudo label: {num_neighbours_per_class = }')
+                logger.info(f'Pseudo label: {thr_per_class = }')
+
                 if add_temporal_overlap_as_pseudo_label:
                     logger.info(f'Adding labels from temporal overlapped segments from file {temporal_overlap_csv_path}.')
                     df_temporal_overlap = pd.read_csv(temporal_overlap_csv_path)
