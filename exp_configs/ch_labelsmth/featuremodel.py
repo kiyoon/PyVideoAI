@@ -201,7 +201,7 @@ def generate_train_pseudo_labels():
                 for num_neighbour in set_num_neighbours:
                     if use_neighbour_cache:
                         neighbour_cache_dir = os.path.join(dataset_cfg.dataset_root, 'neighbour_cache', feature_input_type)
-                        neighbour_cache_file = os.path.join(neighbour_cache_dir, f'{num_neighbours=},{thr=},{l2_norm=}.pkl')
+                        neighbour_cache_file = os.path.join(neighbour_cache_dir, f'{num_neighbours=},{l2_norm=}.pkl')
                         os.makedirs(neighbour_cache_dir, exist_ok=True)
 
                         if os.path.isfile(neighbour_cache_file):
@@ -603,6 +603,7 @@ from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMet
 from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
 from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
 from pyvideoai.metrics.grouped_top_multilabel_accuracy import ClipGroupedTop1MultilabelAccuracyMetric, ClipGroupedTopkMultilabelAccuracyMetric
+from pyvideoai.metrics.grouped_multilabel_classification import ClipGroupedIOUAccuracyMetric, ClipGroupedF1MeasureMetric
 from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set, get_singlemultilabel
 from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict
 video_id_to_multilabel = read_multilabel()
@@ -641,6 +642,8 @@ metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
             Clip_mAPMetric(activation='sigmoid', exclude_classes_less_sample_than=20, video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
             ClipIOUAccuracyMetric(activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
             ClipF1MeasureMetric(activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipGroupedIOUAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipGroupedF1MeasureMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
