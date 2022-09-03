@@ -193,11 +193,6 @@ class ClipGroupedF1MeasureMetric(Metric):
         clip_predictions = clip_predictions >= self.threshold
 
         for pred, label in zip(clip_predictions, labels):
-            f1_this_clip = 2 * torch.sum(torch.logical_and(pred, label)) / (torch.sum(pred) + torch.sum(label))
-            self.f1_per_clip.append(f1_this_clip.item())
-
-
-        for pred, label in zip(clip_predictions, labels):
             group_idx = None
             for class_idx, class_label in enumerate(label):
                 assert class_label in [1., 0.], f'Label in F1 measure metric has to be ones and zeros but got {class_label}.'

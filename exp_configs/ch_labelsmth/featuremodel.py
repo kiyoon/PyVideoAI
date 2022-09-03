@@ -93,7 +93,7 @@ def get_features(split):
     input_feature_dim = get_input_feature_dim()
     if feature_input_type == 'RGB':
         feature_pickle_path = dataset_cfg.RGB_features_pickle_path[split]
-        logger.info(f'Generating train pseudo labels using {feature_input_type} features at: {feature_pickle_path}')
+        logger.info(f'Using {feature_input_type} features at: {feature_pickle_path}')
 
         with open(feature_pickle_path, 'rb') as f:
             d = pickle.load(f)
@@ -105,7 +105,7 @@ def get_features(split):
 
     elif feature_input_type == 'flow':
         feature_pickle_path = dataset_cfg.flow_features_pickle_path[split]
-        logger.info(f'Generating train pseudo labels using {feature_input_type} features at: {feature_pickle_path}')
+        logger.info(f'Using {feature_input_type} features at: {feature_pickle_path}')
 
         with open(feature_pickle_path, 'rb') as f:
             d = pickle.load(f)
@@ -119,7 +119,7 @@ def get_features(split):
     elif feature_input_type == 'concat_RGB_flow':
         RGB_feature_pickle_path = dataset_cfg.RGB_features_pickle_path[split]
         flow_feature_pickle_path = dataset_cfg.flow_features_pickle_path[split]
-        logger.info(f'Generating train pseudo labels using {feature_input_type} features at: {RGB_feature_pickle_path} and {flow_feature_pickle_path}')
+        logger.info(f'Using {feature_input_type} features at: {RGB_feature_pickle_path} and {flow_feature_pickle_path}')
 
         with open(RGB_feature_pickle_path, 'rb') as f:
             d = pickle.load(f)
