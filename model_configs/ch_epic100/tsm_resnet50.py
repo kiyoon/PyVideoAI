@@ -47,7 +47,9 @@ def load_model(num_classes = NUM_VERB_CLASSES, input_frame_length = 8, pretraine
 
         del checkpoint, new_state_dict
 
-    model.new_fc = torch.nn.Linear(2048, num_classes)
+    if num_classes != NUM_VERB_CLASSES + NUM_NOUN_CLASSES:
+        # Only change the classifier if it is different from the pre-trained model.
+        model.new_fc = torch.nn.Linear(2048, num_classes)
     return model
 #    class VerbModel(Module):
 #        def __init__(self, model):
