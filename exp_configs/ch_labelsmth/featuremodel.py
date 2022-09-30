@@ -2,12 +2,8 @@ from pyvideoai.dataloaders.feature_dataset import FeatureDataset
 import pickle
 import numpy as np
 import pandas as pd
-from pyvideoai.utils.losses.proselflc import ProSelfLC
-#from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
-from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
 from pyvideoai.utils.losses.softlabel import MaskedBinaryCrossEntropyLoss
 from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits, WeakAssumeNegativeLossWithLogits, BinaryLabelSmoothLossWithLogits, BinaryNegativeLabelSmoothLossWithLogits, EntropyMaximiseLossWithLogits, BinaryFocalLossWithLogits
-from kornia.losses import FocalLoss
 from pyvideoai.utils.stdout_logger import OutputLogger
 import torch
 import os
@@ -35,25 +31,21 @@ def val_batch_size():
         return 64
     return default()
 
-feature_input_type = 'RGB'          # RGB / flow / concat_RGB_flow
-loss_type = 'crossentropy'  # crossentropy, labelsmooth, proselflc, focal
-                            # maskce
-                            # pseudo_single_binary_ce
+feature_input_type = 'concat_RGB_flow'          # RGB / flow / concat_RGB_flow
+loss_type = 'assume_negative'
                             # assume_negative, weak_assume_negative, binary_labelsmooth, binary_negative_labelsmooth, binary_focal
                             # entropy_maximise
                             # mask_binary_ce
+                            # pseudo_single_binary_ce
 
-loss_types_pseudo_generation = ['maskce', 'mask_binary_ce', 'maskproselflc',
-            'pseudo_single_binary_ce',
-            ]
-loss_types_masked_pseudo = ['maskce', 'mask_binary_ce', 'maskproselflc',
-        ]
+loss_types_pseudo_generation = ['mask_binary_ce', 'pseudo_single_binary_ce']
+loss_types_masked_pseudo = ['mask_binary_ce']
 
 # Pseudo label types
 pseudo_label_type = 'neighbours'    # neighbours, sent2vec, multilabel_cooccurance
 
 # Neighbour search settings for pseudo labelling
-# int
+# In the paper, this is K and τ.
 num_neighbours = int(os.getenv('VAI_NUM_NEIGHBOURS', 10))
 thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.2))
 # If you want the parameters to be different per class.
@@ -77,6 +69,7 @@ l2_norm = False
 #clip_grad_max_norm = 20
 learning_rate = float(os.getenv('VAI_LR', 5e-6))
 
+labelsmooth_factor = 0.1
 
 def get_input_feature_dim():
     input_feature_dim = 2048
@@ -391,40 +384,9 @@ def generate_train_pseudo_labels():
         return video_ids, labels, features
 
 
-
-
-labelsmooth_factor = 0.1
-#proselflc_total_time = 2639 * 60 # 60 epochs
-#proselflc_total_time = 263 * 40 # 60 epochs
-def proselflc_total_time():
-    train_dataset = get_torch_dataset('train')
-    N = batch_size()
-    train_samples = len(train_dataset)
-    num_iters_per_epoch = train_samples // N
-    total_time = num_iters_per_epoch * num_epochs
-    logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * {num_epochs} = {total_time}')
-    return total_time
-
-proselflc_exp_base = 1.
-
 #### OPTIONAL
 def get_criterion(split):
-    if loss_type == 'crossentropy':
-        return torch.nn.CrossEntropyLoss()
-    elif loss_type == 'labelsmooth':
-        return torch.nn.CrossEntropyLoss(label_smoothing=labelsmooth_factor)
-        #return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
-    elif loss_type == 'proselflc':
-        if split == 'train':
-            return ProSelfLC(proselflc_total_time(), proselflc_exp_base)
-        else:
-            return torch.nn.CrossEntropyLoss()
-    elif loss_type == 'focal':
-        return FocalLoss(alpha=0.25, reduction='mean')
-    elif loss_type == 'pseudo_single_binary_ce':
-        # make sure you pass pseudo+single labels
-        return AssumeNegativeLossWithLogits()
-    elif loss_type == 'assume_negative':
+    if loss_type == 'assume_negative':
         return AssumeNegativeLossWithLogits()
     elif loss_type == 'weak_assume_negative':
         return WeakAssumeNegativeLossWithLogits(num_classes = dataset_cfg.num_classes)
@@ -441,11 +403,9 @@ def get_criterion(split):
             return MaskedBinaryCrossEntropyLoss()
         else:
             return AssumeNegativeLossWithLogits()
-    elif loss_type == 'maskce':
-        if split == 'train':
-            return MaskedCrossEntropy()
-        else:
-            return torch.nn.CrossEntropyLoss()
+    elif loss_type == 'pseudo_single_binary_ce':
+        # make sure you pass pseudo+single labels
+        return AssumeNegativeLossWithLogits()
     else:
         return ValueError(f'Wrong loss type: {loss_type}')
 
@@ -656,6 +616,7 @@ how to gather predictions when --save_predictions is set
 """
 from pyvideoai.metrics.metric import ClipPredictionsGatherer, VideoPredictionsGatherer
 predictions_gatherers = {'val': ClipPredictionsGatherer(),
+        'train': ClipPredictionsGatherer(),
         'multicropval': VideoPredictionsGatherer(),
         }
 

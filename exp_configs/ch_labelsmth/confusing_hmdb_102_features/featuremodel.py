@@ -1,10 +1,8 @@
 from pyvideoai.dataloaders.feature_dataset import FeatureDataset
 import pickle
 import numpy as np
-from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
 from pyvideoai.utils.losses.softlabel import MaskedBinaryCrossEntropyLoss
 from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits, WeakAssumeNegativeLossWithLogits, BinaryLabelSmoothLossWithLogits, BinaryNegativeLabelSmoothLossWithLogits, EntropyMaximiseLossWithLogits, BinaryFocalLossWithLogits
-from kornia.losses import FocalLoss
 from pyvideoai.utils.stdout_logger import OutputLogger
 import torch
 import os
@@ -16,15 +14,17 @@ from pyvideoai.utils.distributed import get_rank, get_world_size
 split_num = int(os.getenv('VAI_SPLITNUM', default=1))           # 1 / 2 / 3
 num_epochs = int(os.getenv('VAI_NUM_EPOCHS', default=1000))
 
+
 #batch_size = 8  # per process (per GPU)
 def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
     return int(os.getenv('VAI_BATCHSIZE', 64))
 
+
 def val_batch_size():
     def default():
-        devices=list(range(torch.cuda.device_count()))
+        devices = list(range(torch.cuda.device_count()))
         vram = min([torch.cuda.get_device_properties(device).total_memory for device in devices])
         if vram > 20e+9:
             return 2048
@@ -33,34 +33,37 @@ def val_batch_size():
         return 64
     return default()
 
-feature_input_type = 'RGB'          # RGB / flow / concat_RGB_flow
-loss_type = 'crossentropy'  # crossentropy, labelsmooth, proselflc, focal
-                            # maskce
-                            # pseudo_single_binary_ce
+
+feature_input_type = 'concat_RGB_flow'          # RGB / flow / concat_RGB_flow
+loss_type = 'assume_negative'
                             # assume_negative, weak_assume_negative, binary_labelsmooth, binary_negative_labelsmooth, binary_focal
                             # entropy_maximise
                             # mask_binary_ce
+                            # pseudo_single_binary_ce
 
-loss_types_pseudo_generation = ['maskce', 'mask_binary_ce', 'maskproselflc',
-            'pseudo_single_binary_ce',
-            ]
-loss_types_masked_pseudo = ['maskce', 'mask_binary_ce', 'maskproselflc',
-        ]
+loss_types_pseudo_generation = ['mask_binary_ce', 'pseudo_single_binary_ce']
+loss_types_masked_pseudo = ['mask_binary_ce']
+
 
 # If True, bypass neighbour search pseudo-label generation.
 # Instead, use ideal labels.
 # Only works in confusing_hmdb_102 dataset
 use_ideal_train_labels = False
 
+
 # Neighbour search settings for pseudo labelling
-# int
-num_neighbours = 10
-thr = 0.2
+# In the paper, this is K and τ.
+num_neighbours = int(os.getenv('VAI_NUM_NEIGHBOURS', 10))
+thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.2))
 # If you want the parameters to be different per class.
 # dictionary with key being class index, with size num_classes.
 # If key not found, use the default setting above.
 num_neighbours_per_class = {}
 thr_per_class = {}
+
+
+# Use pre-computed neighbour information if available. Otherwise, compute and cache.
+use_neighbour_cache = os.getenv('VAI_USE_NEIGHBOUR_CACHE', 'False') == 'True'
 
 l2_norm = False
 
@@ -68,6 +71,7 @@ l2_norm = False
 #clip_grad_max_norm = 20
 learning_rate = float(os.getenv('VAI_LR', 5e-6))
 
+labelsmooth_factor = 0.1
 
 def get_input_feature_dim():
     input_feature_dim = 2048
@@ -171,8 +175,26 @@ def generate_train_pseudo_labels():
                 soft_labels_per_num_neighbour = {}    # key: num_neighbours
                 set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
                 for num_neighbour in set_num_neighbours:
-                    with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
-                        nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm, n_classes=dataset_cfg.num_classes)
+                    if use_neighbour_cache:
+                        neighbour_cache_dir = os.path.join(dataset_cfg.dataset_root, 'neighbour_cache', feature_input_type)
+                        neighbour_cache_file = os.path.join(neighbour_cache_dir, f'{num_neighbours=},{l2_norm=}.pkl')
+                        os.makedirs(neighbour_cache_dir, exist_ok=True)
+
+                        if os.path.isfile(neighbour_cache_file):
+                            logger.info(f'Loading neighbour from cache file: {neighbour_cache_file}')
+                            with open(neighbour_cache_file, 'rb') as f:
+                                nc_freq = pickle.load(f)
+                        else:
+                            with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
+                                nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm, n_classes=dataset_cfg.num_classes)
+                            logger.info(f'Caching neighbour information to file: {neighbour_cache_file}')
+                            with open(neighbour_cache_file, 'wb') as f:
+                                pickle.dump(nc_freq, f)
+
+                    else:
+                        with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
+                            nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm, n_classes=dataset_cfg.num_classes)
+
                     #neighbours_ids = []
                     soft_label = []
                     target_ids = feature_data['video_ids']
@@ -291,40 +313,9 @@ def generate_train_pseudo_labels():
         return video_ids, labels, features
 
 
-
-
-labelsmooth_factor = 0.1
-#proselflc_total_time = 2639 * 60 # 60 epochs
-#proselflc_total_time = 263 * 40 # 60 epochs
-def proselflc_total_time():
-    train_dataset = get_torch_dataset('train')
-    N = batch_size()
-    train_samples = len(train_dataset)
-    num_iters_per_epoch = train_samples // N
-    total_time = num_iters_per_epoch * num_epochs
-    logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * {num_epochs} = {total_time}')
-    return total_time
-
-proselflc_exp_base = 1.
-
 #### OPTIONAL
 def get_criterion(split):
-    if loss_type == 'crossentropy':
-        return torch.nn.CrossEntropyLoss()
-    elif loss_type == 'labelsmooth':
-        return torch.nn.CrossEntropyLoss(label_smoothing=labelsmooth_factor)
-        #return LabelSmoothCrossEntropyLoss(smoothing=labelsmooth_factor)
-    elif loss_type == 'proselflc':
-        if split == 'train':
-            return ProSelfLC(proselflc_total_time(), proselflc_exp_base)
-        else:
-            return torch.nn.CrossEntropyLoss()
-    elif loss_type == 'focal':
-        return FocalLoss(alpha=0.25, reduction='mean')
-    elif loss_type == 'pseudo_single_binary_ce':
-        # make sure you pass pseudo+single labels
-        return AssumeNegativeLossWithLogits()
-    elif loss_type == 'assume_negative':
+    if loss_type == 'assume_negative':
         return AssumeNegativeLossWithLogits()
     elif loss_type == 'weak_assume_negative':
         return WeakAssumeNegativeLossWithLogits(num_classes = dataset_cfg.num_classes)
@@ -341,11 +332,9 @@ def get_criterion(split):
             return MaskedBinaryCrossEntropyLoss()
         else:
             return AssumeNegativeLossWithLogits()
-    elif loss_type == 'maskce':
-        if split == 'train':
-            return MaskedCrossEntropy()
-        else:
-            return torch.nn.CrossEntropyLoss()
+    elif loss_type == 'pseudo_single_binary_ce':
+        # make sure you pass pseudo+single labels
+        return AssumeNegativeLossWithLogits()
     else:
         return ValueError(f'Wrong loss type: {loss_type}')
 
@@ -495,23 +484,20 @@ last_activation = 'sigmoid'   # or, you can pass a callable function like `torch
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
+from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
+from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric
 from pyvideoai.metrics import ClipIOUAccuracyMetric, ClipF1MeasureMetric
 from pyvideoai.metrics.mAP import Clip_mAPMetric
-from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
-from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
-from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
-from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
 
 best_metric = ClipIOUAccuracyMetric(activation='sigmoid')
-metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
-            ClipMeanPerclassAccuracyMetric(exclude_classes_less_sample_than=20),
+metrics = {'train': [ClipAccuracyMetric(),
             ],
         'val': [ClipMultilabelAccuracyMetric(),
             ClipTop1MultilabelAccuracyMetric(),
-            ClipTopkMultilabelAccuracyMetric(),
-            Clip_mAPMetric(activation='sigmoid'),
             best_metric,
             ClipF1MeasureMetric(activation='sigmoid'),
+            Clip_mAPMetric(activation='sigmoid'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
