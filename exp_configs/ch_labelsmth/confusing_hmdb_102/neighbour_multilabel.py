@@ -1,15 +1,11 @@
 import os
 import pickle
 
-from pyvideoai.dataloaders import FramesSparsesampleDataset, VideoSparsesampleDataset, GulpSparsesampleDataset
-#from pyvideoai.utils.losses.proselflc import ProSelfLC, InstableCrossEntropy
-#from pyvideoai.utils.losses.loss import LabelSmoothCrossEntropyLoss
+from pyvideoai.dataloaders import GulpSparsesampleDataset
 from pyvideoai.utils.losses.softlabel import MaskedBinaryCrossEntropyLoss
-from exp_configs.ch_labelsmth.epic100_verb.loss import MinCEMultilabelLoss, MinRegressionCombinationLoss
-from pyvideoai.utils.losses.masked_crossentropy import MaskedCrossEntropy
-from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits, WeakAssumeNegativeLossWithLogits, BinaryLabelSmoothLossWithLogits, BinaryNegativeLabelSmoothLossWithLogits, EntropyMaximiseLossWithLogits, BinaryFocalLossWithLogits
-from pyvideoai.utils.losses.proselflc import MaskedProSelfLC
+from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits
 from pyvideoai.utils.stdout_logger import OutputLogger
+import pyvideoai
 
 import torch
 import numpy as np
@@ -60,13 +56,12 @@ sample_index_code = 'pyvideoai'
 
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
-loss_type = 'mask_binary_ce'     # mince / maskce / minregcomb / maskproselflc
-                        # mask_binary_ce / pseudo_single_binary_ce
+loss_type = 'mask_binary_ce'    # mask_binary_ce / pseudo_single_binary_ce
 
 # Neighbour search settings for pseudo labelling
-# int
-num_neighbours = 10
-thr = 0.2
+# In the paper, this is K and τ.
+num_neighbours = int(os.getenv('VAI_NUM_NEIGHBOURS', 15))
+thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.1))
 # If you want the parameters to be different per class.
 # dictionary with key being class index, with size num_classes.
 # If key not found, use the default setting above.
@@ -78,50 +73,29 @@ save_features = True
 
 # If True, bypass neighbour search pseudo-label generation.
 # Instead, use ideal labels.
-# Only works in hmdb_confusion2 dataset
+# Only works in confusing_hmdb_102 dataset
 use_ideal_train_labels = False
 
-#proselflc_total_time = 2639 * 60 # 60 epochs
-#proselflc_total_time = 263 * 40 # 60 epochs
-def proselflc_total_time():
-    train_dataset = get_torch_dataset('train')
-    N = batch_size()
-    train_samples = len(train_dataset)
-    num_iters_per_epoch = train_samples // N
-    total_time = num_iters_per_epoch * num_epochs
-    logger.info(f'ProSelfLC total time = {num_iters_per_epoch} * {num_epochs} = {total_time}')
-    return total_time
-
-
-proselflc_exp_base = 1.
 
 #### OPTIONAL
 def get_criterion(split):
     if split == 'train':
-        if loss_type == 'mince':
-            return MinCEMultilabelLoss()
-        elif loss_type == 'maskce':
-            return MaskedCrossEntropy()
-        elif loss_type == 'mask_binary_ce':
+        if loss_type == 'mask_binary_ce':
             return MaskedBinaryCrossEntropyLoss()
-        elif loss_type == 'minregcomb':
-            return MinRegressionCombinationLoss()
-        elif loss_type == 'maskproselflc':
-            return MaskedProSelfLC(proselflc_total_time(), proselflc_exp_base)
         elif loss_type == 'pseudo_single_binary_ce':
             # make sure you pass pseudo+single labels
             return AssumeNegativeLossWithLogits()
         else:
             raise ValueError(f'{loss_type=} not recognised.')
     else:
-        return torch.nn.CrossEntropyLoss()
+        return AssumeNegativeLossWithLogits()
+
 
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 import pyvideoai.utils.distributed as du
 from pyvideoai.train_and_eval import extract_features
-from exp_configs.ch_labelsmth.epic100_verb.features_study import get_neighbours
-import exp_configs
+from pyvideoai.utils.verbambig import get_neighbours
 train_testmode_dataloader = None
 video_id_to_label = None
 def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
@@ -158,7 +132,7 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
             soft_labels_per_num_neighbour = {}    # key: num_neighbours
             set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
             for num_neighbour in set_num_neighbours:
-                with OutputLogger(exp_configs.ch_labelsmth.epic100_verb.features_study.__name__, 'INFO'):
+                with OutputLogger(pyvideoai.utils.verbambig.__name__, 'INFO'):
                     nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, n_classes=dataset_cfg.num_classes, l2_norm=l2_norm)
                 #neighbours_ids = []
                 soft_label = []
@@ -258,26 +232,6 @@ def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
         train_kit['train_dataloader'] = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size(), shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
 
 
-#    if epoch >= num_epochs - train_classifier_balanced_retraining_epochs:
-#        # freeze base model parameters
-#        # model state dict doesn't save requires_grad parameters.
-#        # When resuming, it has to be re-done. That's why we just call it every epoch.
-#        logger.info(f'Classifier re-training with balanced samples (cRT) for the last {train_classifier_balanced_retraining_epochs} epochs.')
-#        logger.info(f'cRT: freezing base model')
-#        train_kit['model'] = model_cfg.freeze_base_model(train_kit['model'])
-#
-#        logger.info(f'cRT: switching to a balanced dataloader')
-#        train_dataset = get_torch_dataset('train', class_balanced_sampling=True)
-#        train_sampler = DistributedSampler(train_dataset) if world_size > 1 else None
-#        train_kit['train_dataloader'] = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size(), shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
-#
-#    if epoch == num_epochs - train_classifier_balanced_retraining_epochs:
-#        # re-initialise classifier weights
-#        logger.info(f'cRT: re-initialising classifier weights')
-#        train_kit['model'] = model_cfg.initialise_classifier(train_kit['model'])
-
-
-
 # optional
 def get_optim_policies(model):
     """
@@ -320,6 +274,7 @@ def optimiser(params):
 
     return torch.optim.SGD(params, lr = learning_rate, momentum = 0.9, weight_decay = 5e-4)
 
+
 from pyvideoai.utils.lr_scheduling import ReduceLROnPlateauMultiple, GradualWarmupScheduler
 def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
     if base_learning_rate < 1e-5:
@@ -329,8 +284,10 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
 
         return GradualWarmupScheduler(optimiser, multiplier=1, total_epoch=10, after_scheduler=after_scheduler)
 
+
 def load_model():
     return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, pretrained = pretrained)
+
 
 # If you need to extract features, use this. It can be defined in model_cfg too.
 #def feature_extract_model(model):
@@ -348,8 +305,10 @@ def load_model():
 #def load_pretrained(model):
 #    loader.model_load_weights(model, pretrained_path)
 
+
 def _dataloader_shape_to_model_input_shape(inputs):
     return model_cfg.NCTHW_to_model_input_shape(inputs)
+
 
 def get_input_reshape_func(split):
     '''
@@ -399,7 +358,7 @@ def _get_torch_dataset(csv_path, split):
 
     if split == 'train':
         if use_ideal_train_labels:
-            assert dataset_cfg.__name__ == 'dataset_configs.ch_beta.hmdb_confusion2', f'Wrong dataset {dataset_cfg.__name__} for the option use_ideal_train_labels.'
+            assert dataset_cfg.__name__ == 'dataset_configs.ch_beta.confusing_hmdb_102', f'Wrong dataset {dataset_cfg.__name__} for the option use_ideal_train_labels.'
             assert dataset_cfg.num_classes == 102
 
             orig_num_classes = 51
@@ -442,7 +401,7 @@ def _get_torch_dataset(csv_path, split):
                     video_id = int(video_id)
                     label = int(label)
 
-                    if loss_type in ['maskce', 'maskproselflc', 'mask_binary_ce']:
+                    if loss_type in ['mask_binary_ce']:
                         onehot_labels = construct_onehot_with_pseudo(dataset_cfg.num_classes, label, find_another_label(label), 'mask')
                     elif loss_type.lower().startswith('mask'):
                         raise ValueError(f'You are using the mask loss {loss_type} but the labels are not in mask format!!')
@@ -545,24 +504,20 @@ last_activation = 'sigmoid'   # or, you can pass a callable function like `torch
 ## For training, (tools/run_train.py)
 how to calculate metrics
 """
+from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
+from pyvideoai.metrics.topset_multilabel_accuracy import ClipTopSetMultilabelAccuracyMetric
+from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric
 from pyvideoai.metrics import ClipIOUAccuracyMetric, ClipF1MeasureMetric
 from pyvideoai.metrics.mAP import Clip_mAPMetric
-from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
-from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
-from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
-from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
-from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
 
-best_metric = ClipMultilabelAccuracyMetric()
-metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
-            ClipMeanPerclassAccuracyMetric(exclude_classes_less_sample_than=20),
+best_metric = ClipTopSetMultilabelAccuracyMetric()
+metrics = {'train': [ClipAccuracyMetric(),
             ],
         'val': [best_metric,
             ClipTop1MultilabelAccuracyMetric(),
-            ClipTopkMultilabelAccuracyMetric(),
-            Clip_mAPMetric(activation='sigmoid'),
             ClipIOUAccuracyMetric(activation='sigmoid'),
             ClipF1MeasureMetric(activation='sigmoid'),
+            Clip_mAPMetric(activation='sigmoid'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],
