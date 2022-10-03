@@ -3,7 +3,7 @@ from .metric import Metric
 
 
 
-class ClipMultilabelAccuracyMetric(Metric):
+class ClipTopSetMultilabelAccuracyMetric(Metric):
     """
     Multi-label accuracy as defined in Learning Visual Actions Using Multiple Verb-Only Labels (Wray et al. 2019).
     For each sample, if there are k labels, get top-k predictions and see how many of them are in the ground truth.
@@ -48,11 +48,11 @@ class ClipMultilabelAccuracyMetric(Metric):
 
 
     def tensorboard_tags(self):
-        return 'Multilabel accuracy'
+        return 'Top-set multilabel accuracy'
 
 
     def get_csv_fieldnames(self):
-        return f'{self.split}_multilabel_accuracy'
+        return f'{self.split}_topset_multilabel_accuracy'
 
 
     def logging_msg_iter(self):
@@ -66,7 +66,7 @@ class ClipMultilabelAccuracyMetric(Metric):
         else:
             prefix = f'{self.split}_'
 
-        message = f'{prefix}multiacc: {self.last_calculated_metrics:.4f}'
+        message = f'{prefix}topsetML: {self.last_calculated_metrics:.4f}'
         return message
 
 
@@ -85,13 +85,13 @@ class ClipMultilabelAccuracyMetric(Metric):
             either tuple or a single str
         """
         if self.split == 'train':
-            return 'Training multilabel accuracy'
+            return 'Training Top-set multilabel accuracy'
         elif self.split == 'val':
-            return 'Validation multilabel accuracy'
+            return 'Validation Top-set multilabel accuracy'
         elif self.split == 'multicropval':
-            return 'Multicrop validation multilabel accuracy'
+            return 'Multicrop validation Top-set multilabel accuracy'
         else:
-            return f'{self.split} multilabel accuracy'
+            return f'{self.split} Top-set multilabel accuracy'
 
 
     def plot_file_basenames(self):
@@ -100,7 +100,7 @@ class ClipMultilabelAccuracyMetric(Metric):
             either tuple or a single str
         """
         # output plot file names will be e.g.) accuracy.png/pdf, accuracy_top5.png/pdf, ...
-        return 'multilabel_accuracy'
+        return 'topset_ml_accuracy'
 
 
     @staticmethod
@@ -114,6 +114,7 @@ class ClipMultilabelAccuracyMetric(Metric):
             True if value_1 is better. False if value_2 is better or they're equal.
         """
         return value_1 > value_2
+
 
     def __len__(self):
         return len(self.accuracy_per_clip)

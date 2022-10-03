@@ -61,7 +61,7 @@ class ClipTop1MultilabelAccuracyMetric(Metric):
         else:
             prefix = f'{self.split}_'
 
-        message = f'{prefix}top1multiacc: {self.last_calculated_metrics:.4f}'
+        message = f'{prefix}top1ML: {self.last_calculated_metrics:.4f}'
         return message
 
 
@@ -178,7 +178,7 @@ class ClipTopkMultilabelAccuracyMetric(Metric):
         else:
             prefix = f'{self.split}_'
 
-        message = f'{prefix}topkmultiacc: {self.last_calculated_metrics:.4f}'
+        message = f'{prefix}topkML: {self.last_calculated_metrics:.4f}'
         return message
 
 

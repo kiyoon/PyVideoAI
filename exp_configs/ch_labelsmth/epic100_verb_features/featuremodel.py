@@ -1,13 +1,12 @@
-from pyvideoai.dataloaders.feature_dataset import FeatureDataset
+import os
 import pickle
 import numpy as np
-import pandas as pd
+from pyvideoai.dataloaders.feature_dataset import FeatureDataset
 from pyvideoai.utils.losses.softlabel import MaskedBinaryCrossEntropyLoss
 from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits, WeakAssumeNegativeLossWithLogits, BinaryLabelSmoothLossWithLogits, BinaryNegativeLabelSmoothLossWithLogits, EntropyMaximiseLossWithLogits, BinaryFocalLossWithLogits
 from pyvideoai.utils.stdout_logger import OutputLogger
 import torch
-import os
-import multi_label_ar
+import pyvideoai
 
 from pyvideoai.utils.distributed import get_rank, get_world_size
 
@@ -41,13 +40,11 @@ loss_type = 'assume_negative'
 loss_types_pseudo_generation = ['mask_binary_ce', 'pseudo_single_binary_ce']
 loss_types_masked_pseudo = ['mask_binary_ce']
 
-# Pseudo label types
-pseudo_label_type = 'neighbours'    # neighbours, sent2vec, multilabel_cooccurance
 
 # Neighbour search settings for pseudo labelling
 # In the paper, this is K and τ.
-num_neighbours = int(os.getenv('VAI_NUM_NEIGHBOURS', 10))
-thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.2))
+num_neighbours = int(os.getenv('VAI_NUM_NEIGHBOURS', 15))
+thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.1))
 # If you want the parameters to be different per class.
 # dictionary with key being class index, with size num_classes.
 # If key not found, use the default setting above.
@@ -56,11 +53,6 @@ thr_per_class = {}
 
 # Use pre-computed neighbour information if available. Otherwise, compute and cache.
 use_neighbour_cache = os.getenv('VAI_USE_NEIGHBOUR_CACHE', 'False') == 'True'
-
-
-# When generating pseudo labels, always include labels from segments with temporal overlap
-add_temporal_overlap_as_pseudo_label = False
-temporal_overlap_csv_path = os.path.join(multi_label_ar.MODULE_DIR, '..', 'annotations', 'ek_100_train_overlapping', 'EK100_train_overlapping_extension=0.csv')
 
 
 l2_norm = False
@@ -80,7 +72,7 @@ def get_input_feature_dim():
 
 import torch.distributed as dist
 import pyvideoai.utils.distributed as du
-from multi_label_ar.neighbours import get_neighbours
+from pyvideoai.utils.verbambig import get_neighbours
 
 def get_features(split):
     input_feature_dim = get_input_feature_dim()
@@ -189,163 +181,69 @@ def generate_train_pseudo_labels():
 
     if loss_type in loss_types_pseudo_generation:
         if rank == 0:
-            if pseudo_label_type == 'neighbours':
-                logger.info(f'Pseudo label: {num_neighbours = }')
-                logger.info(f'Pseudo label: {thr = }')
-                logger.info(f'Pseudo label: {num_neighbours_per_class = }')
-                logger.info(f'Pseudo label: {thr_per_class = }')
+            logger.info(f'Pseudo label: {num_neighbours = }')
+            logger.info(f'Pseudo label: {thr = }')
+            logger.info(f'Pseudo label: {num_neighbours_per_class = }')
+            logger.info(f'Pseudo label: {thr_per_class = }')
 
-                if add_temporal_overlap_as_pseudo_label:
-                    logger.info(f'Adding labels from temporal overlapped segments from file {temporal_overlap_csv_path}.')
-                    df_temporal_overlap = pd.read_csv(temporal_overlap_csv_path)
+            soft_labels_per_num_neighbour = {}    # key: num_neighbours
+            set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
+            for num_neighbour in set_num_neighbours:
+                if use_neighbour_cache:
+                    neighbour_cache_dir = os.path.join(dataset_cfg.dataset_root, 'neighbour_cache', feature_input_type)
+                    neighbour_cache_file = os.path.join(neighbour_cache_dir, f'{num_neighbours=},{l2_norm=}.pkl')
+                    os.makedirs(neighbour_cache_dir, exist_ok=True)
 
-                    def find_temporal_overlap_labels(video_id: int) -> list:
-                        """
-                        Return labels from temporally overlapping segments.
-                        """
-                        narration_id = dataset_cfg.narration_id_sorted[video_id]
-                        labels_b = df_temporal_overlap.label_b[df_temporal_overlap.a == narration_id]
-                        labels_a = df_temporal_overlap.label_a[df_temporal_overlap.b == narration_id]
-                        labels = set(labels_a) | set(labels_b)
-                        return list(labels)
-
-                soft_labels_per_num_neighbour = {}    # key: num_neighbours
-                set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
-                for num_neighbour in set_num_neighbours:
-                    if use_neighbour_cache:
-                        neighbour_cache_dir = os.path.join(dataset_cfg.dataset_root, 'neighbour_cache', feature_input_type)
-                        neighbour_cache_file = os.path.join(neighbour_cache_dir, f'{num_neighbours=},{l2_norm=}.pkl')
-                        os.makedirs(neighbour_cache_dir, exist_ok=True)
-
-                        if os.path.isfile(neighbour_cache_file):
-                            logger.info(f'Loading neighbour from cache file: {neighbour_cache_file}')
-                            with open(neighbour_cache_file, 'rb') as f:
-                                nc_freq = pickle.load(f)
-                        else:
-                            with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
-                                nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
-                            logger.info(f'Caching neighbour information to file: {neighbour_cache_file}')
-                            with open(neighbour_cache_file, 'wb') as f:
-                                pickle.dump(nc_freq, f)
-
+                    if os.path.isfile(neighbour_cache_file):
+                        logger.info(f'Loading neighbour from cache file: {neighbour_cache_file}')
+                        with open(neighbour_cache_file, 'rb') as f:
+                            nc_freq = pickle.load(f)
                     else:
-                        with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
-                            nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm)
-                    #neighbours_ids = []
-                    soft_label = []
-                    target_ids = feature_data['video_ids']
-                    #source_ids = feature_data['video_ids']
+                        with OutputLogger(pyvideoai.utils.verbambig.__name__, 'INFO'):
+                            nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, n_classes = dataset_cfg.num_classes, l2_norm=l2_norm)
+                        logger.info(f'Caching neighbour information to file: {neighbour_cache_file}')
+                        with open(neighbour_cache_file, 'wb') as f:
+                            pickle.dump(nc_freq, f)
 
-                    for target_idx, target_id in enumerate(target_ids):
-                        #n_ids = [source_ids[x] for x in features_neighbours[target_idx]]
-                        sl = nc_freq[target_idx]
-                        sl = sl / sl.sum()
-                        #neighbours_ids.append(n_ids)
-                        soft_label.append(sl)
+                else:
+                    with OutputLogger(pyvideoai.utils.verbambig.__name__, 'INFO'):
+                        nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, n_classes = dataset_cfg.num_classes, l2_norm=l2_norm)
+                #neighbours_ids = []
+                soft_label = []
+                target_ids = feature_data['video_ids']
+                #source_ids = feature_data['video_ids']
 
-                    #neighbours_ids = np.array(neighbours_ids)
-                    soft_labels_per_num_neighbour[num_neighbour] = np.array(soft_label)
+                for target_idx, target_id in enumerate(target_ids):
+                    #n_ids = [source_ids[x] for x in features_neighbours[target_idx]]
+                    sl = nc_freq[target_idx]
+                    sl = sl / sl.sum()
+                    #neighbours_ids.append(n_ids)
+                    soft_label.append(sl)
 
-                # generate multilabels
-                # For each class, use different soft labels generated with different num_neighbours and thr.
-                #multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
-                multilabels = []
-                for target_idx, (video_id, singlelabel) in enumerate(zip(feature_data['video_ids'], feature_data['labels'])):
-                    if singlelabel in num_neighbours_per_class:
-                        soft_label = soft_labels_per_num_neighbour[num_neighbours_per_class[singlelabel]][target_idx]
-                    else:
-                        soft_label = soft_labels_per_num_neighbour[num_neighbours][target_idx]
+                #neighbours_ids = np.array(neighbours_ids)
+                soft_labels_per_num_neighbour[num_neighbour] = np.array(soft_label)
 
-                    if singlelabel in thr_per_class:
-                        th = thr_per_class[singlelabel]
-                    else:
-                        th = thr
+            # generate multilabels
+            # For each class, use different soft labels generated with different num_neighbours and thr.
+            #multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
+            multilabels = []
+            for target_idx, (video_id, singlelabel) in enumerate(zip(feature_data['video_ids'], feature_data['labels'])):
+                if singlelabel in num_neighbours_per_class:
+                    soft_label = soft_labels_per_num_neighbour[num_neighbours_per_class[singlelabel]][target_idx]
+                else:
+                    soft_label = soft_labels_per_num_neighbour[num_neighbours][target_idx]
 
-                    multilabel = (soft_label > th).astype(int)
-                    multilabel[singlelabel] = 1
-                    if add_temporal_overlap_as_pseudo_label:
-                        overlap_labels = find_temporal_overlap_labels(video_id)
-                        for overlap_label in overlap_labels:
-                            multilabel[overlap_label] = 1
+                if singlelabel in thr_per_class:
+                    th = thr_per_class[singlelabel]
+                else:
+                    th = thr
 
-                    multilabels.append(multilabel)
+                multilabel = (soft_label > th).astype(int)
+                multilabel[singlelabel] = 1
 
-                multilabels = np.stack(multilabels)
+                multilabels.append(multilabel)
 
-
-            elif pseudo_label_type == 'sent2vec':
-                logger.info('Using sent2vec top5 labels as pseudo labels.')
-                sent2vec_top5_csv = os.path.join(multi_label_ar.MODULE_DIR, '..', 'notebooks', 'kiyoon', 'sent2vec', 'top3verbdef-bigrams-concat_wiki_twitter-top5perclass.csv')
-                sent2vec_top5_df = pd.read_csv(sent2vec_top5_csv)
-
-                verb_to_sent2vec_top5 = [[] for _ in range(dataset_cfg.num_classes)]
-                for index, row in sent2vec_top5_df.iterrows():
-                    assert index == dataset_cfg.class_keys_to_label_idx[row['class']]
-                    for k in range(1, 6):   # top 1, 2, 3, 4, 5
-                        top_verb, score = row[f'top{k}'].split(' ')
-                        if score == 'nan':
-                            continue
-
-                        verb_to_sent2vec_top5[index].append(dataset_cfg.class_keys_to_label_idx[top_verb])
-
-                multilabels = []
-                for target_idx, (video_id, singlelabel) in enumerate(zip(feature_data['video_ids'], feature_data['labels'])):
-                    multilabel = np.zeros(dataset_cfg.num_classes, dtype=int)
-                    for index in verb_to_sent2vec_top5[singlelabel]:
-                        multilabel[index] = 1
-                    multilabel[singlelabel] = 1
-
-                    if add_temporal_overlap_as_pseudo_label:
-                        overlap_labels = find_temporal_overlap_labels(video_id)
-                        for overlap_label in overlap_labels:
-                            multilabel[overlap_label] = 1
-
-                    multilabels.append(multilabel)
-
-                multilabels = np.stack(multilabels)
-
-            elif pseudo_label_type == 'multilabel_cooccurance':
-                logger.info('Using multilabel co-occurance data to generate per-class pseudo labels.')
-                cooc_csv = os.path.join(multi_label_ar.MODULE_DIR, '..', 'notebooks', 'kiyoon', 'multilabel_cooccurance_normalised_20220427.csv')
-                cooc_df = pd.read_csv(cooc_csv)
-                cooc_df.set_index('key', inplace=True)
-
-                def thr_multilabel_cooccurance(df_cooc_normalised, thr):
-                    """
-                    Read multilabel_cooccurance_normalised_20220427.csv file and threshold for each class (row).
-                    For generating pseudo labels.
-                    Return: dict[str, list[str]]
-                    """
-                    ret_dict = {}
-                    for index, row in df_cooc_normalised.iterrows():
-                        ret_dict[row.name] = list(row[row > thr].keys())
-                    return ret_dict
-
-                cooc_thresholded = thr_multilabel_cooccurance(cooc_df, 0.5)
-
-                multilabels = []
-                for target_idx, (video_id, singlelabel) in enumerate(zip(feature_data['video_ids'], feature_data['labels'])):
-                    multilabel = np.zeros(dataset_cfg.num_classes, dtype=int)
-                    singlelabel_str = dataset_cfg.class_keys[singlelabel]
-
-                    if singlelabel_str in cooc_thresholded.keys():
-                        for label_str in cooc_thresholded[singlelabel_str]:
-                            multilabel[dataset_cfg.class_keys_to_label_idx[label_str]] = 1
-
-                    multilabel[singlelabel] = 1
-
-                    if add_temporal_overlap_as_pseudo_label:
-                        overlap_labels = find_temporal_overlap_labels(video_id)
-                        for overlap_label in overlap_labels:
-                            multilabel[overlap_label] = 1
-
-                    multilabels.append(multilabel)
-
-                multilabels = np.stack(multilabels)
-
-
-            else:
-                raise ValueError(f'{pseudo_label_type = } not recognised.')
+            multilabels = np.stack(multilabels)
 
             assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
 
@@ -394,13 +292,9 @@ def generate_train_pseudo_labels():
 
     elif loss_type.lower().startswith('mask') or loss_type.lower().startswith('pseudo'):
         logger.error(f'loss_type is {loss_type} but not generating pseudo labels?')
-        if add_temporal_overlap_as_pseudo_label:
-            logger.error('Not generating pseudo labels. Cannot use add_temporal_overlap_as_pseudo_label.')
         return video_ids, labels, features
     else:
         logger.info('NOT generating pseudo labels')
-        if add_temporal_overlap_as_pseudo_label:
-            logger.error('Not generating pseudo labels. Cannot use add_temporal_overlap_as_pseudo_label.')
         return video_ids, labels, features
 
 
@@ -578,52 +472,23 @@ how to calculate metrics
 from pyvideoai.metrics import ClipIOUAccuracyMetric, ClipF1MeasureMetric
 from pyvideoai.metrics.mAP import Clip_mAPMetric
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
-from pyvideoai.metrics.mean_perclass_accuracy import ClipMeanPerclassAccuracyMetric
-from pyvideoai.metrics.grouped_class_accuracy import ClipGroupedClassAccuracyMetric
-from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
-from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric, ClipTopkMultilabelAccuracyMetric
-from pyvideoai.metrics.grouped_top_multilabel_accuracy import ClipGroupedTop1MultilabelAccuracyMetric, ClipGroupedTopkMultilabelAccuracyMetric
-from pyvideoai.metrics.grouped_multilabel_classification import ClipGroupedIOUAccuracyMetric, ClipGroupedF1MeasureMetric
-from exp_configs.ch_labelsmth.epic100_verb.read_multilabel import read_multilabel, get_val_holdout_set, get_singlemultilabel
+from pyvideoai.metrics.topset_multilabel_accuracy import ClipTopSetMultilabelAccuracyMetric
+from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric
+from ..epic100_verb.read_multilabel import read_multiverb, get_val_holdout_set
 from video_datasets_api.epic_kitchens_100.read_annotations import get_verb_uid2label_dict
-video_id_to_multilabel = read_multilabel()
+video_id_to_multilabel = read_multiverb(dataset_cfg.narration_id_to_video_id)
 _, epic_video_id_to_label = get_verb_uid2label_dict(dataset_cfg.annotations_root)
 holdout_video_id_to_label = get_val_holdout_set(epic_video_id_to_label, video_id_to_multilabel)
-video_id_to_singlemultilabel = get_singlemultilabel(epic_video_id_to_label, video_id_to_multilabel)
 
 best_metric = ClipAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval')
-metrics = {'train': [ClipAccuracyMetric(), ClipMeanPerclassAccuracyMetric(),
-            ClipMeanPerclassAccuracyMetric(exclude_classes_less_sample_than=20),
-            ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'])],
+metrics = {'train': [ClipAccuracyMetric()],
         'val': [best_metric,
             ClipAccuracyMetric(topk=(5,), video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
-            ClipMeanPerclassAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
-            ClipMeanPerclassAccuracyMetric(video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval', exclude_classes_less_sample_than=20),
-            ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], video_id_to_label = holdout_video_id_to_label, video_id_to_label_missing_action = 'skip', split='holdoutval'),
-            ClipAccuracyMetric(topk=(1,5)),
-            ClipMeanPerclassAccuracyMetric(),
-            ClipMeanPerclassAccuracyMetric(exclude_classes_less_sample_than=20),
-            ClipGroupedClassAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail']),
-            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipGroupedTop1MultilabelAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipGroupedTopkMultilabelAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            Clip_mAPMetric(activation='sigmoid', exclude_classes_less_sample_than=20, video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipIOUAccuracyMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipF1MeasureMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabelval'),
-            ClipMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipTopkMultilabelAccuracyMetric(video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipGroupedTop1MultilabelAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipGroupedTopkMultilabelAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            Clip_mAPMetric(activation='sigmoid', exclude_classes_less_sample_than=20, video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipIOUAccuracyMetric(activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipF1MeasureMetric(activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipGroupedIOUAccuracyMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
-            ClipGroupedF1MeasureMetric([dataset_cfg.head_classes, dataset_cfg.tail_classes], ['head', 'tail'], activation='sigmoid', video_id_to_label = video_id_to_singlemultilabel, video_id_to_label_missing_action = 'skip', split='singlemultilabelval'),
+            ClipTopSetMultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabeltest'),
+            ClipTop1MultilabelAccuracyMetric(video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabeltest'),
+            ClipIOUAccuracyMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabeltest'),
+            ClipF1MeasureMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabeltest'),
+            Clip_mAPMetric(activation='sigmoid', video_id_to_label = video_id_to_multilabel, video_id_to_label_missing_action = 'skip', split='multilabeltest'),
             ],
         'traindata_testmode': [ClipAccuracyMetric()],
         'trainpartialdata_testmode': [ClipAccuracyMetric()],

@@ -1,12 +1,12 @@
 from pyvideoai.dataloaders.feature_dataset import FeatureDataset
 import pickle
 import numpy as np
+import pyvideoai
 from pyvideoai.utils.losses.softlabel import MaskedBinaryCrossEntropyLoss
 from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits, WeakAssumeNegativeLossWithLogits, BinaryLabelSmoothLossWithLogits, BinaryNegativeLabelSmoothLossWithLogits, EntropyMaximiseLossWithLogits, BinaryFocalLossWithLogits
 from pyvideoai.utils.stdout_logger import OutputLogger
 import torch
 import os
-import multi_label_ar
 
 from pyvideoai.utils.distributed import get_rank, get_world_size
 
@@ -53,8 +53,8 @@ use_ideal_train_labels = False
 
 # Neighbour search settings for pseudo labelling
 # In the paper, this is K and τ.
-num_neighbours = int(os.getenv('VAI_NUM_NEIGHBOURS', 10))
-thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.2))
+num_neighbours = int(os.getenv('VAI_NUM_NEIGHBOURS', 15))
+thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.1))
 # If you want the parameters to be different per class.
 # dictionary with key being class index, with size num_classes.
 # If key not found, use the default setting above.
@@ -79,7 +79,7 @@ def get_input_feature_dim():
 
 import torch.distributed as dist
 import pyvideoai.utils.distributed as du
-from multi_label_ar.neighbours import get_neighbours
+from pyvideoai.utils.verbambig import get_neighbours
 
 def get_features(split):
     input_feature_dim = get_input_feature_dim()
@@ -172,8 +172,8 @@ def generate_train_pseudo_labels():
                 soft_labels_per_num_neighbour = {}    # key: num_neighbours
                 set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
                 for num_neighbour in set_num_neighbours:
-                    with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
-                        nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm, n_classes=dataset_cfg.num_classes)
+                    with OutputLogger(pyvideoai.utils.verbambig.__name__, 'INFO'):
+                        nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, n_classes=dataset_cfg.num_classes, l2_norm=l2_norm)
 
                     #neighbours_ids = []
                     soft_label = []
@@ -465,7 +465,7 @@ last_activation = 'sigmoid'   # or, you can pass a callable function like `torch
 how to calculate metrics
 """
 from pyvideoai.metrics.accuracy import ClipAccuracyMetric, VideoAccuracyMetric
-from pyvideoai.metrics.multilabel_accuracy import ClipMultilabelAccuracyMetric
+from pyvideoai.metrics.topset_multilabel_accuracy import ClipTopSetMultilabelAccuracyMetric
 from pyvideoai.metrics.top1_multilabel_accuracy import ClipTop1MultilabelAccuracyMetric
 from pyvideoai.metrics import ClipIOUAccuracyMetric, ClipF1MeasureMetric
 from pyvideoai.metrics.mAP import Clip_mAPMetric
@@ -473,7 +473,7 @@ from pyvideoai.metrics.mAP import Clip_mAPMetric
 best_metric = ClipIOUAccuracyMetric(activation='sigmoid')
 metrics = {'train': [ClipAccuracyMetric(),
             ],
-        'val': [ClipMultilabelAccuracyMetric(),
+        'val': [ClipTopSetMultilabelAccuracyMetric(),
             ClipTop1MultilabelAccuracyMetric(),
             best_metric,
             ClipF1MeasureMetric(activation='sigmoid'),
