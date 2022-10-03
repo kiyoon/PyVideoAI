@@ -2,7 +2,7 @@
 Use Resnet50 features instead of videos.
 """
 
-_exec_relative_('hmdb_confusion2.py')
+_exec_relative_('confusing_hmdb_102.py')
 
 RGB_features_pickle_path = {}
 RGB_features_pickle_path[1] = {'train': os.path.join(dataset_root, 'features', 'confusing_hmdb_102', 'tsm_resnet50_nopartialbn', 'split1', 'features_epoch_0099_traindata_testmode_oneclip.pkl'),
