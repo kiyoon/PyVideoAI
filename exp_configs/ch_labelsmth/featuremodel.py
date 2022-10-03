@@ -92,6 +92,11 @@ def get_features(split):
             d = pickle.load(f)
 
         video_ids, labels, features = d['video_ids'], d['labels'], d['clip_features']
+        if isinstance(features, tuple):
+            if len(features) != 1:
+                raise ValueError('Not recognised features format. It should be a numpy array, or tuple of numpy array with length 1.')
+            features = features[0]
+
         if features.shape[1] != input_feature_dim:
             # features are not averaged. Average now
             features = np.mean(features, axis=1)
@@ -104,6 +109,11 @@ def get_features(split):
             d = pickle.load(f)
 
         video_ids, labels, features = d['video_ids'], d['labels'], d['clip_features']
+        if isinstance(features, tuple):
+            if len(features) != 1:
+                raise ValueError('Not recognised features format. It should be a numpy array, or tuple of numpy array with length 1.')
+            features = features[0]
+
         if features.shape[1] != input_feature_dim:
             # features are not averaged. Average now
             features = np.mean(features, axis=1)
@@ -118,6 +128,11 @@ def get_features(split):
             d = pickle.load(f)
 
         RGB_video_ids, RGB_labels, RGB_features = d['video_ids'], d['labels'], d['clip_features']
+        if isinstance(RGB_features, tuple):
+            if len(RGB_features) != 1:
+                raise ValueError('Not recognised features format. It should be a numpy array, or tuple of numpy array with length 1.')
+            RGB_features = RGB_features[0]
+
         if RGB_features.shape[1] != 2048:
             # features are not averaged. Average now
             RGB_features = np.mean(RGB_features, axis=1)
@@ -126,6 +141,11 @@ def get_features(split):
             d = pickle.load(f)
 
         flow_video_ids, flow_labels, flow_features = d['video_ids'], d['labels'], d['clip_features']
+        if isinstance(flow_features, tuple):
+            if len(flow_features) != 1:
+                raise ValueError('Not recognised features format. It should be a numpy array, or tuple of numpy array with length 1.')
+            flow_features = flow_features[0]
+
         assert RGB_video_ids.shape[0] == RGB_labels.shape[0] == RGB_features.shape[0] == flow_video_ids.shape[0] == flow_labels.shape[0] == flow_features.shape[0]
 
         if flow_features.shape[1] != 2048:

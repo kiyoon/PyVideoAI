@@ -62,9 +62,6 @@ num_neighbours_per_class = {}
 thr_per_class = {}
 
 
-# Use pre-computed neighbour information if available. Otherwise, compute and cache.
-use_neighbour_cache = os.getenv('VAI_USE_NEIGHBOUR_CACHE', 'False') == 'True'
-
 l2_norm = False
 
 
@@ -175,25 +172,8 @@ def generate_train_pseudo_labels():
                 soft_labels_per_num_neighbour = {}    # key: num_neighbours
                 set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
                 for num_neighbour in set_num_neighbours:
-                    if use_neighbour_cache:
-                        neighbour_cache_dir = os.path.join(dataset_cfg.dataset_root, 'neighbour_cache', feature_input_type)
-                        neighbour_cache_file = os.path.join(neighbour_cache_dir, f'{num_neighbours=},{l2_norm=}.pkl')
-                        os.makedirs(neighbour_cache_dir, exist_ok=True)
-
-                        if os.path.isfile(neighbour_cache_file):
-                            logger.info(f'Loading neighbour from cache file: {neighbour_cache_file}')
-                            with open(neighbour_cache_file, 'rb') as f:
-                                nc_freq = pickle.load(f)
-                        else:
-                            with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
-                                nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm, n_classes=dataset_cfg.num_classes)
-                            logger.info(f'Caching neighbour information to file: {neighbour_cache_file}')
-                            with open(neighbour_cache_file, 'wb') as f:
-                                pickle.dump(nc_freq, f)
-
-                    else:
-                        with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
-                            nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm, n_classes=dataset_cfg.num_classes)
+                    with OutputLogger(multi_label_ar.neighbours.__name__, 'INFO'):
+                        nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, l2_norm=l2_norm, n_classes=dataset_cfg.num_classes)
 
                     #neighbours_ids = []
                     soft_label = []
