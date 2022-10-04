@@ -56,11 +56,11 @@ Refer to [DATASET.md](docs/DATASET.md).
 ## Training command
 ```bash
 # Single GPU
-CUDA_VISIBLE_DEVICES=0 python tools/run_train.py -D {dataset_config_name} -M {model_config_name} -E {exp_config_name} -e {num_epochs}
+CUDA_VISIBLE_DEVICES=0 python tools/run_singlenode.sh train 1 -D {dataset_config_name} -M {model_config_name} -E {exp_config_name}
 # Multi GPUs, single node
-CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_singlenode.sh train {num_gpus} -D {dataset_config_name} -M {model_config_name} -E {exp_config_name} -e {num_epochs}
+CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_singlenode.sh train {num_gpus} -D {dataset_config_name} -M {model_config_name} -E {exp_config_name}
 # Multi GPU, multi node (run on every node)
-CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_singlenode.sh train {num_gpus_per_node} {num_nodes} {node_rank} {master_address} {master_port} -D {dataset_config_name} -M {model_config_name} -E {exp_config_name} -e {num_epochs}
+CUDA_VISIBLE_DEVICES=0,1,2,3 python tools/run_multinode.sh train {num_gpus_per_node} {num_nodes} {node_rank} {master_address} {master_port} -D {dataset_config_name} -M {model_config_name} -E {exp_config_name}
 ```
 
 ## Telegram Bot
