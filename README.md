@@ -99,14 +99,14 @@ TL;DR,
 ```bash
 conda create -n videoai python=3.9
 conda activate videoai
-conda install pytorch==1.10.2 torchvision cudatoolkit=10.2 -c pytorch
+conda install pytorch==1.12.1 torchvision cudatoolkit=10.2 -c pytorch
 ### For RTX 30xx GPUs,
-#conda install pytorch==1.10.2 torchvision cudatoolkit=11.3 -c pytorch
+#conda install pytorch==1.12.1 torchvision cudatoolkit=11.3 -c pytorch
  
 
 git clone --recurse-submodules https://github.com/kiyoon/PyVideoAI.git
 cd PyVideoAI
-git checkout v0.3
+git checkout v0.4
 git submodule update --recursive
 cd submodules/video_datasets_api
 pip install -e .
@@ -135,5 +135,4 @@ Otherwise, you can change `pyvideoai/config.py`'s `DEFAULT_EXPERIMENT_ROOT` valu
 
 
 # TODO
-- ExperimentUtils more intuitive version system with string argument ('last', 'new')
 - Dataloader CSV file json header. BEGIN CSV mark between header and csv. Write PyVideoAI_version, label_type single,multi,soft, multilabel_numclass, softlabel_pickle_path

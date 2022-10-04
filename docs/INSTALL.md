@@ -4,7 +4,7 @@
 ## Python dependencies
 
 Python >= 3.8  
-PyTorch >= 1.9.0
+PyTorch >= 1.12.1	(If not using TSN/TRN/TSM models, 1.9.0 is enough. If not using torch.run, lower than 1.9.0 can work as well.)
 
 ## Installation
 
@@ -24,7 +24,7 @@ git submodule update --init --remote --merge --recursive
 Preferrably, checkout to a stable release.
 
 ```bash
-git checkout v0.3
+git checkout v0.4
 git submodule update --recursive
 ```
 
