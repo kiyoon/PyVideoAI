@@ -25,7 +25,7 @@ import logging
 from typing import Tuple, Union
 
 import numpy as np
-import pretrainedmodels
+import torchvision
 import torch
 from torch import nn
 from torch.nn.init import constant_, normal_
@@ -34,6 +34,7 @@ from torch.utils import model_zoo
 from .ops.basic_ops import ConsensusModule
 from .pretrained_settings import urls as pretrained_urls
 from .pretrained_settings import InvalidPretrainError, ModelConfig
+from .torchvision_weights import get_model_weights_enum
 
 LOG = logging.getLogger(__name__)
 
@@ -248,11 +249,21 @@ TSM Configurations:
     def _prepare_base_model(self, base_model):
         LOG.info("=> base model: {}".format(base_model))
 
-        backbone_pretrained = "imagenet" if self.pretrained == "imagenet" else None
         if "resnet" in base_model.lower():
-            self.base_model = getattr(pretrainedmodels, base_model)(
-                pretrained=backbone_pretrained
+            model_func = getattr(torchvision.models, base_model.lower())
+            if self.pretrained in ["imagenet", "imagenet1k_v1"]:
+                backbone_pretrained = get_model_weights_enum(model_func).IMAGENET1K_V1
+            elif self.pretrained == 'imagenet1k_v2':
+                backbone_pretrained = get_model_weights_enum(model_func).IMAGENET1K_V2
+            elif self.pretrained == 'default':
+                backbone_pretrained = get_model_weights_enum(model_func).DEFAULT
+            else:
+                backbone_pretrained = None
+
+            self.base_model = model_func(
+                weights=backbone_pretrained
             )
+
             if self.is_shift:
                 LOG.info("Adding temporal shift...")
                 from .ops.temporal_shift import make_temporal_shift
@@ -271,7 +282,7 @@ TSM Configurations:
 
                 make_non_local(self.base_model, self.num_segments)
 
-            self.base_model.last_layer_name = "last_linear"
+            self.base_model.last_layer_name = "fc"
             self.input_size = 224
             self.input_mean = [0.485, 0.456, 0.406]
             self.input_std = [0.229, 0.224, 0.225]
@@ -288,7 +299,8 @@ TSM Configurations:
                 )
 
         elif base_model.lower() == "bninception":
-            from archs import bninception
+            from .archs import bninception
+            backbone_pretrained = "imagenet" if self.pretrained == "imagenet" else None
 
             self.base_model = bninception(pretrained=backbone_pretrained)
             self.input_size = self.base_model.input_size

@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Tuple, Union
 
 import numpy as np
-import pretrainedmodels
+import torchvision 
 import torch
 from torch import nn
 from torch.nn.init import constant_, normal_
@@ -42,155 +42,15 @@ from .pretrained_settings import urls as pretrained_urls, InvalidPretrainError
 from .pretrained_settings import ModelConfig
 from .ops.basic_ops import ConsensusModule
 from .ops.trn import return_TRN
-from .ops.transformer import TransformerClassifier, TransformerClassifierAvg
-from .ops.LSTM import LSTMClassifier
+from .torchvision_weights import get_model_weights_enum
 
 LOG = logging.getLogger(__name__)
 
 
-def _initialise_layer(layer, mean=0, std=0.001):
-    if hasattr(layer, 'weight'):
-        normal_(layer.weight, mean, std)
-    if hasattr(layer, 'bias'):
-        if layer.bias is not None:
-            constant_(layer.bias, mean)
-
-class Identity(nn.Module):
-    def __init__(self):
-        super(Identity, self).__init__()
-        
-    def forward(self, x):
-        return x
-
-
-from torchvision import models
-from .BatchRelationalModule import BatchRelationalModule
-from .BatchRelationalModule1D import BatchRelationalModule as BatchRelationalModule1D
-from .feature_model import feature_model
-
-class BNInceptionRN(nn.Module):
-    def __init__(self, pretrained=True, feature_dim=256):
-        super(BNInceptionRN, self).__init__()
-        base_model = 'bninception'
-        if pretrained:
-            backbone_pretrained = 'imagenet'
-        else:
-            backbone_pretrained = None
-
-        self.model = getattr(pretrainedmodels, base_model.lower())(
-            pretrained=backbone_pretrained
-        )
-        #print(self.model)
-        self.model = nn.Sequential(*list(self.model.children()))
-
-    def forward(self, x):
-        # Let x = (N, 3, 224, 224)
-        x = self.model(x)   # (N, 2048, 7, 7)
-#        x = self.downsample_conv(x)     # (N, 256, 7, 7)
-#        x = self.spatial_RN(x)          # (N, 256)
-        return x
-
-
-
-class ResnetRN(nn.Module):
-    def __init__(self, pretrained=True, feature_dim=256, freeze_base = False, depth = 50):
-        super(ResnetRN, self).__init__()
-        if depth == 50:
-            self.model = models.resnet50(pretrained=pretrained)
-            self.resnet_feature_dim = 2048
-        elif depth == 18:
-            self.model = models.resnet18(pretrained=pretrained)
-            self.resnet_feature_dim = 512
-        else:
-            raise ValueError(f"ResNet depth {depth} not possible.")
-
-        self.model = nn.Sequential(*list(self.model.children())[:-2])
-
-        if freeze_base:
-            for param in self.model.parameters():
-                param.requires_grad = False
-
-        self.downsample_conv = nn.Conv2d(self.resnet_feature_dim, feature_dim, kernel_size=1, stride=1, bias=False)
-        self.spatial_RN = BatchRelationalModule((feature_dim,7,7), True, 2, num_units=feature_dim)
-
-        _initialise_layer(self.downsample_conv)
-        #_initialise_layer(self.spatial_RN.)    # !! TODO
-    
-    def forward(self, x):
-        # Let x = (N, 3, 224, 224)
-        x = self.model(x)   # (N, 2048, 7, 7)
-        x = self.downsample_conv(x)     # (N, 256, 7, 7)
-        x = self.spatial_RN(x)          # (N, 256)
-        return x
-
-
-class ResnetRNConcat(nn.Module):
-    def __init__(self, pretrained=True, feature_dim=512, freeze_base = False):
-        super(ResnetRNConcat, self).__init__()
-        self.model = models.resnet50(pretrained=pretrained)
-        self.model = nn.Sequential(*list(self.model.children())[:-2])
-
-        if freeze_base:
-            for param in self.model.parameters():
-                param.requires_grad = False
-
-        self.downsample_conv = nn.Conv2d(2048, feature_dim, kernel_size=1, stride=1, bias=False)
-        self.spatial_RN = BatchRelationalModule((feature_dim,7,7), True, 2, num_units=feature_dim)
-
-        _initialise_layer(self.downsample_conv)
-        #_initialise_layer(self.spatial_RN.)    # !! TODO
-    
-    def forward(self, x):
-        # Let x = (N, 3, 224, 224)
-        x = self.model(x)               # (N, 2048, 7, 7)
-        cnn_feature = nn.AdaptiveAvgPool2d((1,1))(x)
-        cnn_feature = nn.Flatten()(cnn_feature)     # (N, 2048)
-
-        x = self.downsample_conv(x)             # (N, 512, 7, 7)
-        rn_feature = self.spatial_RN(x)          # (N, 512)
-
-        x = torch.cat((cnn_feature, rn_feature), dim=1)     # (N, 2048+512)
-        return x
-
-
-class ResnetRNAdd(nn.Module):
-    def __init__(self, pretrained=True, feature_dim=256, freeze_base = False):
-        super(ResnetRNAdd, self).__init__()
-        self.model = models.resnet50(pretrained=pretrained)
-        self.model = nn.Sequential(*list(self.model.children())[:-2])
-
-        if freeze_base:
-            for param in self.model.parameters():
-                param.requires_grad = False
-
-        self.downsample_conv = nn.Conv2d(2048, feature_dim, kernel_size=1, stride=1, bias=True)
-        self.avgpool = nn.AdaptiveAvgPool2d((1,1))
-        self.flatten = nn.Flatten()
-        self.fc = nn.Linear(2048, feature_dim, bias=True)
-        self.spatial_RN = BatchRelationalModule((feature_dim,7,7), True, 2, num_units=feature_dim)
-
-        _initialise_layer(self.downsample_conv)
-        #_initialise_layer(self.spatial_RN.)    # !! TODO
-    
-    def forward(self, x):
-        # Let x = (N, 3, 224, 224)
-        x = self.model(x)               # (N, 2048, 7, 7)
-        cnn_feature = self.avgpool(x)
-        cnn_feature = self.flatten(cnn_feature)     # (N, 2048)
-        cnn_feature = self.fc(cnn_feature)        # (N, 256)
-
-        x = self.downsample_conv(x)             # (N, 256, 7, 7)
-        rn_feature = self.spatial_RN(x)          # (N, 256)
-
-        x = torch.add(cnn_feature, rn_feature)     # (N, 256)
-        return x
-
 class TSN(nn.Module):
     """
     Temporal Segment Network
-
     See https://arxiv.org/abs/1608.00859 for more details.
-
     Args:
         num_class:
             number of classes, can be either a single integer,
@@ -207,7 +67,7 @@ class TSN(nn.Module):
             the number of channel inputs per snippet
         consensus_type:
             the consensus function used to combined information across segments.
-            one of ``avg``, ``max``, ``trn``, ``trnmultiscale``, and ``strn``.
+            one of ``avg``, ``max``, ``trn``, ``trnmultiscale``.
         before_softmax:
             whether to output class score before or after softmax.
         dropout:
@@ -281,27 +141,9 @@ TSN Configurations:
 
         self._prepare_base_model(base_model)
 
-        if not self.consensus_type.startswith("STRN"):
-            # You don't need this for STRN
-
-            if base_model.lower() == 'resnet50rnconcat':
-                self.feature_dim = 2048 + 512 
-            elif base_model.lower() == 'resnet50rnconcatfrozen':
-                self.feature_dim = 2048 + 512 
-            elif base_model.lower() == 'resnet50rnadd':
-                self.feature_dim = 256 
-            elif base_model.lower() == 'resnet50rn':
-                self.feature_dim = 256
-            elif base_model.lower() == 'resnet50rnfrozen':
-                self.feature_dim = 256
-            elif base_model.lower() == 'resnet18rn':
-                self.feature_dim = 256
-            elif base_model.lower() == 'featurefc':
-                self.feature_dim = 64
-            else:
-                self.feature_dim = getattr(
-                    self.base_model, self.base_model.last_layer_name
-                ).in_features
+        self.feature_dim = getattr(
+            self.base_model, self.base_model.last_layer_name
+        ).in_features
         self._prepare_tsn()
 
         if self.modality == "Flow":
@@ -313,18 +155,10 @@ TSN Configurations:
             self.base_model = self._construct_diff_model(self.base_model)
             LOG.debug("Done. RGBDiff model ready.")
 
-        if consensus_type.startswith("TRN") or consensus_type.startswith("STRN"):
+        if consensus_type.startswith("TRN"):
             self.consensus = return_TRN(
                 consensus_type, self.img_feature_dim, self.num_segments, num_class
             )
-        elif consensus_type.lower() == "transformer":
-            self.consensus = TransformerClassifier(self.num_segments, self.img_feature_dim, 2, 200, 2, num_class, self.dropout)
-        elif consensus_type.lower() == "transformeravg":
-            self.consensus = TransformerClassifierAvg(self.img_feature_dim, 2, 200, 2, num_class, self.dropout)
-        elif consensus_type.lower() == "lstmattention":
-            self.consensus = LSTMClassifier(num_class, self.img_feature_dim, lstm_layers=1, lstm_hidden_dim=1024, lstm_dropout=self.dropout, lstm_bidirectional=True, attention=True)
-        elif consensus_type.lower() == "lstm":
-            self.consensus = LSTMClassifier(num_class, self.img_feature_dim, lstm_layers=1, lstm_hidden_dim=1024, lstm_dropout=self.dropout, lstm_bidirectional=True, attention=False)
         else:
             self.consensus = ConsensusModule(consensus_type)
 
@@ -367,16 +201,6 @@ TSN Configurations:
             variant = "TRN"
         elif self.consensus_type == "TRNMultiscale":
             variant = "MTRN"
-        elif self.consensus_type == 'STRN':
-            variant = "STRN"
-        elif self.consensus_type.lower() == 'transformer':
-            variant = "Transformer"
-        elif self.consensus_type.lower() == 'transformeravg':
-            variant = "TransformerAvg"
-        elif self.consensus_type.lower() == 'lstmattention':
-            variant = "LSTMAttention"
-        elif self.consensus_type.lower() == 'lstm':
-            variant = "LSTM"
         else:
             variant = "TSN"
 
@@ -394,41 +218,24 @@ TSN Configurations:
             if tup[0] == self.base_model.last_layer_name:
                 self.base_model._op_list.remove(tup)
 
-#    def _initialise_layer(self, layer, mean=0, std=0.001):
-#        normal_(layer.weight, mean, std)
-#        constant_(layer.bias, mean)
+    def _initialise_layer(self, layer, mean=0, std=0.001):
+        normal_(layer.weight, mean, std)
+        constant_(layer.bias, mean)
 
     def _prepare_tsn(self):
-        if (self.consensus_type.startswith("TRN") or 
-            self.consensus_type.startswith("STRN") or
-            self.consensus_type.startswith("Transformer") or
-            self.consensus_type.startswith("LSTM") or
-            not isinstance(
+        if self.consensus_type.startswith("TRN") or not isinstance(
             self.num_class, (list, tuple)
-        )):
-            if (not isinstance(self.base_model, Identity) and
-                not isinstance(self.base_model, BatchRelationalModule1D) and
-                not isinstance(self.base_model, feature_model)):
-                setattr(
-                    self.base_model,
-                    self.base_model.last_layer_name,
-                    nn.Dropout(p=self.dropout),
-                )
-            if self.consensus_type.startswith("TRN") or self.consensus_type.startswith("Transformer") or self.consensus_type.startswith("LSTM"):
+        ):
+            setattr(
+                self.base_model,
+                self.base_model.last_layer_name,
+                nn.Dropout(p=self.dropout),
+            )
+            if self.consensus_type.startswith("TRN"):
                 self.new_fc = nn.Linear(self.feature_dim, self.img_feature_dim)
-                #self.new_fc = nn.Linear(1000, self.img_feature_dim)
-            elif self.consensus_type.startswith("STRN"):
-                self.new_fc = Identity()
             else:
-                #setattr(
-                #    self.base_model,
-                #    self.base_model.last_layer_name,
-                #    nn.Linear(self.feature_dim, self.num_class),
-                #)
-                #self.new_fc = Identity()
                 self.new_fc = nn.Linear(self.feature_dim, self.num_class)
-                #self.new_fc = nn.Linear(1000, self.num_class)
-            _initialise_layer(self.new_fc)
+            self._initialise_layer(self.new_fc)
         else:
             assert (
                 len(self.num_class) == 2
@@ -440,113 +247,64 @@ TSN Configurations:
             )
             self.fc_verb = nn.Linear(self.feature_dim, self.num_class[0])
             self.fc_noun = nn.Linear(self.feature_dim, self.num_class[1])
-            _initialise_layer(self.fc_verb)
-            _initialise_layer(self.fc_noun)
+            self._initialise_layer(self.fc_verb)
+            self._initialise_layer(self.fc_noun)
 
     def _prepare_base_model(self, base_model):
-        backbone_pretrained = "imagenet" if self.pretrained == "imagenet" else None
+        if base_model.lower() == "bninception":
+            from .archs import bninception
+            backbone_pretrained = "imagenet" if self.pretrained == "imagenet" else None
 
-        # By Kiyoon
-        if base_model.lower().startswith('resnet50rn'):
-            pretrained = self.pretrained == "imagenet"
-
-            if base_model.lower() == 'resnet50rn':
-                self.base_model = ResnetRN(pretrained, feature_dim=self.img_feature_dim)
-            elif base_model.lower() == 'resnet50rnfrozen':
-                self.base_model = ResnetRN(pretrained, feature_dim=self.img_feature_dim, freeze_base=True)
-            elif base_model.lower() == 'resnet50rnadd':
-                self.base_model = ResnetRNAdd(pretrained, feature_dim=self.img_feature_dim)
-            elif base_model.lower() == 'resnet50rnconcat':
-                self.base_model = ResnetRNConcat(pretrained)
-            elif base_model.lower() == 'resnet50rnconcatfrozen':
-                self.base_model = ResnetRNConcat(pretrained, freeze_base=True)
-            else:
-                raise NotImplementedError()
-            self.base_model.last_layer_name = "last_linear"
-            self.input_size = 224
-            self.input_mean = [0.485, 0.456, 0.406]
-            self.input_std = [0.229, 0.224, 0.225]
-
-            if self.modality == "Flow":
-                self.input_mean = [0.5]
-                self.input_std = [np.mean(self.input_std)]
-            elif self.modality == "RGBDiff":
-                self.input_mean = [0.485, 0.456, 0.406] + [0] * 3 * self.new_length
-                self.input_std = (
-                    self.input_std + [np.mean(self.input_std) * 2] * 3 * self.new_length
-                )
-        elif base_model.lower().startswith('resnet18rn'):
-            pretrained = self.pretrained == "imagenet"
-
-            if base_model.lower() == 'resnet18rn':
-                self.base_model = ResnetRN(pretrained, feature_dim=self.img_feature_dim, depth=18)
-            else:
-                raise NotImplementedError()
-            self.base_model.last_layer_name = "last_linear"
-            self.input_size = 224
-            self.input_mean = [0.485, 0.456, 0.406]
-            self.input_std = [0.229, 0.224, 0.225]
-
-            if self.modality == "Flow":
-                self.input_mean = [0.5]
-                self.input_std = [np.mean(self.input_std)]
-            elif self.modality == "RGBDiff":
-                self.input_mean = [0.485, 0.456, 0.406] + [0] * 3 * self.new_length
-                self.input_std = (
-                    self.input_std + [np.mean(self.input_std) * 2] * 3 * self.new_length
-                )
-        elif base_model.lower() == 'identity':
-            self.base_model = Identity()
-        elif base_model.lower() == 'featurern':
-            self.base_model = BatchRelationalModule1D(7, num_units=64)
-        elif base_model.lower() == 'featurefc':
-            self.base_model = feature_model(70, num_units=64, num_classes=0)
-
-
-        elif "resnet" in base_model.lower() or "vgg" in base_model.lower():
-            self.base_model = getattr(pretrainedmodels, base_model)(
-                pretrained=backbone_pretrained
-            )
-            self.base_model.last_layer_name = "last_linear"
-            self.input_size = 224
-            self.input_mean = [0.485, 0.456, 0.406]
-            self.input_std = [0.229, 0.224, 0.225]
-
-            if self.modality == "Flow":
-                self.input_mean = [0.5]
-                self.input_std = [np.mean(self.input_std)]
-            elif self.modality == "RGBDiff":
-                self.input_mean = [0.485, 0.456, 0.406] + [0] * 3 * self.new_length
-                self.input_std = (
-                    self.input_std + [np.mean(self.input_std) * 2] * 3 * self.new_length
-                )
-        elif base_model.lower() == "bninception":
-            self.base_model = getattr(pretrainedmodels, base_model.lower())(
-                pretrained=backbone_pretrained
-            )
-            self.base_model.last_layer_name = "last_linear"
+            self.base_model = bninception(pretrained=backbone_pretrained)
+            self.base_model.last_layer_name = "fc"
             self.input_size = 224
             self.input_mean = [104, 117, 128]
             self.input_std = [1]
 
-            if self.modality == "Flow":
-                self.input_mean = [128]
-            elif self.modality == "RGBDiff":
-                self.input_mean = self.input_mean * (1 + self.new_length)
-        elif base_model.lower() == "inceptionv3":
-            self.base_model = getattr(pretrainedmodels, base_model.lower())(
-                pretrained=backbone_pretrained
-            )
-            self.base_model.last_layer_name = "top_cls_fc"
-            self.input_size = 299
-            self.input_mean = [104, 117, 128]
-            self.input_std = [1]
             if self.modality == "Flow":
                 self.input_mean = [128]
             elif self.modality == "RGBDiff":
                 self.input_mean = self.input_mean * (1 + self.new_length)
         else:
-            raise ValueError("Unknown base model: {}".format(base_model))
+            model_func = getattr(torchvision.models, base_model.lower())
+            if self.pretrained in ["imagenet", "imagenet1k_v1"]:
+                backbone_pretrained = get_model_weights_enum(model_func).IMAGENET1K_V1
+            elif self.pretrained == 'imagenet1k_v2':
+                backbone_pretrained = get_model_weights_enum(model_func).IMAGENET1K_V2
+            elif self.pretrained == 'default':
+                backbone_pretrained = get_model_weights_enum(model_func).DEFAULT
+            else:
+                backbone_pretrained = None
+
+            self.base_model = model_func(
+                weights=backbone_pretrained
+            )
+
+            if "resnet" in base_model.lower() or "vgg" in base_model.lower():
+                self.base_model.last_layer_name = "fc"
+                self.input_size = 224
+                self.input_mean = [0.485, 0.456, 0.406]
+                self.input_std = [0.229, 0.224, 0.225]
+
+                if self.modality == "Flow":
+                    self.input_mean = [0.5]
+                    self.input_std = [np.mean(self.input_std)]
+                elif self.modality == "RGBDiff":
+                    self.input_mean = [0.485, 0.456, 0.406] + [0] * 3 * self.new_length
+                    self.input_std = (
+                        self.input_std + [np.mean(self.input_std) * 2] * 3 * self.new_length
+                    )
+            elif base_model.lower() == "inceptionv3":
+                self.base_model.last_layer_name = "top_cls_fc"
+                self.input_size = 299
+                self.input_mean = [104, 117, 128]
+                self.input_std = [1]
+                if self.modality == "Flow":
+                    self.input_mean = [128]
+                elif self.modality == "RGBDiff":
+                    self.input_mean = self.input_mean * (1 + self.new_length)
+            else:
+                raise ValueError("Unknown base model: {}".format(base_model))
 
     def train(self, mode=True):
         """
@@ -576,9 +334,6 @@ TSN Configurations:
         normal_weight = []
         normal_bias = []
         bn = []
-        
-        rnn = []
-        layernorm = []
 
         conv_cnt = 0
         bn_cnt = 0
@@ -607,13 +362,6 @@ TSN Configurations:
                 # later BN's are frozen
                 if not self._enable_pbn or bn_cnt == 1:
                     bn.extend(list(m.parameters()))
-            elif isinstance(m, torch.nn.LayerNorm):
-                # For Transformer consensus type.
-                layernorm.extend(list(m.parameters()))
-            elif isinstance(m, torch.nn.LSTM):
-                # For Transformer consensus type.
-                rnn.extend(list(m.parameters()))
-
             elif len(m._modules) == 0:
                 if len(list(m.parameters())) > 0:
                     raise ValueError(
@@ -648,41 +396,23 @@ TSN Configurations:
                 "name": "normal_bias",
             },
             {"params": bn, "lr_mult": 1, "decay_mult": 0, "name": "BN scale/shift"},
-            {"params": layernorm, "lr_mult": 1, "decay_mult": 1, "name": "layernorm"},
-            {
-                "params": rnn,
-                "lr_mult": 1,
-                "decay_mult": 1,
-                "name": "rnn_weight",
-            },
         ]
 
     def features(self, input: torch.Tensor) -> torch.Tensor:
-        if isinstance(self.base_model, Identity):
-            return self.base_model.forward(input.view((-1, input.size()[-1])))
-        elif isinstance(self.base_model, BatchRelationalModule1D):
-            return self.base_model.forward(input.view((-1,) + input.size()[-2:]))
-        elif isinstance(self.base_model, feature_model):
-            return self.base_model.forward(input.view((-1,input.size()[-2] * input.size()[-1])))    # (N, #frame, #object, feature_dim) -> (N*#frame, #object*feature_dim)
+        sample_len = (3 if self.modality == "RGB" else 2) * self.new_length
 
-        else:
-            sample_len = (3 if self.modality == "RGB" else 2) * self.new_length
+        if self.modality == "RGBDiff":
+            sample_len = 3 * self.new_length
+            input = self._get_diff(input)
 
-            if self.modality == "RGBDiff":
-                sample_len = 3 * self.new_length
-                input = self._get_diff(input)
-
-            return self.base_model.forward(input.view((-1, sample_len) + input.size()[-2:]))
+        return self.base_model.forward(input.view((-1, sample_len) + input.size()[-2:]))
 
     def logits(
         self, features: torch.Tensor
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, ...]]:
         if isinstance(
             self.num_class, (list, tuple)
-        ) and (not self.consensus_type.startswith("TRN")
-        ) and (not self.consensus_type.startswith("STRN")
-        ) and (not self.consensus_type.startswith("Transformer")
-        ) and not self.consensus_type.startswith("LSTM"):
+        ) and not self.consensus_type.startswith("TRN"):
             logits_verb = self.fc_verb(features)
             if not self.before_softmax:
                 logits_verb = self.softmax(logits_verb)
@@ -702,7 +432,7 @@ TSN Configurations:
             output_noun = self.consensus(logits_noun)
             return output_verb.squeeze(1), output_noun.squeeze(1)
         else:
-            # handle TRN/STRN/Transformer/LSTM model
+            # handle TRN model
             features = self.new_fc(features)
             features = features.view((-1, self.num_segments) + features.size()[1:])
 
@@ -901,7 +631,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--segment-count", default=3, type=int)
     parser.add_argument(
-        "--consensus", default="TRN", choices=["avg", "max", "TRN", "TRNmultiscale", "STRN"]
+        "--consensus", default="TRN", choices=["avg", "max", "TRN", "TRNmultiscale"]
     )
     parser.add_argument(
         "--class-type", default="verb+noun", choices=["verb+noun", "verb", "noun"]
@@ -930,7 +660,6 @@ if __name__ == "__main__":
 class TRN(TSN):
     """
     Single-scale Temporal Relational Network
-
     See https://arxiv.org/abs/1711.08496 for more details.
     Args:
         num_class:
@@ -996,7 +725,6 @@ class TRN(TSN):
 class MTRN(TSN):
     """
     Multi-scale Temporal Relational Network
-
     See https://arxiv.org/abs/1711.08496 for more details.
     Args:
         num_class:
@@ -1056,387 +784,4 @@ class MTRN(TSN):
             img_feature_dim=img_feature_dim,
             partial_bn=partial_bn,
             pretrained=pretrained,
-        )
-
-
-class STRN(TSN):
-    """
-    Single-scale Spatial-Temporal Relational Network
-
-    See https://arxiv.org/abs/1711.08496 for more details.
-    Args:
-        num_class:
-            Number of classes, can be either a single integer,
-            or a 2-tuple for training verb+noun multi-task models
-        num_segments:
-            Number of frames/optical flow stacks input into the model
-        modality:
-            Either ``RGB`` or ``Flow``.
-        base_model:
-            Backbone model architecture one of ``resnet50rn``
-        new_length:
-            The number of channel inputs per snippet
-        consensus_type:
-            The consensus function used to combined information across segments.
-            One of ``avg``, ``max``, ``STRN``, ``STRNMultiscale``.
-        before_softmax:
-            Whether to output class score before or after softmax.
-        dropout:
-            The dropout probability. The dropout layer replaces the backbone's
-            classification layer.
-        img_feature_dim:
-            Only for TRN/MTRN models. The dimensionality of the features used for
-            relational reasoning.
-        partial_bn:
-            Whether to freeze all BN layers beyond the first 2 layers.
-        pretrained:
-            Either ``'imagenet'`` for ImageNet initialised models,
-            or ``'epic-kitchens'`` for weights pretrained on EPIC-Kitchens.
-    """
-
-    def __init__(
-        self,
-        num_class,
-        num_segments,
-        modality,
-        base_model="resnet50rn",
-        new_length=None,
-        before_softmax=True,
-        dropout=0.7,
-        img_feature_dim=256,
-        partial_bn=True,
-        pretrained="imagenet",
-    ):
-
-        super().__init__(
-            num_class=num_class,
-            num_segments=num_segments,
-            modality=modality,
-            base_model=base_model,
-            new_length=new_length,
-            consensus_type="STRN",
-            before_softmax=before_softmax,
-            dropout=dropout,
-            img_feature_dim=img_feature_dim,
-            partial_bn=partial_bn,
-            pretrained=pretrained,
-        )
-
-
-class SMTRN(TSN):
-    """
-    Single-scale Spatial-Temporal Relational Network
-
-    See https://arxiv.org/abs/1711.08496 for more details.
-    Args:
-        num_class:
-            Number of classes, can be either a single integer,
-            or a 2-tuple for training verb+noun multi-task models
-        num_segments:
-            Number of frames/optical flow stacks input into the model
-        modality:
-            Either ``RGB`` or ``Flow``.
-        base_model:
-            Backbone model architecture one of ``resnet50rn``
-        new_length:
-            The number of channel inputs per snippet
-        consensus_type:
-            The consensus function used to combined information across segments.
-            One of ``avg``, ``max``, ``STRN``, ``STRNMultiscale``.
-        before_softmax:
-            Whether to output class score before or after softmax.
-        dropout:
-            The dropout probability. The dropout layer replaces the backbone's
-            classification layer.
-        img_feature_dim:
-            Only for TRN/MTRN models. The dimensionality of the features used for
-            relational reasoning.
-        partial_bn:
-            Whether to freeze all BN layers beyond the first 2 layers.
-        pretrained:
-            Either ``'imagenet'`` for ImageNet initialised models,
-            or ``'epic-kitchens'`` for weights pretrained on EPIC-Kitchens.
-    """
-
-    def __init__(
-        self,
-        num_class,
-        num_segments,
-        modality,
-        base_model="resnet50rn",
-        new_length=None,
-        before_softmax=True,
-        dropout=0.7,
-        img_feature_dim=256,
-        partial_bn=True,
-        pretrained="imagenet",
-    ):
-
-        super().__init__(
-            num_class=num_class,
-            num_segments=num_segments,
-            modality=modality,
-            base_model=base_model,
-            new_length=new_length,
-            consensus_type="STRNMultiscale",
-            before_softmax=before_softmax,
-            dropout=dropout,
-            img_feature_dim=img_feature_dim,
-            partial_bn=partial_bn,
-            pretrained=pretrained,
-        )
-
-
-class VideoTransformer(TSN):
-    """
-    Single-scale Spatial-Temporal Relational Network
-
-    See https://arxiv.org/abs/1711.08496 for more details.
-    Args:
-        num_class:
-            Number of classes, can be either a single integer,
-            or a 2-tuple for training verb+noun multi-task models
-        num_segments:
-            Number of frames/optical flow stacks input into the model
-        modality:
-            Either ``RGB`` or ``Flow``.
-        base_model:
-            Backbone model architecture one of ``resnet50rn``
-        new_length:
-            The number of channel inputs per snippet
-        consensus_type:
-            The consensus function used to combined information across segments.
-            One of ``avg``, ``max``, ``STRN``, ``STRNMultiscale``.
-        before_softmax:
-            Whether to output class score before or after softmax.
-        dropout:
-            The dropout probability. The dropout layer replaces the backbone's
-            classification layer.
-        img_feature_dim:
-            Only for TRN/MTRN models. The dimensionality of the features used for
-            relational reasoning.
-        partial_bn:
-            Whether to freeze all BN layers beyond the first 2 layers.
-        pretrained:
-            Either ``'imagenet'`` for ImageNet initialised models,
-            or ``'epic-kitchens'`` for weights pretrained on EPIC-Kitchens.
-    """
-
-    def __init__(
-        self,
-        num_class,
-        num_segments,
-        modality,
-        base_model="resnet50",
-        new_length=None,
-        before_softmax=True,
-        dropout=0.7,
-        img_feature_dim=256,
-        partial_bn=True,
-        pretrained="imagenet",
-    ):
-
-        super().__init__(
-            num_class=num_class,
-            num_segments=num_segments,
-            modality=modality,
-            base_model=base_model,
-            new_length=new_length,
-            consensus_type="Transformer",
-            before_softmax=before_softmax,
-            dropout=dropout,
-            img_feature_dim=img_feature_dim,
-            partial_bn=partial_bn,
-            pretrained=pretrained,
-        )
-
-
-class VideoTransformerAvg(TSN):
-    """
-    Single-scale Spatial-Temporal Relational Network
-
-    See https://arxiv.org/abs/1711.08496 for more details.
-    Args:
-        num_class:
-            Number of classes, can be either a single integer,
-            or a 2-tuple for training verb+noun multi-task models
-        num_segments:
-            Number of frames/optical flow stacks input into the model
-        modality:
-            Either ``RGB`` or ``Flow``.
-        base_model:
-            Backbone model architecture one of ``resnet50rn``
-        new_length:
-            The number of channel inputs per snippet
-        consensus_type:
-            The consensus function used to combined information across segments.
-            One of ``avg``, ``max``, ``STRN``, ``STRNMultiscale``.
-        before_softmax:
-            Whether to output class score before or after softmax.
-        dropout:
-            The dropout probability. The dropout layer replaces the backbone's
-            classification layer.
-        img_feature_dim:
-            Only for TRN/MTRN models. The dimensionality of the features used for
-            relational reasoning.
-        partial_bn:
-            Whether to freeze all BN layers beyond the first 2 layers.
-        pretrained:
-            Either ``'imagenet'`` for ImageNet initialised models,
-            or ``'epic-kitchens'`` for weights pretrained on EPIC-Kitchens.
-    """
-
-    def __init__(
-        self,
-        num_class,
-        num_segments,
-        modality,
-        base_model="resnet50",
-        new_length=None,
-        before_softmax=True,
-        dropout=0.7,
-        img_feature_dim=256,
-        partial_bn=True,
-        pretrained="imagenet",
-    ):
-
-        super().__init__(
-            num_class=num_class,
-            num_segments=num_segments,
-            modality=modality,
-            base_model=base_model,
-            new_length=new_length,
-            consensus_type="TransformerAvg",
-            before_softmax=before_softmax,
-            dropout=dropout,
-            img_feature_dim=img_feature_dim,
-            partial_bn=partial_bn,
-            pretrained=pretrained,
-        )
-
-
-class VideoLSTM(TSN):
-    """
-    Single-scale Spatial-Temporal Relational Network
-
-    See https://arxiv.org/abs/1711.08496 for more details.
-    Args:
-        num_class:
-            Number of classes, can be either a single integer,
-            or a 2-tuple for training verb+noun multi-task models
-        num_segments:
-            Number of frames/optical flow stacks input into the model
-        modality:
-            Either ``RGB`` or ``Flow``.
-        base_model:
-            Backbone model architecture one of ``resnet50rn``
-        new_length:
-            The number of channel inputs per snippet
-        consensus_type:
-            The consensus function used to combined information across segments.
-            One of ``avg``, ``max``, ``STRN``, ``STRNMultiscale``.
-        before_softmax:
-            Whether to output class score before or after softmax.
-        dropout:
-            The dropout probability. The dropout layer replaces the backbone's
-            classification layer.
-        img_feature_dim:
-            Only for TRN/MTRN models. The dimensionality of the features used for
-            relational reasoning.
-        partial_bn:
-            Whether to freeze all BN layers beyond the first 2 layers.
-        pretrained:
-            Either ``'imagenet'`` for ImageNet initialised models,
-            or ``'epic-kitchens'`` for weights pretrained on EPIC-Kitchens.
-    """
-
-    def __init__(
-        self,
-        num_class,
-        num_segments,
-        modality,
-        base_model="resnet50",
-        new_length=None,
-        before_softmax=True,
-        dropout=0.7,
-        img_feature_dim=256,
-        partial_bn=True,
-        pretrained="imagenet",
-    ):
-
-        super().__init__(
-            num_class=num_class,
-            num_segments=num_segments,
-            modality=modality,
-            base_model=base_model,
-            new_length=new_length,
-            consensus_type="LSTM",
-            before_softmax=before_softmax,
-            dropout=dropout,
-            img_feature_dim=img_feature_dim,
-            partial_bn=partial_bn,
-            pretrained=pretrained,
-        )
-
-class VideoLSTMAttention(TSN):
-    """
-    Single-scale Spatial-Temporal Relational Network
-
-    See https://arxiv.org/abs/1711.08496 for more details.
-    Args:
-        num_class:
-            Number of classes, can be either a single integer,
-            or a 2-tuple for training verb+noun multi-task models
-        num_segments:
-            Number of frames/optical flow stacks input into the model
-        modality:
-            Either ``RGB`` or ``Flow``.
-        base_model:
-            Backbone model architecture one of ``resnet50rn``
-        new_length:
-            The number of channel inputs per snippet
-        consensus_type:
-            The consensus function used to combined information across segments.
-            One of ``avg``, ``max``, ``STRN``, ``STRNMultiscale``.
-        before_softmax:
-            Whether to output class score before or after softmax.
-        dropout:
-            The dropout probability. The dropout layer replaces the backbone's
-            classification layer.
-        img_feature_dim:
-            Only for TRN/MTRN models. The dimensionality of the features used for
-            relational reasoning.
-        partial_bn:
-            Whether to freeze all BN layers beyond the first 2 layers.
-        pretrained:
-            Either ``'imagenet'`` for ImageNet initialised models,
-            or ``'epic-kitchens'`` for weights pretrained on EPIC-Kitchens.
-    """
-
-    def __init__(
-        self,
-        num_class,
-        num_segments,
-        modality,
-        base_model="resnet50",
-        new_length=None,
-        before_softmax=True,
-        dropout=0.7,
-        img_feature_dim=256,
-        partial_bn=True,
-        pretrained="imagenet",
-    ):
-
-        super().__init__(
-            num_class=num_class,
-            num_segments=num_segments,
-            modality=modality,
-            base_model=base_model,
-            new_length=new_length,
-            consensus_type="LSTMAttention",
-            before_softmax=before_softmax,
-            dropout=dropout,
-            img_feature_dim=img_feature_dim,
-            partial_bn=partial_bn,
-            pretrained=pretrained,
-        )
+        ) 
