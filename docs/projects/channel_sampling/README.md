@@ -8,8 +8,14 @@ In BMVC 2022. [arXiv](http://arxiv.org/abs/2201.10394)
 
 ## Getting started
 
-Core implementation of reordering methods is in [`pyvideoai/utils/tc_reordering.py`](../../../pyvideoai/utils/tc_reordering.py).  
-See [`exp_configs/ch_tcgrey`](../../../exp_configs/ch_tcgrey) for experiment settings.  
+### PyVideoAI checklist
+- Install PyVideoAI correctly. See [README.md](../../../README.md) and [INSTALL.md](../../../docs/INSTALL.md).
+- Make sure datasets are available in `PyVideoAI/data` directory. Generate splits using scripts in [`PyVideoAI/tools/datasets`](../../../tools/datasets). See [DATASET.md](../../../docs/DATASET.md).
+- Following [PyVideoAI-examples](https://github.com/kiyoon/PyVideoAI-examples) help understand the overall workflow.
+
+### About the paper
+- Core implementation of reordering methods is in [`pyvideoai/utils/tc_reordering.py`](../../../pyvideoai/utils/tc_reordering.py).  
+- See [`exp_configs/ch_tcgrey`](../../../exp_configs/ch_tcgrey) for experiment settings.  
 For example, in order to run TSM model, GreyST method on the Something-Something-V1 dataset, you should run [`exp_configs/ch_tcgrey/something_v1/tsm_resnet50_nopartialbn-GreyST_8frame.py`](../../../exp_configs/ch_tcgrey/something_v1/tsm_resnet50_nopartialbn-GreyST_8frame.py), the command of which would be:
 
 ```bash
@@ -18,6 +24,36 @@ tools/run_singlenode.sh train 4 -R ~/experiment_root -D something_v1 -M tsm_resn
 # Run evaluation
 tools/run_singlenode.sh eval 4 -R ~/experiment_root -D something_v1 -M tsm_resnet_nopartialbn -E GreyST_8frame -c:e tcgrey
 ```
+
+### Lists of datasets, models, experiments available
+See [`exp_configs/ch_tcgrey`](../../../exp_configs/ch_tcgrey) for the available experiment settings.  
+Not all combinations are available, but below are main settings.
+
+#### Datasets (-D option)
+- [cater_task2](../../../dataset_configs/cater_task2.py)
+- [cater_task2_cameramotion](../../../dataset_configs/cater_task2_cameramotion.py)
+- [something_v1](../../../dataset_configs/something_v1.py)
+- [something_v2](../../../dataset_configs/something_v2.py)
+
+#### Models (-M option)
+- [tsn_resnet50](../../../model_configs/tsn_resnet50.py)
+- [trn_resnet50](../../../model_configs/trn_resnet50.py)
+- [mtrn_resnet50](../../../model_configs/mtrn_resnet50.py)
+- [tsm_resnet50](../../../model_configs/tsn_resnet50.py) or [tsm_resnet50_nopartialbn](../../../model_configs/tsn_resnet50_nopartialbn.py)
+- [mvf_resnet50](../../../model_configs/mvf_resnet50.py) or [mvf_resnet50_nopartialbn](../../../model_configs/mvf_resnet50_nopartialbn.py)
+
+#### Experiments (-E option)
+For `something_v1` and `something_v2`,  
+- RGB_8frame
+- TC_8frame
+- TCPlus2_8frame
+- GreyST_8frame
+
+For `cater_task2` and `cater_task2_cameramotion`,  
+- RGB_32frame
+- TC_32frame
+- TCPlus2_32frame
+- GreyST_32frame
 
 ## Citing the paper
 
