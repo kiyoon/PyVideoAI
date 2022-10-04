@@ -25,7 +25,6 @@ import logging
 from typing import Tuple, Union
 
 import numpy as np
-import torchvision
 import torch
 from torch import nn
 from torch.nn.init import constant_, normal_
@@ -34,7 +33,7 @@ from torch.utils import model_zoo
 from .ops.basic_ops import ConsensusModule
 from .pretrained_settings import urls as pretrained_urls
 from .pretrained_settings import InvalidPretrainError, ModelConfig
-from .torchvision_weights import get_model_weights_enum
+from .torchvision_weights import get_torchvision_model
 
 LOG = logging.getLogger(__name__)
 
@@ -250,19 +249,7 @@ TSM Configurations:
         LOG.info("=> base model: {}".format(base_model))
 
         if "resnet" in base_model.lower():
-            model_func = getattr(torchvision.models, base_model.lower())
-            if self.pretrained in ["imagenet", "imagenet1k_v1"]:
-                backbone_pretrained = get_model_weights_enum(model_func).IMAGENET1K_V1
-            elif self.pretrained == 'imagenet1k_v2':
-                backbone_pretrained = get_model_weights_enum(model_func).IMAGENET1K_V2
-            elif self.pretrained == 'default':
-                backbone_pretrained = get_model_weights_enum(model_func).DEFAULT
-            else:
-                backbone_pretrained = None
-
-            self.base_model = model_func(
-                weights=backbone_pretrained
-            )
+            self.base_model = get_torchvision_model(base_model, self.pretrained)
 
             if self.is_shift:
                 LOG.info("Adding temporal shift...")

@@ -27,12 +27,13 @@
 # Modified by Will Price to support multiple output classification layers and `features()` and
 # `logits()` methods.
 
+# Modified by Kiyoon Kim to support Torchvision >= 0.13
+
 import logging
 from pathlib import Path
 from typing import Tuple, Union
 
 import numpy as np
-import torchvision 
 import torch
 from torch import nn
 from torch.nn.init import constant_, normal_
@@ -42,10 +43,9 @@ from .pretrained_settings import urls as pretrained_urls, InvalidPretrainError
 from .pretrained_settings import ModelConfig
 from .ops.basic_ops import ConsensusModule
 from .ops.trn import return_TRN
-from .torchvision_weights import get_model_weights_enum
+from .torchvision_weights import get_torchvision_model
 
 LOG = logging.getLogger(__name__)
-
 
 class TSN(nn.Module):
     """
@@ -266,19 +266,7 @@ TSN Configurations:
             elif self.modality == "RGBDiff":
                 self.input_mean = self.input_mean * (1 + self.new_length)
         else:
-            model_func = getattr(torchvision.models, base_model.lower())
-            if self.pretrained in ["imagenet", "imagenet1k_v1"]:
-                backbone_pretrained = get_model_weights_enum(model_func).IMAGENET1K_V1
-            elif self.pretrained == 'imagenet1k_v2':
-                backbone_pretrained = get_model_weights_enum(model_func).IMAGENET1K_V2
-            elif self.pretrained == 'default':
-                backbone_pretrained = get_model_weights_enum(model_func).DEFAULT
-            else:
-                backbone_pretrained = None
-
-            self.base_model = model_func(
-                weights=backbone_pretrained
-            )
+            self.base_model = get_torchvision_model(base_model, self.pretrained)
 
             if "resnet" in base_model.lower() or "vgg" in base_model.lower():
                 self.base_model.last_layer_name = "fc"
@@ -784,4 +772,4 @@ class MTRN(TSN):
             img_feature_dim=img_feature_dim,
             partial_bn=partial_bn,
             pretrained=pretrained,
-        ) 
+        )

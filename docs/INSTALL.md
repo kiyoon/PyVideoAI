@@ -1,23 +1,23 @@
 
-# Installation / Upgrade 
+# Installation / Upgrade
 
 ## Python dependencies
 
-Python >= 3.8  
-PyTorch >= 1.12.1	(If not using TSN/TRN/TSM models, 1.9.0 is enough. If not using torch.run, lower than 1.9.0 can work as well.)
+Python >= 3.8
+PyTorch >= 1.9.0	(If not using torch.run, lower version can work as well.)
 
 ## Installation
 
-Clone this repository as follows:  
+Clone this repository as follows:
 ```bash
 git clone --recurse-submodules https://github.com/kiyoon/PyVideoAI.git
 ```
 
-Or, clone submodules and checkout to master after you clone this repository.  
+Or, clone submodules and checkout to master after you clone this repository.
 
 ```bash
 git clone https://github.com/kiyoon/PyVideoAI.git
-cd PyVideoAI 
+cd PyVideoAI
 git submodule update --init --remote --merge --recursive
 ```
 
@@ -28,7 +28,7 @@ git checkout v0.4
 git submodule update --recursive
 ```
 
-Then, install each submodule.  
+Then, install each submodule.
 
 ```bash
 cd submodules/video_datasets_api
@@ -45,8 +45,8 @@ cd ../..
 pip install -e .
 ```
 
-Optional: Pillow-SIMD and libjepg-turbo to improve dataloading performance.  
-Run this at the end of the installation:  
+Optional: Pillow-SIMD and libjepg-turbo to improve dataloading performance.
+Run this at the end of the installation:
 
 ```bash
 conda uninstall -y --force pillow pil jpeg libtiff libjpeg-turbo
