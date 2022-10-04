@@ -29,7 +29,7 @@ test_scale = 256
 test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 
 greyscale=False
-sampling_mode = 'RGB'   # RGB, TC, GreyST
+sampling_mode = 'RGB'   # RGB, TC, GreyST, GreyOnly
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
@@ -152,7 +152,7 @@ def _get_torch_dataset(csv_path, split):
         sample_frame_length = input_frame_length * 3
     elif sampling_mode == 'TCPlus2':
         sample_frame_length = input_frame_length + 2
-    elif sampling_mode in ['TC', 'RGB']:
+    elif sampling_mode in ['TC', 'RGB', 'GreyOnly']:
         sample_frame_length = input_frame_length
     else:
         raise ValueError(f'Unknown {sampling_mode = }. Should be RGB, TC, TCPlus2, or GreyST')
