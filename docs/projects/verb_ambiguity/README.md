@@ -3,6 +3,11 @@
 Kiyoon Kim, Davide Moltisanti, Oisin Mac Aodha, Laura Sevilla-Lara  
 In BMVC 2022.
 
+![verb_ambiguity](https://user-images.githubusercontent.com/12980409/193856345-e0287624-4c84-46af-b245-c07ff263c424.png)
+
+
+![method](https://user-images.githubusercontent.com/12980409/193856373-c1ec172f-713f-47ec-8a6f-b698de84402a.png)
+
 
 ## Citing the paper
 
