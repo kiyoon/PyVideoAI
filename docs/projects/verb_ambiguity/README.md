@@ -5,7 +5,7 @@ In BMVC 2022.
 
 <img src="https://user-images.githubusercontent.com/12980409/193856345-e0287624-4c84-46af-b245-c07ff263c424.png" alt="Verb Ambiguity" width="800"> 
 
-<img src="https://user-images.githubusercontent.com/12980409/193856373-c1ec172f-713f-47ec-8a6f-b698de84402a.png" alt="Method" width="1000"> 
+<img src="https://user-images.githubusercontent.com/12980409/193883304-9e7275ee-2b88-4250-b695-c6d2f0d5acc0.png" alt="Method" width="1000"> 
 
 ## Dataset downloads (labels only)
 - [EPIC-Kitchens-100-SPMV test set labels](https://uoe-my.sharepoint.com/:x:/g/personal/s1884147_ed_ac_uk/Eful82Zu8BZDnpYSEt8FVDsB4KdL4gYG6pcPjV-NURLc6Q?e=Qm7ovB&download=1)
