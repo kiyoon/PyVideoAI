@@ -14,7 +14,7 @@ For example, in order to run TSM model, GreyST method on the Something-Something
 
 ```bash
 # Run training
-tools/run_singlenode.sh train 4 -R ~/experiment_root -D something_v1 -M tsm_resnet_nopartialbn -E GreyST_8frame -c:e tcgrey -e 200
+tools/run_singlenode.sh train 4 -R ~/experiment_root -D something_v1 -M tsm_resnet_nopartialbn -E GreyST_8frame -c:e tcgrey
 # Run evaluation
 tools/run_singlenode.sh eval 4 -R ~/experiment_root -D something_v1 -M tsm_resnet_nopartialbn -E GreyST_8frame -c:e tcgrey
 ```
