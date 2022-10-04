@@ -86,7 +86,7 @@ def get_torchvision_model(model: str, pretrained: str | None) -> nn.Module:
             backbone_pretrained = None
         else:
             pretrained = pretrained.lower()
-            if pretrained in ["imagenet", "imagenet1k_v1"]:
+            if pretrained in ["imagenet", "imagenet1k_v1", "default"]:
                 backbone_pretrained = "imagenet"
             else:
                 raise ValueError(f'Not recognised {pretrained = } with the {model = }. Maybe torchvision version is too low?')
@@ -109,13 +109,13 @@ def main():
     print(model)
     model = get_torchvision_model("resnet50", "imagenet")
     print(model)
+    model = get_torchvision_model("resnet50", "DEFAULT")
+    print(model)
+    model = get_torchvision_model("inception_v3", "DEFAULT")
+    print(model)
 
     print("Below would not work with torchvision < 0.13")
     model = get_torchvision_model("resnet50", "IMAGENET1K_V2")
-    print(model)
-    model = get_torchvision_model("resnet50", "DEFAULT")
-    print(model)
-    model = get_torchvision_model("inceptionv3", "DEFAULT")
     print(model)
 
 
