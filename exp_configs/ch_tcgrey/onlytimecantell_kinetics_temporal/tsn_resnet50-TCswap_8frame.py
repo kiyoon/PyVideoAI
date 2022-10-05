@@ -1,1 +1,0 @@
-trn_resnet50-TCswap_8frame.py

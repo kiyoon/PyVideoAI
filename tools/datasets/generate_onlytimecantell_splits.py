@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import tqdm
-import pickle
 import json
 import os
 import random
@@ -55,9 +54,11 @@ if __name__ == '__main__':
 
     def kinetics_gen_split(uid_start_num, labels, trainval_dict, train_or_valid, output_path):
         split = open(output_path, 'w')
+        split.write('0\n')
         uid = uid_start_num
         for uuid, class_key in tqdm.tqdm(trainval_dict.items(), desc="Generating splits", total=len(trainval_dict)):
-            if class_key in labels.keys():      # only the selected classes (temporal/static/random) 
+            class_key = class_key['annotations']['label']
+            if class_key in labels.keys():      # only the selected classes (temporal/static/random)
                 if not args.partial or random.random() < 0.25:      # choose quarter when --partial is set
                     class_key_path = class_key.replace(' ', '_')
                     label = labels[class_key]
@@ -68,7 +69,7 @@ if __name__ == '__main__':
                         if os.path.isdir(dir_path):     # ignore videos not downloaded
                             num_frames = len([name for name in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, name))])
                             if num_frames > 0:  # ignore videos with 0 frames
-                                write_str = dir_path + ' %d %d %d\n' % (uid, label, num_frames)
+                                write_str = dir_path + '/{:05d}.jpg %d %d 1 %d\n' % (uid, label, num_frames)
                     else:
                         raise NotImplementedError(args.mode)
 
@@ -101,11 +102,12 @@ if __name__ == '__main__':
     train_uids, train_labels = sthv1.read_splits(train_path, labels)
     val_uids, val_labels = sthv1.read_splits(val_path, labels)
 
-    
+
 
     def sth_gen_split(uids, labels, output_path):
         num_samples = len(uids)
         split = open(output_path, 'a')
+        split.write('0\n')
         for uid, label in tqdm.tqdm(zip(uids, labels), desc="Generating splits", total=num_samples):
 
             if not args.partial or random.random() < 0.25:
@@ -114,7 +116,7 @@ if __name__ == '__main__':
                 elif args.mode == 'frames':
                     dir_path = os.path.join(args.sth_root, '%d' % uid)
                     num_frames = len([name for name in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, name))])
-                    write_str = dir_path + ' %d %d %d\n' % (uid, label, num_frames)
+                    write_str = dir_path + '/{:05d}.jpg %d %d 1 %d\n' % (uid, label, num_frames)
                 else:
                     raise NotImplementedError(args.mode)
 
@@ -124,4 +126,3 @@ if __name__ == '__main__':
 
     sth_gen_split(train_uids, train_labels, train_output_path)
     sth_gen_split(val_uids, val_labels, val_output_path)
-

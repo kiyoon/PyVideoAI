@@ -2,8 +2,6 @@
 Kinetics-Temporal-32 set (from Kinetics-400) suggested by Only Time Can Tell (WACV 2021, Sevilla-Lara et al.)
 """
 import os
-import numpy as np
-import pandas as pd
 
 from video_datasets_api.onlytimecantell.definitions import NUM_CLASSES_KINETICS_TEMPORAL as num_classes
 from pyvideoai.config import DATA_DIR

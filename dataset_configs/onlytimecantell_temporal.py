@@ -2,8 +2,6 @@
 Temporal-50 set (from Kinetics-400 and Something-Something-V1) suggested by Only Time Can Tell (WACV 2021, Sevilla-Lara et al.)
 """
 import os
-import numpy as np
-import pandas as pd
 
 from video_datasets_api.onlytimecantell.definitions import NUM_CLASSES_TEMPORAL as num_classes
 from pyvideoai.config import DATA_DIR
@@ -54,8 +52,8 @@ split2mode = {'train': 'train', 'val': 'val', 'multicropval': 'test', 'test': 't
 #        plt.ylabel('Target', fontsize=50)
 #
 #        # This sets the yticks "upright" with 0, as opposed to sideways with 90.
-#        plt.yticks(fontsize=12, rotation=0) 
-#        plt.xticks(fontsize=12, rotation=90) 
+#        plt.yticks(fontsize=12, rotation=0)
+#        plt.xticks(fontsize=12, rotation=90)
 #
 #        # here set the colorbar labelsize by 50
 #        cbar = ax.collections[0].colorbar
@@ -71,8 +69,8 @@ split2mode = {'train': 'train', 'val': 'val', 'multicropval': 'test', 'test': 't
 #        plt.ylabel('Target', fontsize=20)
 #
 #        # This sets the yticks "upright" with 0, as opposed to sideways with 90.
-#        plt.yticks(fontsize=12, rotation=0) 
-#        plt.xticks(fontsize=12, rotation=90) 
+#        plt.yticks(fontsize=12, rotation=0)
+#        plt.xticks(fontsize=12, rotation=90)
 #
 #        # here set the colorbar labelsize by 20
 #        cbar = ax.collections[0].colorbar
