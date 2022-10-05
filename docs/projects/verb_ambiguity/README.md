@@ -8,14 +8,14 @@ In BMVC 2022.
 <img src="https://user-images.githubusercontent.com/12980409/193883304-9e7275ee-2b88-4250-b695-c6d2f0d5acc0.png" alt="Method" width="1000"> 
 
 ## Dataset downloads (labels only)
-- [EPIC-Kitchens-100-SPMV test set labels](https://uoe-my.sharepoint.com/:x:/g/personal/s1884147_ed_ac_uk/Eful82Zu8BZDnpYSEt8FVDsB4KdL4gYG6pcPjV-NURLc6Q?e=Qm7ovB&download=1)
-- [Confusing-HMDB-102 labels](https://uoe-my.sharepoint.com/:u:/g/personal/s1884147_ed_ac_uk/ETZMaaNOPFtFl4TKIoJx2dMBMeFPR8IoDH6SsnDhuWGoPA?e=rMusBi&download=1)
+- [EPIC-Kitchens-100-SPMV test set labels](https://github.com/kiyoon/verb_ambiguity/releases/download/datasets-v1.0.0/ek100-val-multiple-verbs-halfagree-halfconfident-include_original-20220427.csv)
+- [Confusing-HMDB-102 labels](https://github.com/kiyoon/verb_ambiguity/releases/download/datasets-v1.0.0/confusing_hmdb_102_splits.tar.gz)
 
 ## Running feature experiments using pre-extracted features
 1. Download pre-extracted features.
-- [Download EPIC-Kitchens-100 TSM features](https://uoe-my.sharepoint.com/:u:/g/personal/s1884147_ed_ac_uk/EcDYfVFyOb9ImTE2wdFj5FwBlC-Gu5x2C_fSpAqtamM0pA?e=vkUeBn&download=1)
-- [Download EPIC-Kitchens-100 TSM feature neighbours (optional)](https://uoe-my.sharepoint.com/:u:/g/personal/s1884147_ed_ac_uk/ES2EVtHUrY5Onel-dTDNWm4BXd3mnzUgkjQBKrr2O4PEMA?e=D2cjLy&download=1): Using this neighbour cache will reduce the preparation time of the training by skipping neighbour search.
-- [Download Confusing-HMDB-102 TSM features](https://uoe-my.sharepoint.com/:u:/g/personal/s1884147_ed_ac_uk/EecDvCW-IOZJum83AR8x_zUBB0g5BFhgZpr0hb7qL6Q7Uw?e=rbChOV&download=1)
+- [Download EPIC-Kitchens-100 TSM features](https://github.com/kiyoon/verb_ambiguity/releases/download/datasets-v1.0.0/EPIC_KITCHENS_100_TSM_features.tar.gz)
+- [Download EPIC-Kitchens-100 TSM feature neighbours (optional)](https://github.com/kiyoon/verb_ambiguity/releases/download/datasets-v1.0.0/EPIC_KITCHENS_100_TSM_neighbour_cache.tar.gz): Using this neighbour cache will reduce the preparation time of the training by skipping neighbour search.
+- [Download Confusing-HMDB-102 TSM features](https://github.com/kiyoon/verb_ambiguity/releases/download/datasets-v1.0.0/confusing_hmdb_102_TSM_features.tar.gz)
 
 2. Exract in `PyVideoAI/data/EPIC_KITCHENS_100` or `PyVideoAI/data/hmdb51`.
 3. Run the training code. Change the dataset and exp_name variables to select different experiments.
