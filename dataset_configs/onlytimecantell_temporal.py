@@ -20,7 +20,9 @@ frames_split_file_dir = os.path.join(dataset_root, "temporal_splits_frames")
 frames_split_partial_file_dir = os.path.join(dataset_root, "temporal_splits_frames_partial")
 #frames_split_file_dir = "data/something-something-v1/splits_frames_sorted"
 split_file_basename = {'train': 'train.csv', 'val': 'val.csv', 'multicropval': 'val.csv'}
-split2mode = {'train': 'train', 'val': 'val', 'multicropval': 'test', 'test': 'test'}
+split2mode = {'train': 'train', 'val': 'test', 'multicropval': 'test', 'test': 'test'}
+
+horizontal_flip = False
 
 # Misc
 
