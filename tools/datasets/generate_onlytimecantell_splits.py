@@ -54,7 +54,7 @@ if __name__ == '__main__':
 
     def kinetics_gen_split(uid_start_num, labels, trainval_dict, train_or_valid, output_path):
         split = open(output_path, 'w')
-        split.write('0\n')
+        split.write('0')
         uid = uid_start_num
         for uuid, class_key in tqdm.tqdm(trainval_dict.items(), desc="Generating splits", total=len(trainval_dict)):
             class_key = class_key['annotations']['label']
@@ -64,13 +64,13 @@ if __name__ == '__main__':
                     class_key_path = class_key.replace(' ', '_')
                     label = labels[class_key]
                     if args.mode == 'video':
-                        write_str = os.path.join(args.kinetics_root, train_or_valid, class_key_path, f'{uuid}.mp4') + ' %d %d\n' % (uid, label)
+                        write_str = '\n' + os.path.join(args.kinetics_root, train_or_valid, class_key_path, f'{uuid}.mp4') + ' %d %d' % (uid, label)
                     elif args.mode == 'frames':
                         dir_path = os.path.join(args.kinetics_root, train_or_valid, class_key_path, f'{uuid}')
                         if os.path.isdir(dir_path):     # ignore videos not downloaded
                             num_frames = len([name for name in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, name))])
                             if num_frames > 0:  # ignore videos with 0 frames
-                                write_str = dir_path + '/{:05d}.jpg %d %d 1 %d\n' % (uid, label, num_frames)
+                                write_str = '\n' + dir_path + '/{:05d}.jpg %d %d 1 %d' % (uid, label, num_frames)
                     else:
                         raise NotImplementedError(args.mode)
 
@@ -108,16 +108,16 @@ if __name__ == '__main__':
     def sth_gen_split(uids, labels, output_path):
         num_samples = len(uids)
         split = open(output_path, 'a')
-        split.write('0\n')
+        split.write('0')
         for uid, label in tqdm.tqdm(zip(uids, labels), desc="Generating splits", total=num_samples):
 
             if not args.partial or random.random() < 0.25:
                 if args.mode == 'video':
-                    write_str = os.path.join(args.sth_root, '%d.mp4' % uid) + ' %d %d\n' % (uid, label)
+                    write_str = '\n' + os.path.join(args.sth_root, '%d.mp4' % uid) + ' %d %d' % (uid, label)
                 elif args.mode == 'frames':
                     dir_path = os.path.join(args.sth_root, '%d' % uid)
                     num_frames = len([name for name in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, name))])
-                    write_str = dir_path + '/{:05d}.jpg %d %d 1 %d\n' % (uid, label, num_frames)
+                    write_str = '\n' + dir_path + '/{:05d}.jpg %d %d 1 %d' % (uid, label, num_frames)
                 else:
                     raise NotImplementedError(args.mode)
 
