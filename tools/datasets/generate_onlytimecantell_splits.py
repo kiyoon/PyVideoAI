@@ -60,6 +60,7 @@ if __name__ == '__main__':
             class_key = class_key['annotations']['label']
             if class_key in labels.keys():      # only the selected classes (temporal/static/random)
                 if not args.partial or random.random() < 0.25:      # choose quarter when --partial is set
+                    write_str = ''
                     class_key_path = class_key.replace(' ', '_')
                     label = labels[class_key]
                     if args.mode == 'video':
