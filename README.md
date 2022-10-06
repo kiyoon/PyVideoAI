@@ -82,7 +82,7 @@ Use [tools/visualisations/model_and_dataloader_visualiser.py](tools/visualisatio
 
 - Talk to BotFather and make a bot.  
 - Go to your bot and type anything (/start)  
-- Find chat_id at https://api.telegram.org/bot{token}/getUpdates (without braces)  
+- Find chat_id at https://api.telegram.org/bot{token}/getUpdates (replace {token} with your token, excluding braces.)  
 - Add your token and chat_id to `tools/key.ini`.  
 
 ```INI
