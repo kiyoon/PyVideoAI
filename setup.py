@@ -21,12 +21,10 @@ setup(
        'pandas>=1.3.1',         # pandas 1.3.0 has a bug when loading pickled data
        'tensorboard',
        'opencv-python',
-       'pretrainedmodels',      # epic models TSN TRN
        'moviepy',               # Tensorboard `add_video()`
        'decord',                # Video decoding
 #       'av',                    # Video decoding (you may not need it in favour of decord)
        'scikit-image',          # Only used for timecycle
        'gulpio2',               # Efficient frame dataloader
-       'kornia',                # Focal loss, Binary focal loss
        ],
 )

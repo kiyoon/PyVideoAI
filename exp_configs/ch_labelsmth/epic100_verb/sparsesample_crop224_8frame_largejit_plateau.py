@@ -1,13 +1,12 @@
 import os
-import pickle
 
 from pyvideoai.dataloaders import GulpSparsesampleDataset
-from pyvideoai.utils.losses.softlabel import MaskedBinaryCrossEntropyLoss
-from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits
-from pyvideoai.utils.stdout_logger import OutputLogger
+from pyvideoai.utils.losses.single_positive_multilabel import AssumeNegativeLossWithLogits, WeakAssumeNegativeLossWithLogits, BinaryLabelSmoothLossWithLogits, BinaryNegativeLabelSmoothLossWithLogits, EntropyMaximiseLossWithLogits, BinaryFocalLossWithLogits
+from functools import lru_cache
+import logging
+logger = logging.getLogger(__name__)
 
 import torch
-import numpy as np
 
 input_frame_length = 8
 input_type = 'gulp_rgb'  # gulp_rgb / gulp_flow
@@ -19,7 +18,7 @@ def batch_size():
     '''batch_size can be either integer or function returning integer.
     '''
     if input_type in ['gulp_rgb', 'gulp_flow']:
-        divide_batch_size = 2
+        divide_batch_size = 1
     else:
         raise ValueError(f'Wrong input_type {input_type}')
 
@@ -32,10 +31,8 @@ def batch_size():
         return input_frame_length * 2 // divide_batch_size
     return input_frame_length // divide_batch_size
 
-
 def val_batch_size():
     return batch_size() if callable(batch_size) else batch_size
-
 
 crop_size = 224
 train_jitter_min = 224
@@ -47,179 +44,42 @@ test_num_spatial_crops = 10 if dataset_cfg.horizontal_flip else 1
 
 early_stop_patience = 20        # or None to turn off
 
-pretrained = 'epic100'          # epic100 / imagenet / random
-
 sample_index_code = 'pyvideoai'
 #clip_grad_max_norm = 5
 
+
+pretrained = 'epic100'      # epic100 / imagenet / random
+
 base_learning_rate = float(os.getenv('VAI_BASELR', 5e-6))      # when batch_size == 1 and #GPUs == 1
 
-loss_type = 'mask_binary_ce'  # mask_binary_ce / pseudo_single_binary_ce
+loss_type = 'crossentropy'  # crossentropy
+                            # assume_negative, weak_assume_negative, binary_labelsmooth, binary_negative_labelsmooth, binary_focal
+                            # entropy_maximise
 
-# Neighbour search settings for pseudo labelling
-# In the paper, this is K and τ.
-num_neighbours = int(os.getenv('VAI_NUM_NEIGHBOURS', 15))
-thr = float(os.getenv('VAI_PSEUDOLABEL_THR', 0.1))
-# If you want the parameters to be different per class.
-# dictionary with key being class index, with size num_classes.
-# If key not found, use the default setting above.
-num_neighbours_per_class = {}
-thr_per_class = {}
-
-l2_norm = False
-save_features = True
-
+labelsmooth_factor = 0.1
 
 #### OPTIONAL
 def get_criterion(split):
-    if split == 'train':
-        if loss_type == 'mask_binary_ce':
-            return MaskedBinaryCrossEntropyLoss()
-        elif loss_type == 'pseudo_single_binary_ce':
-            # make sure you pass pseudo+single labels
-            return AssumeNegativeLossWithLogits()
-        else:
-            raise ValueError(f'{loss_type=} not recognised.')
-    else:
+    if loss_type == 'crossentropy':
+        return torch.nn.CrossEntropyLoss()
+    elif loss_type == 'assume_negative':
         return AssumeNegativeLossWithLogits()
+    elif loss_type == 'weak_assume_negative':
+        return WeakAssumeNegativeLossWithLogits(num_classes = dataset_cfg.num_classes)
+    elif loss_type == 'binary_labelsmooth':
+        return BinaryLabelSmoothLossWithLogits(smoothing=labelsmooth_factor)
+    elif loss_type == 'binary_negative_labelsmooth':
+        return BinaryNegativeLabelSmoothLossWithLogits(smoothing=labelsmooth_factor)
+    elif loss_type == 'binary_focal':
+        return BinaryFocalLossWithLogits()
+    elif loss_type == 'entropy_maximise':
+        return EntropyMaximiseLossWithLogits()
+    else:
+        return ValueError(f'Wrong loss type: {loss_type}')
 
-from torch.utils.data.distributed import DistributedSampler
-import torch.distributed as dist
-import pyvideoai.utils.distributed as du
-from pyvideoai.train_and_eval import extract_features
-from pyvideoai.utils.verbambig import get_neighbours
-import pyvideoai
-train_testmode_dataloader = None
-video_id_to_label = None
-def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
-    global train_testmode_dataloader
-    if train_testmode_dataloader is None or epoch % 5 == 0:
-        if 'partial' in dataset_cfg.__name__:
-            feature_extract_split = 'trainpartialdata_testmode'
-        else:
-            feature_extract_split = 'traindata_testmode'
 
-        if train_testmode_dataloader is None:
-            train_testmode_dataset = get_torch_dataset(feature_extract_split)
-            sampler = DistributedSampler(train_testmode_dataset, shuffle=False) if world_size > 1 else None
-            train_testmode_dataloader = torch.utils.data.DataLoader(train_testmode_dataset, batch_size=val_batch_size(), shuffle=False, sampler=sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=False, worker_init_fn = du.seed_worker)
-
-        data_unpack_func = get_data_unpack_func(feature_extract_split)
-        input_reshape_func = get_input_reshape_func(feature_extract_split)
-        feature_data, _, _, _, eval_log_str = extract_features(model_cfg.feature_extract_model(train_kit["model"], 'features'), train_testmode_dataloader, data_unpack_func, dataset_cfg.num_classes, feature_extract_split, rank, world_size, input_reshape_func=input_reshape_func, refresh_period=args.refresh_period)
-        # feature_data['video_ids'] feature_data['labels'] feature_data['clip_features']
-
-        if rank == 0:
-            # feature will be tuple just in case there are many features returning from the model. This case, it's only one feature.
-            feature_data['clip_features'] = feature_data['clip_features'][0]
-
-            if feature_data['clip_features'].shape[1] == input_frame_length:
-                # features are not averaged. Average now
-                feature_data['clip_features'] = np.mean(feature_data['clip_features'], axis=1)
-
-            assert feature_data['clip_features'].shape[1] == 2048
-
-            soft_labels_per_num_neighbour = {}    # key: num_neighbours
-            set_num_neighbours = set(num_neighbours_per_class.values()) | {num_neighbours}
-            for num_neighbour in set_num_neighbours:
-                with OutputLogger(pyvideoai.utils.verbambig.__name__, 'INFO'):
-                    nc_freq, _, _ = get_neighbours(feature_data['clip_features'], feature_data['clip_features'], feature_data['labels'], feature_data['labels'], num_neighbour, n_classes=dataset_cfg.num_classes, l2_norm=l2_norm)
-                #neighbours_ids = []
-                soft_label = []
-                target_ids = feature_data['video_ids']
-                source_ids = feature_data['video_ids']
-
-                for target_idx, target_id in enumerate(target_ids):
-                    #n_ids = [source_ids[x] for x in features_neighbours[target_idx]]
-                    sl = nc_freq[target_idx]
-                    sl = sl / sl.sum()
-                    #neighbours_ids.append(n_ids)
-                    soft_label.append(sl)
-
-                #neighbours_ids = np.array(neighbours_ids)
-                soft_labels_per_num_neighbour[num_neighbour] = np.array(soft_label)
-
-            # generate multilabels
-            # For each class, use different soft labels generated with different num_neighbours and thr.
-            #multilabels = MinCEMultilabelLoss.generate_multilabels_numpy(soft_labels, thr, feature_data['labels'])
-            multilabels = []
-            for target_idx, singlelabel in enumerate(feature_data['labels']):
-                if singlelabel in num_neighbours_per_class:
-                    soft_label = soft_labels_per_num_neighbour[num_neighbours_per_class[singlelabel]][target_idx]
-                else:
-                    soft_label = soft_labels_per_num_neighbour[num_neighbours][target_idx]
-
-                if singlelabel in thr_per_class:
-                    th = thr_per_class[singlelabel]
-                else:
-                    th = thr
-
-                multilabel = (soft_label > th).astype(int)
-                multilabel[singlelabel] = 1
-                multilabels.append(multilabel)
-
-            multilabels = np.stack(multilabels)
-            assert multilabels.shape == (len(feature_data['labels']), dataset_cfg.num_classes)
-
-            # format multilabels properly based on loss
-            if loss_type in ['mask_binary_ce']:
-                logger.info('Turning multilabels to mask out sign (-1) and including one single label')
-                multilabels = -multilabels      # negative numbers mean masks. Mask out the relevant verbs.
-                for idx, label in enumerate(feature_data['labels']):
-                    multilabels[idx, label] = 1     # Make the actual single label GT the only label.
-            elif loss_type.lower().startswith('mask'):
-                logger.error(f'You are using the mask loss {loss_type} but the labels are not in mask format!!')
-            else:
-                logger.info('Including all multilabels and singlelabel')
-
-            if save_features:
-                logger.info(f"Saving features, neighbours, and multilabels to {os.path.join(exp.predictions_dir, 'features_neighbours')}")
-                os.makedirs(os.path.join(exp.predictions_dir, 'features_neighbours'), exist_ok = True)
-
-                feature_data['kn'] = num_neighbours
-                feature_data['thr'] = thr
-                feature_data['nc_freq'] = nc_freq
-                feature_data['multilabels'] = multilabels
-                with open(os.path.join(exp.predictions_dir, 'features_neighbours', f'feature_neighbours_epoch_{epoch:04d}.pkl'), 'wb') as f:
-                    pickle.dump(feature_data, f)
-
-        logger.info("Syncing multilabels over processes.")
-        # If distributed, sync data
-        if world_size > 1:
-            cur_device = torch.cuda.current_device()
-            if rank == 0:
-                num_samples = torch.LongTensor([multilabels.shape[0]]).to(device=cur_device, non_blocking=True)
-            else:
-                num_samples = torch.LongTensor([0]).to(device=cur_device, non_blocking=True)
-            dist.broadcast(num_samples, 0)
-            num_samples = num_samples.item()
-
-            if rank != 0:
-                multilabels = np.zeros((num_samples,dataset_cfg.num_classes), dtype=int)
-                source_ids = np.zeros((num_samples), dtype=int)
-
-            multilabels_dist = torch.from_numpy(multilabels).to(cur_device, non_blocking=True)
-            dist.broadcast(multilabels_dist, 0)
-
-            video_ids_dist = torch.from_numpy(source_ids).to(cur_device, non_blocking=True)
-            dist.broadcast(video_ids_dist, 0)
-
-            du.synchronize()
-            multilabels = multilabels_dist.cpu().numpy()
-            source_ids = video_ids_dist.cpu().numpy()
-
-        # Update video_id_to_label
-        logger.info(f'New {multilabels = }')
-        logger.info(f'For video IDs = {source_ids}')
-        global video_id_to_label
-        video_id_to_label = {}
-        for video_id, label in zip(source_ids, multilabels):
-            video_id_to_label[video_id] = label
-
-        # Update train_dataloader with the new labels
-        train_dataset = get_torch_dataset('train')
-        train_sampler = DistributedSampler(train_dataset) if world_size > 1 else None
-        train_kit['train_dataloader'] = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size(), shuffle=False if train_sampler else True, sampler=train_sampler, num_workers=args.dataloader_num_workers, pin_memory=True, drop_last=True, worker_init_fn = du.seed_worker)
+#def epoch_start_script(epoch, exp, args, rank, world_size, train_kit):
+#    return None
 
 
 # optional
@@ -231,8 +91,6 @@ def get_optim_policies(model):
     return model_cfg.get_optim_policies(model)
 
 
-import logging
-logger = logging.getLogger(__name__)
 from pyvideoai.utils.early_stopping import min_value_within_lastN, best_value_within_lastN
 # optional
 def early_stopping_condition(exp, metric_info):
@@ -277,7 +135,13 @@ def scheduler(optimiser, iters_per_epoch, last_epoch=-1):
 
 
 def load_model():
-    return model_cfg.load_model(dataset_cfg.num_classes, input_frame_length, pretrained = pretrained)
+    if pretrained is not None:
+        return model_cfg.load_model(num_classes = dataset_cfg.num_classes,
+                input_frame_length = input_frame_length,
+                pretrained=pretrained)
+    else:
+        return model_cfg.load_model(num_classes = dataset_cfg.num_classes,
+                input_frame_length = input_frame_length)
 
 
 # If you need to extract features, use this. It can be defined in model_cfg too.
@@ -294,11 +158,12 @@ def load_model():
 
 # optional
 #def load_pretrained(model):
-#    loader.model_load_weights(model, pretrained_path)
+#    loader.model_load_weights_GPU(model, pretrained_path)
 
 
 def _dataloader_shape_to_model_input_shape(inputs):
     return model_cfg.NCTHW_to_model_input_shape(inputs)
+
 
 def get_input_reshape_func(split):
     '''
@@ -314,7 +179,7 @@ def get_input_reshape_func(split):
     return _dataloader_shape_to_model_input_shape
 
 
-def _unpack_data(data):
+def _sparse_unpack_data(data):
     '''
     From dataloader returning values to (inputs, uids, labels, [reserved]) format
     '''
@@ -323,17 +188,7 @@ def _unpack_data(data):
 
 
 def get_data_unpack_func(split):
-    '''
-    if split == 'train':
-        return _unpack_data
-    elif split == 'val':
-        return _unpack_data
-    elif split == 'multicropval':
-        return _unpack_data
-    else:
-        assert False, 'unknown split'
-    '''
-    return _unpack_data
+    return _sparse_unpack_data
 
 
 def _get_torch_dataset(csv_path, split):
@@ -346,10 +201,6 @@ def _get_torch_dataset(csv_path, split):
         _test_scale = val_scale
         _test_num_spatial_crops = val_num_spatial_crops
 
-    if split == 'train':
-        global video_id_to_label
-    else:
-        video_id_to_label = None
 
     if input_type == 'gulp_rgb':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_rgb_dirname[split])
@@ -366,9 +217,8 @@ def _get_torch_dataset(csv_path, split):
                 greyscale=False,
                 sample_index_code=sample_index_code,
                 processing_backend = 'pil',
-                video_id_to_label = video_id_to_label,
                 )
-    elif input_type == 'gulp_flow':
+    if input_type == 'gulp_flow':
         gulp_dir_path = os.path.join(dataset_cfg.dataset_root, dataset_cfg.gulp_flow_dirname[split])
         flow_neighbours = 5
 
@@ -386,12 +236,13 @@ def _get_torch_dataset(csv_path, split):
                 processing_backend = 'pil',
                 flow = 'grey',
                 flow_neighbours = flow_neighbours,
-                video_id_to_label = video_id_to_label,
                 )
     else:
         raise ValueError(f'Wrong input_type {input_type}')
 
 
+
+@lru_cache
 def get_torch_dataset(split):
     if input_type == 'gulp_rgb':
         split_dir = dataset_cfg.gulp_rgb_split_file_dir
@@ -402,7 +253,6 @@ def get_torch_dataset(split):
     csv_path = os.path.join(split_dir, dataset_cfg.split_file_basename[split])
 
     return _get_torch_dataset(csv_path, split)
-
 
 
 """
