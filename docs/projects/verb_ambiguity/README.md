@@ -73,6 +73,19 @@ PyVideoAI/tools/run_singlenode.sh eval 1 -R $exp_root -D $dataset -c:d verbambig
 5. Generate dataset split files. [`script`](../../../tools/datasets/generate_hmdb_splits.py) (Use `--confusion 2`) Or just download the splits.
 6. `PyVideoAI/data/hmdb51` directory should have four directories: `confusing102_splits_gulp_flow`, `confusing102_splits_gulp_rgb`, `gulp_flow`, `gulp_rgb`.
 
+Putting all together,
+```bash
+# Install unrar, nvidia-docker
+# Execute from the root directory of this repo.
+# Don't run all of them together. Some things may not run 
+
+GPU_arch=pascal
+
+submodules/video_datasets_api/tools/hmdb/download_hmdb.sh data/hmdb51
+submodules/video_datasets_api/tools/hmdb/hmdb_extract_frames.sh data/hmdb51/videos data/hmdb51/frames
+submodules/video_datasets_api/tools/hmdb/extract_flow_multigpu.sh data/hmdb51/frames data/hmdb51/flow $GPU_arch 0
+```
+
 ## Citing the paper
 
 If you find our work or code useful, please cite:
