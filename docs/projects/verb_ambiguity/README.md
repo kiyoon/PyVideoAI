@@ -52,6 +52,27 @@ PyVideoAI/tools/run_singlenode.sh train 1 -R $exp_root -D $dataset -c:d verbambi
 PyVideoAI/tools/run_singlenode.sh eval 1 -R $exp_root -D $dataset -c:d verbambig -M ch_beta.featuremodel -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -p #--wandb
 ```
 
+## Running feature extraction or end-to-end experiments.
+
+### Prepare the dataset
+#### EPIC-Kitchens-100-SPMV
+1. Download `rgb_frames` and `flow_frames`. [`script`](https://github.com/epic-kitchens/epic-kitchens-download-scripts).  
+  Extract tar files. [`RGB script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/epic_kitchens_100/epic_extract_rgb.sh), [`flow script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/epic_kitchens_100/epic_extract_flow.sh).
+2. Clone [EPIC-Kitchens-100 annotations](https://github.com/epic-kitchens/epic-kitchens-100-annotations) at `PyVideoAI/data/EPIC_KITCHENS_100/epic-kitchens-100-annotations`.
+3. Gulp the dataset. First, generate flow annotations using [this](https://github.com/kiyoon/video_datasets_api/blob/master/tools/epic_kitchens_100/epic_convert_rgb_to_flow_frame_idxs.py) and use [this](https://github.com/kiyoon/video_datasets_api/blob/master/tools/epic_kitchens_100/gulp_data.py) to gulp.
+4. Generate dataset split files. [`RGB_script`](../../../tools/datasets/generate_epic100_splits.py), [`flow_script`](../../../tools/datasets/generate_epic100_flow_splits.py)
+5. Get TSM pre-trained models from [EPIC-Kitchens Action Models](https://github.com/epic-kitchens/C1-Action-Recognition-TSN-TRN-TSM#pretrained-models), and save them into `PyVideoAI/data/pretrained/epic100`.
+6. Download the [multi-verb annotations](https://github.com/kiyoon/verb_ambiguity/releases/download/datasets-v1.0.0/ek100-val-multiple-verbs-halfagree-halfconfident-include_original-20220427.csv) at `PyVideoAI/data/EPIC_KITCHENS_100/ek100-val-multiple-verbs-halfagree-halfconfident-include_original-20220427.csv`.
+6. `PyVideoAI/data/EPIC_KITCHENS_100` directory should have five directories and one file: `epic-kitchens-100-annotations`, `splits_gulp_flow`, `splits_gulp_rgb`, `gulp_flow`, `gulp_rgb`, `ek100-val-multiple-verbs-halfagree-halfconfident-include_original-20220427.csv`.
+
+#### Confusing-HMDB-102
+1. Download HMDB-51 videos. [`script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/hmdb/download_hmdb.sh)
+2. Extract them into frames of images. [`script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/hmdb/hmdb_extract_frames.sh)
+3. Generate optical flow. [`script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/hmdb/extract_flow_multigpu.sh)
+4. Gulp the dataset. [`script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/gulp_jpeg_dir.py) (Use `--modality rgb` and `--modality flow_onefolder`).
+5. Generate dataset split files. [`script`](../../../tools/datasets/generate_hmdb_splits.py) (Use `--confusion 2`) Or just download the splits.
+6. `PyVideoAI/data/hmdb51` directory should have four directories: `confusing102_splits_gulp_flow`, `confusing102_splits_gulp_rgb`, `gulp_flow`, `gulp_rgb`.
+
 ## Citing the paper
 
 If you find our work or code useful, please cite:
