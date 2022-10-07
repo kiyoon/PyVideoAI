@@ -13,6 +13,16 @@ In BMVC 2022. [arXiv](http://arxiv.org/abs/2201.10394)
 - Make sure datasets are available in `PyVideoAI/data` directory. Generate splits using scripts in [`PyVideoAI/tools/datasets`](../../../tools/datasets). See [DATASET.md](../../../docs/DATASET.md).
 - Following [PyVideoAI-examples](https://github.com/kiyoon/PyVideoAI-examples) help understand the overall workflow.
 
+### Preparing the datasets
+#### Something-Something-V1
+1. Download the dataset and annotations. Rename the directories into `frames` and `annotations`, and put them in `data/something-something-v1`.
+2. Generate splits.
+
+```bash
+conda activate videoai
+python tools/datasets/generate_somethingv1_splits.py data/something-something-v1/splits_frames data/something-something-v1/annotations --root data/something-something-v1/frames --mode frames
+```
+
 ### About the paper
 - Core implementation of reordering methods is in [`pyvideoai/utils/tc_reordering.py`](../../../pyvideoai/utils/tc_reordering.py).  
 - See [`exp_configs/ch_tcgrey`](../../../exp_configs/ch_tcgrey) for experiment settings.  
