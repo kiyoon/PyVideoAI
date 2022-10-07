@@ -69,9 +69,9 @@ PyVideoAI/tools/run_singlenode.sh eval 1 -R $exp_root -D $dataset -c:d verbambig
 1. Download HMDB-51 videos. [`script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/hmdb/download_hmdb.sh)
 2. Extract them into frames of images. [`script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/hmdb/hmdb_extract_frames.sh)
 3. Generate optical flow. [`script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/hmdb/extract_flow_multigpu.sh)
-4. Gulp the dataset. [`script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/gulp_jpeg_dir.py) (Use `--modality rgb` and `--modality flow_onefolder`).
+4. Gulp the dataset. [`script`](https://github.com/kiyoon/video_datasets_api/blob/master/tools/gulp_jpeg_dir.py) (Use `rgb` and `flow_onefolder` modality, and `--class_folder`).
 5. Generate dataset split files. [`script`](../../../tools/datasets/generate_hmdb_splits.py) (Use `--confusion 2`) Or just download the splits.
-6. `PyVideoAI/data/hmdb51` directory should have four directories: `confusing102_splits_gulp_flow`, `confusing102_splits_gulp_rgb`, `gulp_flow`, `gulp_rgb`.
+6. `PyVideoAI/data/hmdb51` directory must have at least four directories: `confusing102_splits_gulp_flow`, `confusing102_splits_gulp_rgb`, `gulp_flow`, `gulp_rgb`.
 
 Putting all together,
 ```bash
@@ -79,11 +79,18 @@ Putting all together,
 # Execute from the root directory of this repo.
 # Don't run all of them together. Some things may not run 
 
-GPU_arch=pascal
+GPU_arch=pascal  # pascal or turing
 
+conda activate videoai
 submodules/video_datasets_api/tools/hmdb/download_hmdb.sh data/hmdb51
 submodules/video_datasets_api/tools/hmdb/hmdb_extract_frames.sh data/hmdb51/videos data/hmdb51/frames
 submodules/video_datasets_api/tools/hmdb/extract_flow_multigpu.sh data/hmdb51/frames data/hmdb51/flow $GPU_arch 0
+python submodules/video_datasets_api/tools/gulp_jpeg_dir.py data/hmdb51/frames data/hmdb51/gulp_rgb rgb --class_folder
+python submodules/video_datasets_api/tools/gulp_jpeg_dir.py data/hmdb51/flow data/hmdb51/gulp_flow flow_onefolder --class_folder
+python tools/datasets/generate_hmdb_splits.py data/hmdb51/gulp_rgb data/hmdb51/confusing102_splits_gulp_rgb data/hmdb51/testTrainM
+ulti_7030_splits --mode gulp --confusion 2
+python tools/datasets/generate_hmdb_splits.py data/hmdb51/gulp_rgb data/hmdb51/confusing102_splits_gulp_rgb data/hmdb51/testTrainM
+ulti_7030_splits --mode gulp --confusion 2
 ```
 
 ## Citing the paper
