@@ -21,6 +21,7 @@ In BMVC 2022.
 3. Run the training code. Change the dataset and exp_name variables to select different experiments.
  
 ```bash
+#!/bin/bash
 exp_root="$HOME/experiments"  # Experiment results will be saved here.
 
 export CUDA_VISIBLE_DEVICES=0
@@ -91,6 +92,74 @@ python tools/datasets/generate_hmdb_splits.py data/hmdb51/gulp_rgb data/hmdb51/c
 ulti_7030_splits --mode gulp --confusion 2
 python tools/datasets/generate_hmdb_splits.py data/hmdb51/gulp_rgb data/hmdb51/confusing102_splits_gulp_rgb data/hmdb51/testTrainM
 ulti_7030_splits --mode gulp --confusion 2
+```
+
+
+### Run training, evaluation and feature extraction.
+
+```bash
+#!/bin/bash
+
+exp_root="$HOME/experiments"  # Experiment results will be saved here.
+
+export CUDA_VISIBLE_DEVICES=0
+num_gpus=1
+export VAI_NUM_NEIGHBOURS=15
+export VAI_PSEUDOLABEL_THR=0.1
+
+
+## Choose dataset
+#dataset=epic100_verb
+dataset=confusing_hmdb_102
+export VAI_SPLITNUM=1   # only for confusing_hmdb_102 dataset.
+
+## Choose model (RGB or flow)
+model="tsm_resnet50_nopartialbn"
+#model="ch_epic100.tsm_resnet50_flow"
+
+## Choose loss
+## For feature extraction, use "ce"
+exp_name="ce"
+#exp_name="assume_negative"
+#exp_name="weak_assume_negative"
+#exp_name="binary_labelsmooth"
+#exp_name="binary_negative_labelsmooth"
+#exp_name="binary_focal"
+#exp_name="entropy_maximise"
+#exp_name="mask_binary_ce"
+#exp_name="pseudo_single_binary_ce"
+
+
+# Name subfolder as you like.
+if [[ $dataset == "epic100_verb" ]]
+then
+    subfolder="k=$VAI_NUM_NEIGHBOURS,thr=$VAI_PSEUDOLABEL_THR"
+else
+    subfolder="k=$VAI_NUM_NEIGHBOURS,thr=$VAI_PSEUDOLABEL_THR,split=$VAI_SPLITNUM"
+fi
+
+# Training script
+# -S creates a subdirectory in the name of your choice. (optional)
+tools/run_singlenode.sh train $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" #--wandb_project kiyoon_kim_verbambig
+
+if [[ $dataset == "epic100_verb" ]]
+then
+# Evaluating script
+# -l -2 loads the best model (with the highest heldout validation accuracy)
+# -p saves the predictions. (optional)
+tools/run_singlenode.sh eval $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -p #--wandb
+else
+    echo "For Confusing-HMDB-102, there is no evaluation script. See summary.csv file and get the best number per metric."
+fi
+
+
+if [[ $exp_name == "ce" ]]
+then
+# Extract features
+# -l -2 loads the best model (with the highest heldout validation accuracy)
+# -p saves the predictions. (optional)
+tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 #--wandb
+fi
 ```
 
 ## Citing the paper
