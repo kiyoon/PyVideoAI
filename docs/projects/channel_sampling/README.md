@@ -23,6 +23,17 @@ conda activate videoai
 python tools/datasets/generate_somethingv1_splits.py data/something-something-v1/splits_frames data/something-something-v1/annotations --root data/something-something-v1/frames --mode frames
 ```
 
+#### Something-Something-V2
+1. Download the dataset and annotations. Rename the directories into `videos` and `annotations`, and put them in `data/something-something-v2`.
+2. Extract videos into frames of images, to folder `data/something-something-v2/frames_q5`.
+3. Generate splits.
+
+```bash
+submodules/video_datasets_api/tools/something-something-v2/extract_frames.sh data/something-something-v2/videos data/something-something-v2/frames_q5
+conda activate videoai
+python tools/datasets/generate_somethingv2_splits.py data/something-something-v2/splits_frames data/something-something-v2/annotations data/something-something-v2/frames_q5 --mode frames
+```
+
 ### About the paper
 - Core implementation of reordering methods is in [`pyvideoai/utils/tc_reordering.py`](../../../pyvideoai/utils/tc_reordering.py).  
 - See [`exp_configs/ch_tcgrey`](../../../exp_configs/ch_tcgrey) for experiment settings.  
