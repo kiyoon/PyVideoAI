@@ -46,12 +46,12 @@ exp_name="concat_RGB_flow_assume_negative"
 
 # Training script
 # -S creates a subdirectory in the name of your choice. (optional)
-PyVideoAI/tools/run_singlenode.sh train $num_gpus -R $exp_root -D $dataset -c:d verbambig -M ch_beta.featuremodel -E $exp_name -c:e verbambig -S "$subfolder" #--wandb_project kiyoon_kim_verbambig
+tools/run_singlenode.sh train $num_gpus -R $exp_root -D $dataset -c:d verbambig -M ch_beta.featuremodel -E $exp_name -c:e verbambig -S "$subfolder" #--wandb_project kiyoon_kim_verbambig
 
 # Evaluating script
 # -l -2 loads the best model (with the highest heldout validation accuracy)
 # -p saves the predictions. (optional)
-PyVideoAI/tools/run_singlenode.sh eval $num_gpus -R $exp_root -D $dataset -c:d verbambig -M ch_beta.featuremodel -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -p #--wandb
+tools/run_singlenode.sh eval $num_gpus -R $exp_root -D $dataset -c:d verbambig -M ch_beta.featuremodel -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -p #--wandb
 ```
 
 ## Running feature extraction or end-to-end experiments.
