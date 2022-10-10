@@ -80,7 +80,7 @@ Putting all together,
 # Execute from the root directory of this repo.
 # Don't run all of them together. Some things may not run 
 
-GPU_arch=pascal  # pascal or turing
+GPU_arch=pascal  # pascal / turing / ampere
 
 conda activate videoai
 submodules/video_datasets_api/tools/hmdb/download_hmdb.sh data/hmdb51
@@ -157,10 +157,14 @@ if [[ $exp_name == "ce" ]]
 then
 # Extract features
 # -l -2 loads the best model (with the highest heldout validation accuracy)
-# -p saves the predictions. (optional)
-tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 #--wandb
+tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s traindata_testmode #--wandb
+tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s val #--wandb
 fi
 ```
+
+Once features are extracted, copy to `data/` directory and edit `dataset_configs/ch_verbambig/epic100_verb_features.py` or `dataset_configs/ch_verbambig/confusing_hmdb_102_features.py` to update the corresponding feature path.  
+
+Refer to the [Running feature experiments using pre-extracted features](#running-feature-experiments-using-pre-extracted-features) section for running experiments using the features.
 
 ## Citing the paper
 
