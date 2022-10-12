@@ -135,20 +135,22 @@ exp_name="ce"
 if [[ $dataset == "epic100_verb" ]]
 then
     subfolder="k=$VAI_NUM_NEIGHBOURS,thr=$VAI_PSEUDOLABEL_THR"
+    extra_args=()
 else
     subfolder="k=$VAI_NUM_NEIGHBOURS,thr=$VAI_PSEUDOLABEL_THR,split=$VAI_SPLITNUM"
+    extra_args=(-c:d verbambig)
 fi
 
 # Training script
 # -S creates a subdirectory in the name of your choice. (optional)
-tools/run_singlenode.sh train $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" #--wandb_project kiyoon_kim_verbambig
+tools/run_singlenode.sh train $num_gpus -R $exp_root -D $dataset -M $model -E $exp_name -c:e verbambig -S "$subfolder" ${extra_args[@]} #--wandb_project kiyoon_kim_verbambig
 
 if [[ $dataset == "epic100_verb" ]]
 then
 # Evaluating script
 # -l -2 loads the best model (with the highest heldout validation accuracy)
 # -p saves the predictions. (optional)
-tools/run_singlenode.sh eval $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -p #--wandb
+tools/run_singlenode.sh eval $num_gpus -R $exp_root -D $dataset -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -p ${extra_args[@]} #--wandb
 else
     echo "For Confusing-HMDB-102, there is no evaluation script. See summary.csv file and get the best number per metric."
 fi
@@ -158,8 +160,8 @@ if [[ $exp_name == "ce" ]]
 then
 # Extract features
 # -l -2 loads the best model (with the highest heldout validation accuracy)
-tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s traindata_testmode #--wandb
-tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s val #--wandb
+tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s traindata_testmode ${extra_args[@]} #--wandb
+tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s val ${extra_args[@]} #--wandb
 fi
 ```
 
