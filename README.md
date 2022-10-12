@@ -2,7 +2,7 @@
 - [Capturing Temporal Information in a Single Frame: Channel Sampling Strategies for Action Recognition](http://arxiv.org/abs/2201.10394) (Kim et al., BMVC 2022) [`Instruction`](docs/projects/channel_sampling)
 <img src="https://user-images.githubusercontent.com/12980409/151038213-12bdad91-7895-40e7-9304-126079fed637.png" alt="8-frame TC Reordering" width="400">
 
-- An Action Is Worth Multiple Words: Handling Ambiguity in Action Recognition (Kim et al., BMVC 2022) [`Instruction`](docs/projects/verb_ambiguity)
+- [An Action Is Worth Multiple Words: Handling Ambiguity in Action Recognition](https://arxiv.org/abs/2210.04933) (Kim et al., BMVC 2022) [`Instruction`](docs/projects/verb_ambiguity)
 <img src="https://user-images.githubusercontent.com/12980409/193856345-e0287624-4c84-46af-b245-c07ff263c424.png" alt="Verb Ambiguity" width="400">
 
 # PyVideoAI: Action Recognition Framework
