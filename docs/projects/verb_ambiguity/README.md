@@ -1,7 +1,7 @@
 # An Action Is Worth Multiple Words: Handling Ambiguity in Action Recognition
 
 Kiyoon Kim, Davide Moltisanti, Oisin Mac Aodha, Laura Sevilla-Lara  
-In BMVC 2022.
+In BMVC 2022. [`arXiv`](https://arxiv.org/abs/2210.04933)
 
 <img src="https://user-images.githubusercontent.com/12980409/193856345-e0287624-4c84-46af-b245-c07ff263c424.png" alt="Verb Ambiguity" width="800"> 
 
