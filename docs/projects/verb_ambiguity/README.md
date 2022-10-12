@@ -160,8 +160,8 @@ if [[ $exp_name == "ce" ]]
 then
 # Extract features
 # -l -2 loads the best model (with the highest heldout validation accuracy)
-tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s traindata_testmode ${extra_args[@]} #--wandb
-tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -c:d verbambig -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s val ${extra_args[@]} #--wandb
+tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s traindata_testmode ${extra_args[@]} #--wandb
+tools/run_singlenode.sh feature $num_gpus -R $exp_root -D $dataset -M $model -E $exp_name -c:e verbambig -S "$subfolder" -l -2 -s val ${extra_args[@]} #--wandb
 fi
 ```
 
