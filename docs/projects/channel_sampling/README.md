@@ -1,7 +1,7 @@
 # Capturing Temporal Information in a Single Frame: Channel Sampling Strategies for Action Recognition
 
 Kiyoon Kim, Shreyank N Gowda, Oisin Mac Aodha, Laura Sevilla-Lara  
-In BMVC 2022. [arXiv](http://arxiv.org/abs/2201.10394)
+In BMVC 2022. [`arXiv`](http://arxiv.org/abs/2201.10394)
 
 <img src="https://user-images.githubusercontent.com/12980409/151038213-12bdad91-7895-40e7-9304-126079fed637.png" alt="8-frame TC Reordering" width="800">  
 <img src="https://user-images.githubusercontent.com/12980409/151038200-6f32cea8-6a2b-40bf-9d95-50ba860114be.png" alt="3-frame GrayST" width="800">  
