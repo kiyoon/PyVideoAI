@@ -22,8 +22,7 @@ The only framework that completes your computer vision, action recognition resea
 - Colour logging  
 - All of the above come with no extra setup. Trust me and try some [examples](https://github.com/kiyoon/PyVideoAI-examples.git).
 
-** Papers implemented **
-- \[Official\] *TC Reordering* and *GrayST* (Kim et al. 2022).  
+** Papers implemented **  
 - [*ProSelfLC* (CVPR 2021)](https://arxiv.org/abs/2005.03788).  
 
 
@@ -137,6 +136,3 @@ The experiment results (log, training stats, weights, tensorboard, plots, etc.) 
 
 Otherwise, you can change `pyvideoai/config.py`'s `DEFAULT_EXPERIMENT_ROOT` value. Or, you can also set `--experiment_root`/`-R` argument manually when executing.  
 
-
-# TODO
-- Dataloader CSV file json header. BEGIN CSV mark between header and csv. Write PyVideoAI_version, label_type single,multi,soft, multilabel_numclass, softlabel_pickle_path
